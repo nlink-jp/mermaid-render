@@ -635,6 +635,14 @@ same way as pathguard.
     the constructs the real data lacks. 16 of 18 unmarked. The other two noted "no arrowhead": their
     sources use `->` and `-->`, which the documentation's table lists as solid and dotted lines
     without an arrow, so they are drawn as specified and left as they are.
+  - **Step 5: fonts (2026-09-28)**: `LoadFont(FontSpec)`. Face names are read from the name table
+    directly: every ID 4 and 6 record (Windows and Unicode UTF-16, Macintosh Roman), matched
+    ignoring case (`sfnt.Name` returns only the first record, so a Japanese name could not pick a
+    face). Other Macintosh encodings are skipped (no new dependency). Body and bold each put
+    Hiragino W3 / W6 after the chosen face and use, per character, the first face that draws it
+    (without Hiragino, the chosen face alone). An unknown name is an error listing the faces; a
+    face that fails to load is reported by name. The name reader is tested on fonts built in the
+    test, and truncated files do not stop it.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

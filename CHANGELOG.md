@@ -102,7 +102,12 @@ to [Semantic Versioning](https://semver.org/).
   self as loops, activation bars, notes, loop / opt / alt / par / critical /
   break frames with sections, boxes, autonumber circles. Columns are placed
   from what lies between them; events stack in order.
-- `tools/mmdpng` renders a mermaid file to PNG and prints the timings.
+- `raster.LoadFont(FontSpec)`: a face chosen by file and name (full or
+  PostScript name, any language, any case), with a bold face of its own;
+  Hiragino fills in the characters it lacks, one by one. Unknown names list
+  the file's faces; faces that fail to load are named in the error.
+- `tools/mmdpng` renders a mermaid file to PNG and prints the timings;
+  `-font`, `-font-name`, `-bold`, `-bold-name` pick faces.
 - Layout property tests (placement, overlaps, link ends on outlines, no link
   through a node, distinct link ends, determinism) on synthetic cases in four
   directions, the 22 real flowcharts, 400 seeded random flowcharts (-random N

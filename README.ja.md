@@ -35,6 +35,9 @@ case *mermaidrender.Sequence:  // Participants, Boxes, Events（メッセージ�
 }
 
 font, err := raster.DefaultFont() // 一度読んで使い回す
+// または好きな書体。その書体に無い文字は 1 文字ずつヒラギノで補う
+font, err = raster.LoadFont(raster.FontSpec{Path: "/path/Font.ttc", Name: "Font-Regular",
+	BoldPath: "/path/Font.ttc", BoldName: "Font-Bold"})
 img, err := raster.Render(d, raster.Options{Font: font}) // *image.RGBA。Scale 0 は 2
 img, err = raster.RenderSource(src, raster.Options{Font: font})
 ```
@@ -51,6 +54,15 @@ subgraph を合わせて 300（subgraph は 100 まで）、線 500（mermaid �
 画素（時間とメモリのため）。PNG の大きさ（1 画素あたり 0.10〜0.67 バイトと幅がある）は呼び出し側が自分の
 上限（termimg の 2MiB）で確かめ、超えたらソースを表示する。上限を超えたときは、どのフォントにも無い文字と
 同じく `UnsupportedConstruct` のエラーになる。
+
+## フォント
+
+`FontSpec.Name` は、ファイルの中の書体（.ttc には複数ある）をフル名か PostScript 名で選ぶ。
+ファイルに記録されたどの言語の名前でもよく、大文字小文字は区別しない。`HiraginoSans-W6` でも
+`ヒラギノ角ゴシック W6` でも選べる。無い名前はエラーになり、ファイルにある書体の一覧が付く。読めない
+書体は書体の名前つきで報告する（.ttc は書体ごとに読めたり読めなかったりする）。選んだ書体に無い文字は
+1 文字ずつヒラギノ角ゴシックで描き、どの書体にも無い文字（絵文字など）はエラーにする（欠けた絵は
+返さない）。異体字セレクタ・ZWJ・ZWSP は読み飛ばす。`mmdpng -font パス -font-name 名前` で試せる。
 
 ## 依存
 

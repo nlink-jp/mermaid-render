@@ -36,6 +36,9 @@ case *mermaidrender.Sequence:  // Participants, Boxes, Events (messages, notes, 
 }
 
 font, err := raster.DefaultFont() // load once, reuse
+// or a face of your own; characters it lacks come from Hiragino one by one
+font, err = raster.LoadFont(raster.FontSpec{Path: "/path/Font.ttc", Name: "Font-Regular",
+	BoldPath: "/path/Font.ttc", BoldName: "Font-Bold"})
 img, err := raster.Render(d, raster.Options{Font: font}) // *image.RGBA; Scale 0 = 2
 img, err = raster.RenderSource(src, raster.Options{Font: font})
 ```
@@ -54,6 +57,17 @@ per image (for time and memory). The PNG's size is the caller's to check — it
 ran from 0.10 to 0.67 bytes per pixel — against its own limit (termimg's
 2 MiB), showing the source when over. Beyond the limits the result is an
 `UnsupportedConstruct` error, like a label character no font can draw.
+
+## Fonts
+
+`FontSpec.Name` picks a face in a file (a .ttc holds several) by its full
+name or PostScript name, in any language the file records, ignoring case:
+`HiraginoSans-W6` and `ヒラギノ角ゴシック W6` both work. An unknown name is an
+error that lists the file's faces; a face that fails to load is reported by
+name, since a collection's faces can fail one by one. Characters the chosen
+faces lack are drawn with Hiragino Sans, one by one; a character no face has
+(an emoji, say) is an error, never a gap. Variation selectors, ZWJ and ZWSP
+are skipped. `mmdpng -font path -font-name name` tries a face.
 
 ## Dependencies
 

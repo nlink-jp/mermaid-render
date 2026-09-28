@@ -40,6 +40,7 @@ mermaid-render/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
 │   ├── seq.go        # sequence: columns from pairwise needs, events stacked, drawing
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, MissingGlyphError
+│   ├── fontload.go   # FontSpec, LoadFont, name-table reader (every language)
 │   ├── layout.go     # layered layout: chains, two-level ranks, items, ordering
 │   ├── coords.go     # cross-axis coordinates: difference constraints + descent
 │   ├── place.go      # rank positions, frames, ports, routing, direction transform
