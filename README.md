@@ -29,7 +29,10 @@ if errors.As(err, &e) {
 	// e.Kind: SyntaxError, UnsupportedType or UnsupportedConstruct; e.Line
 	// is 1-based in src. Every kind means: show the source instead.
 }
-f := d.(*mermaidrender.Flowchart) // Nodes, Links, Subgraphs, Direction
+switch d := d.(type) {
+case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
+case *mermaidrender.ER:        // Entities (attributes), Relationships, Direction
+}
 
 font, err := raster.DefaultFont() // load once, reuse
 img, err := raster.Render(d, raster.Options{Font: font}) // *image.RGBA; Scale 0 = 2
@@ -38,8 +41,11 @@ img, err = raster.RenderSource(src, raster.Options{Font: font})
 
 Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 (which characters an id may hold, how link symbols are read, subgraph
-membership) follow that version's own parser. `raster` draws flowcharts on a
-white card with a layered layout; the caller encodes the PNG and chooses the
+membership) follow that version's own parser; `erDiagram` is read with a port
+of that version's lexer, rule by rule, so it agrees with mermaid on edge cases
+(keywords such as `one` or `to` are never names, and `direction TD` is two
+entities). `raster` draws flowcharts (ER drawing is in progress) on a white
+card with a layered layout; the caller encodes the PNG and chooses the
 terminal box. Limits keep a render bounded: 300 nodes and subgraphs (at most
 100 subgraphs), 500 links (mermaid's own limit, checked while parsing), 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx

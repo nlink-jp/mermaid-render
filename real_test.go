@@ -24,7 +24,12 @@ func outcome(src string) string {
 	if err != nil {
 		return "error: " + err.Error() + "\n"
 	}
-	return dump(d.(*Flowchart))
+	switch d := d.(type) {
+	case *ER:
+		return dumpER(d)
+	default:
+		return dump(d.(*Flowchart))
+	}
 }
 
 func TestRealBlocks(t *testing.T) {

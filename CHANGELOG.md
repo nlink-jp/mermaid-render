@@ -72,6 +72,14 @@ to [Semantic Versioning](https://semver.org/).
   crossing only at a clear angle or keeping 0.3 em apart, no link through
   another link's label, every node label inside its shape. A 60,000-seed
   sweep passes.
+- `Parse` for `erDiagram` (mermaid 12.0.0): entities, aliases, quoted names,
+  attributes (types with `?` and `~` generics, PK / FK / UK, comments),
+  every cardinality in symbols and words, identifying and non-identifying
+  relationships, labels, `direction`. The lexer is a rule-by-rule port of
+  `erDiagram.jison`, so edge cases read as mermaid reads them. Markdown
+  formatting in names and labels, the undocumented `u` cardinality and ER
+  subgraphs are unsupported constructs; style, classDef, class and `:::`
+  are ignored. At most 500 relationships and 200 attributes per entity.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings.
 - Layout property tests (placement, overlaps, link ends on outlines, no link
   through a node, distinct link ends, determinism) on synthetic cases in four

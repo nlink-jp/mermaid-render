@@ -1,1 +1,22 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity INDICATOR "INDICATOR"
+  attr string value PK
+  attr string type "domain | ip | hash"
+  attr datetime first_seen
+  attr datetime last_seen
+entity ATTRIBUTION "ATTRIBUTION"
+  attr string id PK
+  attr string confidence "High | Medium | Low"
+  attr string method
+entity THREAT_ACTOR "THREAT_ACTOR"
+  attr string name PK
+  attr string origin_country
+  attr string motivation
+entity INFRASTRUCTURE "INFRASTRUCTURE"
+  attr string asn PK
+  attr string cidr
+  attr string country
+  attr string hosting_provider
+rel INDICATOR -> ATTRIBUTION exactly-one/zero-or-more identifying "identifies"
+rel ATTRIBUTION -> THREAT_ACTOR exactly-one/one-or-more identifying "linked_to"
+rel INDICATOR -> INFRASTRUCTURE zero-or-more/zero-or-more identifying "resolves_to"

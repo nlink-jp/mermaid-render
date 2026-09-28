@@ -1,1 +1,25 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity INCIDENT "INCIDENT"
+  attr string incident_id PK
+  attr string title
+  attr string severity
+  attr string status
+  attr date detected_at
+entity INDICATOR "INDICATOR"
+  attr string indicator_id PK
+  attr string type
+  attr string value
+  attr string confidence
+entity EVIDENCE "EVIDENCE"
+  attr string evidence_id PK
+  attr string source_tool
+  attr string raw_data
+  attr datetime collected_at
+entity THREAT_ACTOR "THREAT_ACTOR"
+  attr string actor_id PK
+  attr string name
+  attr string origin
+  attr string motivation
+rel INCIDENT -> INDICATOR exactly-one/zero-or-more identifying "contains"
+rel INDICATOR -> EVIDENCE exactly-one/zero-or-more identifying "provides"
+rel INDICATOR -> THREAT_ACTOR zero-or-more/zero-or-one identifying "attributed_to"

@@ -1,1 +1,21 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity USER "USER"
+  attr int id PK
+  attr string username
+  attr string email
+entity ORDER "ORDER"
+  attr int id PK
+  attr int user_id FK
+  attr string status
+  attr datetime created_at
+entity ORDER_ITEM "ORDER_ITEM"
+  attr int order_id FK
+  attr int item_id FK
+  attr int quantity
+entity ITEM "ITEM"
+  attr int id PK
+  attr string name
+  attr int price
+rel USER -> ORDER exactly-one/zero-or-more identifying "places"
+rel ORDER -> ORDER_ITEM exactly-one/one-or-more identifying "contains"
+rel ITEM -> ORDER_ITEM exactly-one/zero-or-more identifying "ordered in"

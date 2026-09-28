@@ -1,1 +1,28 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity DOMAIN "DOMAIN"
+  attr string name PK
+  attr string registrar
+  attr date creation_date
+  attr date expiry_date
+entity SUBDOMAIN "SUBDOMAIN"
+entity DNS_RECORD "DNS_RECORD"
+entity IP_ADDRESS "IP_ADDRESS"
+  attr string ip_address PK
+  attr string country
+  attr boolean is_tor_exit
+  attr boolean is_relay
+entity ASN "ASN"
+  attr int asn PK
+  attr string org_name
+  attr string country
+entity ABUSE_REPORT "ABUSE_REPORT"
+entity THREAT_PULSE "THREAT_PULSE"
+  attr string pulse_id PK
+  attr string adversary
+  attr string malware_family
+rel DOMAIN -> SUBDOMAIN exactly-one/zero-or-more identifying "contains"
+rel DOMAIN -> DNS_RECORD exactly-one/one-or-more identifying "resolves_to"
+rel DNS_RECORD -> IP_ADDRESS one-or-more/exactly-one identifying "points_to"
+rel IP_ADDRESS -> ASN one-or-more/exactly-one identifying "routed_by"
+rel IP_ADDRESS -> ABUSE_REPORT exactly-one/zero-or-more identifying "has"
+rel DOMAIN -> THREAT_PULSE exactly-one/zero-or-more identifying "associated_with"

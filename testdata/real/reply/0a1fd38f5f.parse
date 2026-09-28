@@ -1,1 +1,31 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity INCIDENT "INCIDENT"
+  attr string incident_id PK
+  attr string title
+  attr string severity
+  attr date detected_at
+entity INDICATOR "INDICATOR"
+  attr string indicator_id PK
+  attr string type
+  attr string value
+entity DOMAIN "DOMAIN"
+  attr string fqdn PK
+  attr string registrar
+  attr date created_at
+entity IP_ADDRESS "IP_ADDRESS"
+  attr string ip PK
+  attr string country
+  attr boolean is_tor
+entity ASN "ASN"
+  attr int asn_number PK
+  attr string org_name
+entity THREAT_ACTOR "THREAT_ACTOR"
+  attr string actor_id PK
+  attr string name
+  attr string confidence
+rel INCIDENT -> INDICATOR exactly-one/zero-or-more identifying "contains"
+rel INDICATOR -> DOMAIN exactly-one/zero-or-more identifying "resolves_to"
+rel INDICATOR -> IP_ADDRESS exactly-one/zero-or-more identifying "resolves_to"
+rel DOMAIN -> IP_ADDRESS exactly-one/zero-or-more identifying "points_to"
+rel IP_ADDRESS -> ASN one-or-more/exactly-one identifying "belongs_to"
+rel INDICATOR -> THREAT_ACTOR one-or-more/zero-or-more identifying "attributed_to"

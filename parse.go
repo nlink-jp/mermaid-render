@@ -19,6 +19,8 @@ func Parse(src string) (Diagram, error) {
 	switch kw {
 	case "flowchart", "graph", "flowchart-elk":
 		return parseFlowchart(lines, title)
+	case "erDiagram":
+		return parseER(lines, title)
 	}
 	if unsupportedTypes[kw] {
 		return nil, errf(UnsupportedType, head.no, "%s", kw)
@@ -27,11 +29,11 @@ func Parse(src string) (Diagram, error) {
 }
 
 // unsupportedTypes are the diagram keywords of mermaid 12.0.0 that this
-// engine does not draw. sequenceDiagram and erDiagram leave this list when
-// their parsers land.
+// engine does not draw. sequenceDiagram leaves this list when its parser
+// lands.
 var unsupportedTypes = map[string]bool{
-	"sequenceDiagram": true, "erDiagram": true,
-	"stateDiagram": true, "stateDiagram-v2": true, "classDiagram": true, "classDiagram-v2": true,
+	"sequenceDiagram": true,
+	"stateDiagram":    true, "stateDiagram-v2": true, "classDiagram": true, "classDiagram-v2": true,
 	"gantt": true, "pie": true, "mindmap": true, "journey": true, "gitGraph": true,
 	"timeline": true, "quadrantChart": true, "requirementDiagram": true,
 	"C4Context": true, "C4Container": true, "C4Component": true, "C4Dynamic": true, "C4Deployment": true,

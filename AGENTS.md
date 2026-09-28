@@ -29,6 +29,9 @@ mermaid-render/
 ├── flowchart.go      # Flowchart, Node, Link, Subgraph, Shape, Stroke, Head
 ├── flowparse.go      # the flowchart parser (flow.jison / flowDb.ts rules noted inline)
 ├── label.go          # label text: quotes, entity codes, <br>, HTML refused
+├── er.go             # ER, Entity, Attribute, Relationship, Cardinality
+├── erlex.go          # the erDiagram.jison lexer, ported rule by rule
+├── erparse.go        # the erDiagram grammar; generics, markdown refusal
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
 ├── raster/
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, MissingGlyphError
@@ -101,6 +104,12 @@ mermaid-render/
 - **Ranks are two-level**: a subgraph is ranked inside, then placed as one
   block. Ranking members directly let a cycle through subgraphs make one
   frame straddle another (the mermaid docs' own example did).
+- **The ER lexer is a port, not a reading of the docs** (`erlex.go`): rules
+  in `erDiagram.jison` order, first match wins, case-insensitive, `\b`
+  appended to a rule ending in a word character (jison-lex does that), and
+  Go-side lookaheads for the four `(?=...)` rules. JavaScript's `\s` and `.`
+  are spelled out (`jsSpace`, `jsDot`). Do not "fix" a surprising result
+  (`direction TD` as two entities) without checking mermaid does otherwise.
 - **Link tokens follow flowDb.destructEndLink**: a start mark counts only when
   the end mark is the same kind; `A---oB` has length 2.
 - **Font names**: `sfnt.Name` returns the first name record whatever its

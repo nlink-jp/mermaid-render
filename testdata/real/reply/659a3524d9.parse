@@ -1,1 +1,17 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity INCIDENT "INCIDENT"
+  attr string incident_id PK
+  attr string title
+  attr string severity
+  attr string detected_at
+entity INDICATOR "INDICATOR"
+  attr string indicator_id PK
+  attr string type
+  attr string value
+  attr string confidence
+entity THREAT_PULSE "THREAT_PULSE"
+  attr string pulse_id PK
+  attr string adversary
+  attr string malware_family
+rel INCIDENT -> INDICATOR exactly-one/zero-or-more identifying "contains"
+rel INDICATOR -> THREAT_PULSE exactly-one/zero-or-more identifying "matches"

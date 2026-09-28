@@ -196,8 +196,10 @@ real data.
 
 - Entities, aliases, names containing hyphens, quoted names
 - Entities without an attribute block [R]
-- Attributes (type, name, PK / FK / UK and their combinations, comment) [R]
-- Every cardinality marker, and the word forms (`one or more` and so on)
+- Attributes (type, name, PK / FK / UK and their combinations, comment) [R], optional types
+  `string?`, generics with `~` (`List~int~` shows as `List<int>`)
+- Every cardinality marker, and the word forms (`one or more` and so on); a marker may stand on
+  either side (`o{--||`)
 - Identifying (`--`) and non-identifying (`..`) relationships, relationship labels (quoted ones
   included) [R]
 - `direction` (supported, since ER shares the flowchart layout)
@@ -563,6 +565,20 @@ same way as pathguard.
     bends from 106 to 134 and was dropped).
     Round 4 (2026-09-28): all 22 marked ○ on all four items, no notes. This closes the flowchart
     check.
+  - **Step 3a: reading ER (2026-09-28)**: the lexer rules of `erDiagram.jison` are ported in their
+    order, with jison's behaviour (first matching rule wins, case-insensitive, `\b` appended to a
+    rule ending in a word character). Rules derived from the documentation's prose would disagree
+    with mermaid on details. Consequences shared with mermaid: `one`, `to`, `many`, `end`, `class`,
+    `style` and the like are never names; `direction TD` is not a direction but two entities
+    ("direction", "TD": the lexer has no TD); an unquoted two-word label (`: places order`) makes
+    its second word an entity; any line containing `direction TB` is a direction statement.
+    Entity names and relationship labels are markdown in mermaid, so formatting (emphasis, code,
+    headings) is refused as unsupported rather than drawn as marks. The `u` cardinality (in the
+    lexer only, not the documentation) and ER subgraphs are unsupported too. Presentation
+    (style, classDef, class, `:::`) is checked for form and dropped. Entity codes go through
+    mermaid's own placeholders (`ﬂ°…¶ß`), so they fail inside attribute words exactly as in
+    mermaid. The 11 real blocks were checked against an independently written reader before
+    their goldens were frozen.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

@@ -157,6 +157,9 @@ func TestRealBlocksRender(t *testing.T) {
 		if err != nil {
 			continue
 		}
+		if _, ok := d.(*mr.Flowchart); !ok {
+			continue // until ER drawing lands (step 3b)
+		}
 		if _, err := Render(d, Options{Font: fn}); err != nil {
 			t.Errorf("%s: %v", filepath.Base(f), err)
 		}

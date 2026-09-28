@@ -1,1 +1,9 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity INDICATOR "INDICATOR"
+  attr string value PK
+  attr string type
+  attr datetime first_seen
+entity ATTRIBUTION "ATTRIBUTION"
+  attr string id PK
+  attr string confidence
+rel INDICATOR -> ATTRIBUTION exactly-one/zero-or-more identifying "identifies"

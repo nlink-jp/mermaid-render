@@ -1,1 +1,23 @@
-error: line 1: unsupported diagram type: erDiagram
+dir TB
+entity DOMAIN "DOMAIN"
+  attr string fqdn PK
+  attr string registrar
+  attr date created_at
+entity IP_ADDRESS "IP_ADDRESS"
+  attr string ip_v4 PK
+  attr string country
+  attr boolean is_tor
+entity CERTIFICATE "CERTIFICATE"
+entity WHOIS_RECORD "WHOIS_RECORD"
+entity ASN "ASN"
+  attr int asn PK
+  attr string org_name
+entity ABUSE_REPORT "ABUSE_REPORT"
+entity THREAT_PULSE "THREAT_PULSE"
+rel DOMAIN -> IP_ADDRESS exactly-one/zero-or-more identifying "resolves_to"
+rel DOMAIN -> CERTIFICATE exactly-one/zero-or-more identifying "uses"
+rel DOMAIN -> WHOIS_RECORD exactly-one/exactly-one identifying "registered_with"
+rel IP_ADDRESS -> ASN one-or-more/exactly-one identifying "belongs_to"
+rel IP_ADDRESS -> ABUSE_REPORT exactly-one/zero-or-more identifying "has"
+rel DOMAIN -> THREAT_PULSE one-or-more/zero-or-more identifying "associated_with"
+rel IP_ADDRESS -> THREAT_PULSE one-or-more/zero-or-more identifying "associated_with"
