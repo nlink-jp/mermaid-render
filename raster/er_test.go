@@ -104,7 +104,9 @@ func checkER(t *testing.T, name string, d *mr.ER, el *erLayout, m measurer) {
 		for _, q := range p[1 : len(p)-1] {
 			dx := math.Max(0, math.Max(e.LabelBox.X0-q.X, q.X-e.LabelBox.X1))
 			dy := math.Max(0, math.Max(e.LabelBox.Y0-q.Y, q.Y-e.LabelBox.Y1))
-			if d := math.Hypot(dx, dy); d < erLabelRoom-0.05 && d > 1e-9 {
+			// 1.2 em as the operator's check asked, not erLabelRoom: the
+			// check must not loosen with the constant it guards.
+			if d := math.Hypot(dx, dy); d < 1.2-0.05 && d > 1e-9 {
 				fail("link %s->%s bends %.3f em from its label", e.Link.From.ID, e.Link.To.ID, d)
 			}
 		}
@@ -286,3 +288,60 @@ func TestRealERBends(t *testing.T) {
 // erBendsBaseline: 46 after the first ER check (48 with a 60% face), 40
 // after the second (pushRuns).
 const erBendsBaseline = 40
+
+// What is drawn matches the source: each end's marker has the parts of its
+// own cardinality (next to the entity the maximum, then the minimum), and
+// the line is dashed exactly for non-identifying relationships. The layout
+// checks cannot see this: they end at the right entity whatever is drawn.
+func TestERDrawnMarkers(t *testing.T) {
+	fn, err := DefaultFont()
+	if err != nil {
+		t.Skipf("no system font: %v", err)
+	}
+	parts := map[mr.Cardinality]string{
+		mr.ExactlyOne: "bar@0.45 bar@0.75",
+		mr.ZeroOrOne:  "bar@0.45 circle@1.00",
+		mr.ZeroOrMore: "foot circle@1.10",
+		mr.OneOrMore:  "foot bar@1.05",
+	}
+	src := `erDiagram
+    direction DIR
+    A |o--o{ B : first
+    B }|..|| C : second
+    C ||--o| A : third
+    A }o..|{ A : self`
+	for _, dir := range []string{"TB", "BT", "LR", "RL"} {
+		d, err := mr.Parse(strings.Replace(src, "DIR", dir, 1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		el, err := layoutER(d.(*mr.ER), fn.measureEm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		drawn := map[string]string{}
+		if _, err := render(d, Options{Font: fn}, func(s string) {
+			if k, v, ok := strings.Cut(s, ": "); ok {
+				drawn[k] = v
+			} else {
+				drawn[s] = ""
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range el.Edges {
+			r := el.rels[e.Link]
+			p, q := e.Points[0], e.Points[len(e.Points)-1]
+			if got := drawn[fmt.Sprintf("marker at %.2f,%.2f", p.X, p.Y)]; got != parts[r.FromCard] {
+				t.Errorf("%s %s: marker at %s is %q, want %s %q", dir, r.Label, r.From.Name, got, r.FromCard, parts[r.FromCard])
+			}
+			if got := drawn[fmt.Sprintf("marker at %.2f,%.2f", q.X, q.Y)]; got != parts[r.ToCard] {
+				t.Errorf("%s %s: marker at %s is %q, want %s %q", dir, r.Label, r.To.Name, got, r.ToCard, parts[r.ToCard])
+			}
+			line := fmt.Sprintf("line dashed=%v %.2f,%.2f", !r.Identifying, p.X, p.Y)
+			if _, ok := drawn[line]; !ok {
+				t.Errorf("%s %s: no %q", dir, r.Label, line)
+			}
+		}
+	}
+}

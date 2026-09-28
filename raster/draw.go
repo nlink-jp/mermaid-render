@@ -1,6 +1,7 @@
 package raster
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -40,6 +41,15 @@ type canvas struct {
 	offX, offY float64 // em
 	// rels marks an ER diagram's links: they end in cardinality markers.
 	rels map[*mr.Link]*mr.Relationship
+	// trace, when set, is told what is drawn: markers, heads, lines (tests
+	// tie them to the source).
+	trace func(string)
+}
+
+func (c *canvas) tracef(format string, a ...any) {
+	if c.trace != nil {
+		c.trace(fmt.Sprintf(format, a...))
+	}
 }
 
 func (c *canvas) px(p Pt) (float32, float32) {
@@ -89,6 +99,9 @@ func (c *canvas) segment(a, b Pt, w float64, col color.Color) {
 
 // polyline strokes a path; dotted draws it in dashes.
 func (c *canvas) polyline(pts []Pt, w float64, dotted bool, col color.Color) {
+	if len(pts) > 0 {
+		c.tracef("line dashed=%v %.2f,%.2f", dotted, pts[0].X, pts[0].Y)
+	}
 	if !dotted {
 		for i := 0; i+1 < len(pts); i++ {
 			c.segment(pts[i], pts[i+1], w, col)

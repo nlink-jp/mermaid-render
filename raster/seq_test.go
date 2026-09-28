@@ -80,6 +80,36 @@ func checkSeq(t *testing.T, name string, d *mr.Sequence, sl *seqLayout) {
 		if !reach(a, first.X) || !reach(b, last.X) {
 			fail("message %d (%q) does not start and end on its lifelines", k, e.Text)
 		}
+		// Each end is on its lifeline, or on the side of the outermost bar
+		// open there, facing the other end.
+		endAt := func(i int, p Pt, right bool) float64 {
+			x := sl.cols[i]
+			for _, bar := range sl.acts {
+				if bar.Y0-eps <= p.Y && p.Y <= bar.Y1+eps && bar.X0 < x+10*sqActStep && bar.X1 > x-sqActW {
+					if right {
+						x = math.Max(x, bar.X1)
+					} else {
+						x = math.Min(x, bar.X0)
+					}
+				}
+			}
+			return x
+		}
+		// An arrow points at its receiver; a loop to itself goes right.
+		if a != b && (last.X-first.X)*(sl.cols[b]-sl.cols[a]) <= 0 {
+			fail("message %d (%q) points the wrong way", k, e.Text)
+		}
+		if a == b && m.pts[1].X <= first.X {
+			fail("message %d (%q) to itself loops the wrong way", k, e.Text)
+		}
+		toRight := a == b || sl.cols[b] > sl.cols[a]
+		if want := endAt(a, first, toRight); math.Abs(first.X-want) > eps {
+			fail("message %d (%q) starts at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, first.X, want)
+		}
+		fromRight := a == b || sl.cols[a] > sl.cols[b]
+		if want := endAt(b, last, fromRight); math.Abs(last.X-want) > eps {
+			fail("message %d (%q) ends at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, last.X, want)
+		}
 		if m.tbox != (Rect{}) {
 			texts = append(texts, labelled{m.tbox, "message " + e.Text})
 			if m.tbox.Y1 > first.Y+eps {
@@ -121,6 +151,16 @@ func checkSeq(t *testing.T, name string, d *mr.Sequence, sl *seqLayout) {
 			fail("note %q is outside the picture", e.Text)
 		}
 		lo, hi := min(idx[e.From], idx[e.To]), max(idx[e.From], idx[e.To])
+		switch x := sl.cols[lo]; e.Place {
+		case mr.LeftOf:
+			if nt.box.X1 > x-eps {
+				fail("note %q is not left of %s", e.Text, e.From.ID)
+			}
+		case mr.RightOf:
+			if nt.box.X0 < x+eps {
+				fail("note %q is not right of %s", e.Text, e.From.ID)
+			}
+		}
 		for i, x := range sl.cols {
 			crosses := x > nt.box.X0+eps && x < nt.box.X1-eps
 			own := e.Place == mr.Over && i >= lo && i <= hi
@@ -164,6 +204,13 @@ func checkSeq(t *testing.T, name string, d *mr.Sequence, sl *seqLayout) {
 				fail("a %s frame does not hold the note %q in its rows", f.kind, nt.text)
 			}
 		}
+		for _, bar := range sl.acts {
+			for _, y := range []float64{bar.Y0, bar.Y1} {
+				if in(y, y) && (bar.X0 < f.box.X0 || bar.X1 > f.box.X1) {
+					fail("a %s frame does not hold an activation that starts or ends in its rows", f.kind)
+				}
+			}
+		}
 		for _, g := range sl.frames {
 			if g != f && in(g.box.Y0, g.box.Y1) && !f.box.contains(g.box) {
 				fail("a %s frame does not hold the %s frame inside it", f.kind, g.kind)
@@ -175,6 +222,34 @@ func checkSeq(t *testing.T, name string, d *mr.Sequence, sl *seqLayout) {
 			if a.r.overlaps(b.r) {
 				fail("%s overlaps %s", a.what, b.what)
 			}
+		}
+	}
+	// A bar starts at the message that activates its participant (A->>+B,
+	// or a message followed by activate) and ends at the one it sends
+	// before deactivating (B-->>-A).
+	mi := -1
+	for k, e := range d.Events {
+		if e.Kind == mr.Message {
+			mi++
+		}
+		if mi < 0 || k == 0 || d.Events[k-1].Kind != mr.Message {
+			continue
+		}
+		prev, y := d.Events[k-1], sl.msgs[mi].pts[0].Y
+		if prev.From == prev.To {
+			y = sl.msgs[mi].pts[len(sl.msgs[mi].pts)-1].Y
+		}
+		col := sl.cols[idx[e.From]]
+		found := false
+		for _, bar := range sl.acts {
+			near := bar.X0 < col+10*sqActStep && bar.X1 > col-sqActW
+			if e.Kind == mr.Activate && e.From == prev.To && near && math.Abs(bar.Y0-y) < eps ||
+				e.Kind == mr.Deactivate && e.From == prev.From && near && math.Abs(bar.Y1-y) < eps {
+				found = true
+			}
+		}
+		if (e.Kind == mr.Activate && e.From == prev.To || e.Kind == mr.Deactivate && e.From == prev.From) && !found {
+			fail("no bar of %s %ss at message %d's arrow", e.From.ID, e.Kind, mi)
 		}
 	}
 	for _, a := range sl.acts {
@@ -232,6 +307,29 @@ func TestSequenceLayoutCases(t *testing.T) {
     autonumber
     A<<->>B: both ways
     B<<-->>A: and back`,
+		"a block holding only an activation": `sequenceDiagram
+    participant A
+    participant B
+    participant C
+    loop x
+    activate C
+    end
+    deactivate C`,
+		"deep nesting": `sequenceDiagram
+    participant A
+    participant B
+    activate A
+    activate A
+    activate A
+    activate A
+    activate A
+    activate A
+    activate A
+    activate A
+    A->>A: think
+    B->>A: in
+    A->>B: out
+    Note right of A: beside`,
 		"activations stacked": `sequenceDiagram
     A->>+B: one
     A->>+B: two
@@ -354,6 +452,71 @@ func TestSequenceLayoutRandom(t *testing.T) {
 		if t.Failed() {
 			t.Logf("source:\n%s", src)
 			return
+		}
+	}
+}
+
+// What is drawn matches the source: each message's line is dashed exactly
+// when it is dotted, and its heads are of its kind at its end (and its
+// start, for two-headed arrows).
+func TestSequenceDrawnHeads(t *testing.T) {
+	fn, err := DefaultFont()
+	if err != nil {
+		t.Skipf("no system font: %v", err)
+	}
+	src := `sequenceDiagram
+    A->B: 1
+    A-->B: 2
+    A->>B: 3
+    B-->>A: 4
+    A<<->>B: 5
+    B<<-->>A: 6
+    A-xB: 7
+    B--xA: 8
+    A-)B: 9
+    A--)A: 10`
+	d, err := mr.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := d.(*mr.Sequence)
+	sl, err := layoutSequence(s, fn.measureEm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drawn := map[string]bool{}
+	if _, err := render(d, Options{Font: fn}, func(t string) { drawn[t] = true }); err != nil {
+		t.Fatal(err)
+	}
+	k := 0
+	for _, e := range s.Events {
+		if e.Kind != mr.Message {
+			continue
+		}
+		m := sl.msgs[k]
+		k++
+		p, q := m.pts[0], m.pts[len(m.pts)-1]
+		if line := fmt.Sprintf("line dashed=%v %.2f,%.2f", e.Dotted, p.X, p.Y); !drawn[line] {
+			t.Errorf("message %q: no %q", e.Text, line)
+		}
+		heads := []Pt{}
+		if e.Head != mr.HeadNone {
+			heads = append(heads, q)
+			if e.BothEnds {
+				heads = append(heads, p)
+			}
+		}
+		for _, h := range heads {
+			if key := fmt.Sprintf("head %s at %.2f,%.2f", e.Head, h.X, h.Y); !drawn[key] {
+				t.Errorf("message %q: no %q", e.Text, key)
+			}
+		}
+		if e.Head == mr.HeadNone || !e.BothEnds {
+			for _, other := range []mr.ArrowHead{mr.HeadFilled, mr.HeadCross, mr.HeadOpen} {
+				if drawn[fmt.Sprintf("head %s at %.2f,%.2f", other, p.X, p.Y)] {
+					t.Errorf("message %q: a head at its start", e.Text)
+				}
+			}
 		}
 	}
 }

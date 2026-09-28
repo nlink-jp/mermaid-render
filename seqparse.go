@@ -52,6 +52,23 @@ func parseSequence(lines []srcLine, title frontTitle) (Diagram, error) {
 	if t := p.peek(); t.kind != "EOF" {
 		return nil, p.unexpected(t)
 	}
+	// A box draws around neighbouring columns. A participant mentioned
+	// before its box was declared keeps its earlier place, and a box around
+	// columns that are not side by side would take in a participant it
+	// does not hold (mermaid draws that too): refused, not drawn wrong.
+	at := map[*Participant]int{}
+	for i, pt := range p.d.Participants {
+		at[pt] = i
+	}
+	for _, b := range p.d.Boxes {
+		lo, hi := len(p.d.Participants), -1
+		for _, pt := range b.Participants {
+			lo, hi = min(lo, at[pt]), max(hi, at[pt])
+		}
+		if hi >= 0 && hi-lo+1 != len(b.Participants) {
+			return nil, errf(UnsupportedConstruct, b.Line, "box %q holds participants that are not side by side", b.Title)
+		}
+	}
 	return p.d, nil
 }
 

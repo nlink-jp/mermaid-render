@@ -460,6 +460,12 @@ func TestSequenceRefusals(t *testing.T) {
     A->>B: hi`, SyntaxError, 3},
 		{"jison: a name stops before --", `sequenceDiagram
     A--B->>C: x`, SyntaxError, 2},
+		{"a box around participants not side by side", `sequenceDiagram
+    A->>B: hi
+    box Grp
+    participant A
+    participant C
+    end`, UnsupportedConstruct, 3},
 		{"HTML in a message", `sequenceDiagram
     A->>B: <b>bold</b>`, UnsupportedConstruct, 2},
 	}

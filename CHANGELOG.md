@@ -106,6 +106,15 @@ to [Semantic Versioning](https://semver.org/).
   PostScript name, any language, any case), with a bold face of its own;
   Hiragino fills in the characters it lacks, one by one. Unknown names list
   the file's faces; faces that fail to load are named in the error.
+- Step-5 review, layout: an arrow ends outside all of a participant's
+  bars, as mermaid does (with nested bars it ran into the outer ones); a
+  block frame holds the bars that start or end in it; what stands beside a
+  lifeline (neighbours, self-message loops, side notes, message text) stands
+  beyond its deepest bar; an empty box reserves no title row; a box around
+  participants that are not side by side is an unsupported construct (it
+  would take in a participant it does not hold). Tests now tie what is
+  drawn to the source (markers, heads, dashed lines, through a drawing
+  trace) and check arrow ends, bar ends and note sides exactly.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings;
   `-font`, `-font-name`, `-bold`, `-bold-name` pick faces.
 - Layout property tests (placement, overlaps, link ends on outlines, no link

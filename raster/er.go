@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	mr "github.com/nlink-jp/mermaid-render"
@@ -209,14 +210,21 @@ func (c *canvas) marker(card mr.Cardinality, tip, from Pt) {
 	ux, uy := dx/l, dy/l // along the line, away from the entity
 	nx, ny := -uy, ux    // across it
 	at := func(t, s float64) Pt { return Pt{tip.X + ux*t + nx*s, tip.Y + uy*t + ny*s} }
-	bar := func(t float64) { c.segment(at(t, -markHalf), at(t, markHalf), lineW*1.2, colEdge) }
+	var parts []string
+	defer func() { c.tracef("marker at %.2f,%.2f: %s", tip.X, tip.Y, strings.Join(parts, " ")) }()
+	bar := func(t float64) {
+		parts = append(parts, fmt.Sprintf("bar@%.2f", t))
+		c.segment(at(t, -markHalf), at(t, markHalf), lineW*1.2, colEdge)
+	}
 	circle := func(t float64) {
+		parts = append(parts, fmt.Sprintf("circle@%.2f", t))
 		ctr := at(t, 0)
 		ring := ellipse(ctr.X, ctr.Y, markCircR, markCircR, 24)
 		c.fill(ring, colBG)
 		c.polyline(append(ring, ring[0]), lineW, false, colEdge)
 	}
 	foot := func() {
+		parts = append(parts, "foot")
 		c.segment(at(footLen, 0), at(0, -markHalf), lineW, colEdge)
 		c.segment(at(footLen, 0), at(0, markHalf), lineW, colEdge)
 	}

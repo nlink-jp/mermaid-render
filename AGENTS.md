@@ -127,6 +127,11 @@ mermaid-render/
 - **A mutant that does not compile proves nothing**: when checking a
   property by breaking the code, make sure the broken copy builds (an
   unused variable once passed for "not caught").
+- **Drawing is checked through a trace** (`render(d, opts, trace)`,
+  `canvas.tracef`): markers, heads and every polyline's dash flag are
+  reported, and tests compare them with the source. Trace inside the
+  primitive (polyline), not beside the call: a trace line computed apart
+  from the drawn value let a swapped dash flag pass.
 - **Sequence columns are a longest path over pairwise needs**: every
   constraint is between a column and one to its left, so one pass from the
   left places them. A frame's width comes from what lies in its rows.

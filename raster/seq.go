@@ -145,6 +145,22 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 		hdrH = math.Max(hdrH, h)
 	}
 
+	// How far each participant's bars reach from its lifeline at their
+	// deepest: what stands beside a lifeline stands beyond its bars.
+	barReach := make([]float64, n)
+	{
+		dep := make([]int, n)
+		for _, e := range d.Events {
+			switch i := idx[e.From]; e.Kind {
+			case mr.Activate:
+				dep[i]++
+				barReach[i] = math.Max(barReach[i], float64(dep[i]-1)*sqActStep+sqActW/2)
+			case mr.Deactivate:
+				dep[i] = max(dep[i]-1, 0)
+			}
+		}
+	}
+
 	// Columns: every constraint is between a column and one to its left.
 	need := make([][]float64, n) // need[j][i]: x_j - x_i >= need, i < j
 	for j := range need {
@@ -191,11 +207,11 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			if a == b {
 				if a+1 < n {
 					reach := math.Max(sqSelfW, sqSelfText+w+0.3)
-					atLeast(a, a+1, reach+0.8)
+					atLeast(a, a+1, barReach[a]+reach+0.8+barReach[a+1])
 				}
 				continue
 			}
-			l := math.Max(w+2*sqMsgPad, sqMsgMinLen)
+			l := math.Max(w+2*sqMsgPad, sqMsgMinLen) + barReach[a] + barReach[b]
 			if e.Number != "" {
 				l += 2 * sqNumR
 			}
@@ -206,11 +222,11 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			switch e.Place {
 			case mr.RightOf:
 				if a+1 < n {
-					atLeast(a, a+1, sqNoteGap+nw+sqNoteGap)
+					atLeast(a, a+1, barReach[a]+sqNoteGap+nw+sqNoteGap+barReach[a+1])
 				}
 			case mr.LeftOf:
 				if a > 0 {
-					atLeast(a-1, a, sqNoteGap+nw+sqNoteGap)
+					atLeast(a-1, a, barReach[a-1]+sqNoteGap+nw+sqNoteGap+barReach[a])
 				}
 			case mr.Over:
 				lo, hi := min(a, b), max(a, b)
@@ -246,7 +262,7 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 	y := 0.0
 	boxTitleH := 0.0
 	for _, b := range d.Boxes {
-		if b.Title != "" {
+		if b.Title != "" && len(b.Participants) > 0 {
 			_, th, err := measure(b.Title, false, b.Line)
 			if err != nil {
 				return nil, err
@@ -277,17 +293,18 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 		}
 	}
 	// edge is where a message meets participant i's lifeline, heading
-	// toward x: at its activation bar's side when it has one.
+	// toward x: at the outside of its bars when it has any — the leftmost
+	// bar's left side, the rightmost's right side (nested bars step
+	// right), as mermaid's activationBounds does.
 	edge := func(i int, toward float64, dep int) float64 {
 		x := cols[i]
 		if dep <= 0 {
 			return x
 		}
-		off := float64(dep-1)*sqActStep + sqActW/2
 		if toward < x {
-			return x - sqActW/2 + float64(dep-1)*sqActStep
+			return x - sqActW/2
 		}
-		return x + off
+		return x + float64(dep-1)*sqActStep + sqActW/2
 	}
 	for k, e := range d.Events {
 		sz := sizes[k]
@@ -308,10 +325,10 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			if a == b {
 				x0 := edge(a, math.Inf(1), depth[a])
 				x1 := edge(a, math.Inf(1), dTo)
-				reach := cols[a] + sqSelfW
+				reach := cols[a] + barReach[a] + sqSelfW
 				msg.pts = []Pt{{x0, arrowY}, {reach, arrowY}, {reach, arrowY + sqSelfH}, {x1, arrowY + sqSelfH}}
 				if e.Text != "" {
-					tx := cols[a] + sqSelfText
+					tx := cols[a] + barReach[a] + sqSelfText
 					msg.tbox = Rect{tx, textTop, tx + sz.w, textTop + sz.h}
 				}
 				lastY = arrowY + sqSelfH
@@ -345,10 +362,10 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			var r Rect
 			switch e.Place {
 			case mr.RightOf:
-				x := cols[a] + sqNoteGap
+				x := cols[a] + barReach[a] + sqNoteGap
 				r = Rect{x, y, x + nw, y + nh}
 			case mr.LeftOf:
-				x := cols[a] - sqNoteGap
+				x := cols[a] - barReach[a] - sqNoteGap
 				r = Rect{x - nw, y, x, y + nh}
 			default:
 				lo, hi := cols[min(a, b)], cols[max(a, b)]
@@ -371,6 +388,8 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 		case mr.Activate:
 			i := idx[e.From]
 			acts[i] = append(acts[i], openAct{start: lastY, level: depth[i]})
+			x := cols[i] + float64(depth[i])*sqActStep
+			note(Rect{x - sqActW/2, lastY, x + sqActW/2, lastY}) // a frame holds the bars that start in it
 			depth[i]++
 		case mr.Deactivate:
 			i := idx[e.From]
@@ -384,6 +403,7 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			end := math.Max(lastY, o.start+sqMinBar)
 			x := cols[i] + float64(o.level)*sqActStep
 			sl.acts = append(sl.acts, Rect{x - sqActW/2, o.start, x + sqActW/2, end})
+			note(Rect{x - sqActW/2, end, x + sqActW/2, end}) // and those that end in it
 			if end > lastY {
 				lastY = end
 				y = math.Max(y, end+sqRowGap)
@@ -690,6 +710,9 @@ func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
 }
 
 func (c *canvas) seqHead(h mr.ArrowHead, tip, from Pt) {
+	if h != mr.HeadNone {
+		c.tracef("head %s at %.2f,%.2f", h, tip.X, tip.Y)
+	}
 	switch h {
 	case mr.HeadFilled:
 		c.head(mr.Arrow, tip, from)
