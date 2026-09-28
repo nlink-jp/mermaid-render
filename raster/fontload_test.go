@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 	"unicode/utf16"
 )
 
@@ -367,12 +368,27 @@ func TestFontReadsAreBounded(t *testing.T) {
 		fifo:        "not a regular file", // opening it would wait for a writer
 		big:         "limit",
 	} {
-		_, err := LoadFont(FontSpec{Path: path})
-		if err == nil || !strings.Contains(err.Error(), want) {
+		if err := loadWithin(FontSpec{Path: path}); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v, want an error naming %q", path, err, want)
 		}
-		if _, err := LoadFont(FontSpec{Path: hiraginoW3, BoldPath: path}); err == nil || !strings.Contains(err.Error(), want) {
+		if err := loadWithin(FontSpec{Path: hiraginoW3, BoldPath: path}); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("bold %s: %v, want an error naming %q", path, err, want)
 		}
+	}
+}
+
+// loadWithin is LoadFont with a runaway cap: a read that blocks (a named
+// pipe) fails the test on an assertion instead of hanging it.
+func loadWithin(spec FontSpec) error {
+	done := make(chan error, 1)
+	go func() {
+		_, err := LoadFont(spec)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(10 * time.Second):
+		return errors.New("blocked for 10 s")
 	}
 }

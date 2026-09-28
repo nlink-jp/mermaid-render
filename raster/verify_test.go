@@ -307,9 +307,16 @@ func TestVerifyShortLink(t *testing.T) {
 	d, el := erOf(t, "erDiagram\n    A ||--o{ B : has", fakeMeasure)
 	el.Edges[0].Points = el.Edges[0].Points[:1]
 	for _, strict := range []bool{false, true} {
-		fs := append(flowFaults(el.graph, el.flowLayout, fakeMeasure, strict, nil), erFaults(d, el, fakeMeasure, strict)...)
-		if !strings.Contains(strings.Join(fs, "; "), "has 1 points") {
-			t.Errorf("strict %v: %v, want the short link reported", strict, fs)
-		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("strict %v: panicked: %v", strict, r)
+				}
+			}()
+			fs := append(flowFaults(el.graph, el.flowLayout, fakeMeasure, strict, nil), erFaults(d, el, fakeMeasure, strict)...)
+			if !strings.Contains(strings.Join(fs, "; "), "has 1 points") {
+				t.Errorf("strict %v: %v, want the short link reported", strict, fs)
+			}
+		}()
 	}
 }
