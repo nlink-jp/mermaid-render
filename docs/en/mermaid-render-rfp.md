@@ -607,6 +607,7 @@ same way as pathguard.
     the runs in the way are now pushed aside whole, and a try is kept only when the steps along
     links go down (pushing apart only widens gaps, so no constraint breaks). Bends over the 11:
     46 to 40. ER only for now.
+    Round 3 (2026-09-28): all 11 marked ○ on all four items, no notes. This closes the ER check.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
