@@ -381,6 +381,13 @@ Tests:
 
 - First release of mermaid-render and registration in lib-series. Before release, an independent
   implementation review and govulncheck.
+- Added to the engine before release (from the design verification of gem-agent ADR-0092):
+  - **Invariants checked on every render**: the invariants the property tests hold (no two boxes
+    overlap, a box holds its label, a frame holds its members and no other box, an edge keeps its
+    label and every head has a run of line) are checked after layout on every render, and a
+    failure is an error. It checks wrong, never ugly.
+  - **Bounded font reads**: anything but a regular file is refused, and a read stops at a fixed
+    ceiling set from the largest system font on macOS.
 - **Integrate into gem-agent** (with an ADR):
   - Revise A3 of ADR-0089 (for the reasons in §3).
   - Change the type of the reply rendering function. Today `diagram.Split` runs inside glamour's
@@ -668,6 +675,16 @@ same way as pathguard.
     surviving mutant the reviewers listed now fails a test, except where a value is checked twice
     (name IDs). Recorded only: a leading NBSP or full-width space in an ER name, Go's case folding
     (ſ), an emoji just before `%%`.
+  - **Integration before phase 2 (2026-09-28, the operator's decision)**: after step 5, the visual
+    re-check of the sequence changes is skipped and integration into gem-agent (this RFP's phase 3)
+    goes first; stateDiagram, nested subgraphs and replacing the text art (phase 2) follow. On the
+    gem-agent side the design is ADR-0092 (Proposed), which had an independent design verification.
+    Findings on the engine: the property tests run offline only, so they alone do not answer
+    ADR-0089 A3's "a PNG deletes the verification that runs on every render" (→ invariants checked on
+    every render); font reads are unbounded, and gem-agent's bounded-read architecture test cannot
+    see inside an external module (→ bounded reads). Both are now phase 3 pre-release items. The
+    cell size is read with `TIOCGWINSZ`, an ioctl, so this does not contradict the rejected
+    "asking the terminal for its cell size" below.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
