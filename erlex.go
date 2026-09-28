@@ -36,11 +36,15 @@ type erToken struct {
 }
 
 type lexRule struct {
-	re   *regexp.Regexp
-	kind string // "" skips the match
-	// push / pop change the lexer state.
+	re *regexp.Regexp
+	// match, when set instead of re, is a hand-written matcher: the
+	// length it matches at the start of rest, or -1.
+	match func(rest string) int
+	kind  string // "" skips the match; "." is the character itself
+	// pop leaves that many states, then push enters one.
+	pop  int
 	push string
-	pop  bool
+	trim bool // the token's text is trimmed (yytext.trim())
 	// look is a hand-written lookahead (Go's regexp has none): the text
 	// after the match must satisfy it.
 	look func(rest string) bool
@@ -131,15 +135,15 @@ var erRules = map[string][]lexRule{
 		{re: lexRE("`"), push: "block_bq"},
 		r(`"[^"]*"`, "COMMENT"),
 		r(`[\n]+`, ""),
-		{re: lexRE(`\}`), kind: "BLOCK_STOP", pop: true},
+		{re: lexRE(`\}`), kind: "BLOCK_STOP", pop: 1},
 		r(`(DOT)`, "."),
 	},
 	"block_bq": {
 		r("[^`]+", "ATTRIBUTE_WORD"),
-		{re: lexRE("`"), pop: true},
+		{re: lexRE("`"), pop: 1},
 	},
 	"style": {
-		{re: lexRE(`[\n]+`), kind: "NEWLINE", pop: true},
+		{re: lexRE(`[\n]+`), kind: "NEWLINE", pop: 1},
 		r(`\s+`, ""),
 		r(`:`, "COLON"),
 		r(`,`, "COMMA"),
@@ -148,13 +152,13 @@ var erRules = map[string][]lexRule{
 		r(`;`, "SEMI"),
 	},
 	"acc_title": {
-		{re: lexRE(`[^\n]*`), kind: "acc_title_value", pop: true},
+		{re: lexRE(`[^\n]*`), kind: "acc_title_value", pop: 1},
 	},
 	"acc_descr": {
-		{re: lexRE(`[^\n]*`), kind: "acc_descr_value", pop: true},
+		{re: lexRE(`[^\n]*`), kind: "acc_descr_value", pop: 1},
 	},
 	"acc_descr_multiline": {
-		{re: lexRE(`\}`), pop: true},
+		{re: lexRE(`\}`), pop: 1},
 		r(`[^\}]*`, "acc_descr_multiline_value"),
 	},
 }
@@ -193,6 +197,13 @@ func restoreEntities(s string) string {
 // lexER turns the prepared lines into tokens. Tokens carry the source line
 // they start on.
 func lexER(lines []srcLine) ([]erToken, error) {
+	return runLexer(lines, erRules, "")
+}
+
+// runLexer runs a jison-style lexer: in the current state, the first rule
+// that matches wins. At the end it emits eofKind (if any) in the INITIAL
+// state, as a <<EOF>> rule would, then EOF.
+func runLexer(lines []srcLine, rules map[string][]lexRule, eofKind string) ([]erToken, error) {
 	texts := make([]string, len(lines))
 	for i, l := range lines {
 		texts[i] = l.text
@@ -220,19 +231,23 @@ func lexER(lines []srcLine) ([]erToken, error) {
 		cur := state[len(state)-1]
 		rest := src[pos:]
 		matched := false
-		for _, rl := range erRules[cur] {
+		for _, rl := range rules[cur] {
 			if rl.need != "" && !strings.Contains(lineLower(rest), rl.need) {
 				continue
 			}
-			loc := rl.re.FindStringIndex(rest)
-			if loc == nil {
+			n := -1
+			if rl.match != nil {
+				n = rl.match(rest)
+			} else if loc := rl.re.FindStringIndex(rest); loc != nil {
+				n = loc[1]
+			}
+			if n < 0 {
 				continue
 			}
-			n := loc[1]
 			if rl.look != nil && !rl.look(rest[n:]) {
 				continue
 			}
-			if n == 0 && rl.kind == "" && rl.push == "" && !rl.pop {
+			if n == 0 && rl.kind == "" && rl.push == "" && rl.pop == 0 {
 				continue // an empty skip would never advance
 			}
 			text := rest[:n]
@@ -241,13 +256,19 @@ func lexER(lines []srcLine) ([]erToken, error) {
 				if kind == "." {
 					kind = text
 				}
-				out = append(out, erToken{kind: kind, text: text, line: lineOf()})
+				t := text
+				if rl.trim {
+					t = strings.TrimSpace(t)
+				}
+				out = append(out, erToken{kind: kind, text: t, line: lineOf()})
+			}
+			for range rl.pop {
+				if len(state) > 1 {
+					state = state[:len(state)-1]
+				}
 			}
 			if rl.push != "" {
 				state = append(state, rl.push)
-			}
-			if rl.pop && len(state) > 1 {
-				state = state[:len(state)-1]
 			}
 			pos += n
 			ln += strings.Count(text, "\n")
@@ -258,7 +279,10 @@ func lexER(lines []srcLine) ([]erToken, error) {
 			return nil, errf(SyntaxError, lineOf(), "unrecognized text %q", firstRunes(rest, 12))
 		}
 	}
-	out = append(out, erToken{kind: "EOF", line: lines[len(lines)-1].no})
+	if eofKind != "" && len(state) == 1 {
+		out = append(out, erToken{kind: eofKind, line: lineOf()})
+	}
+	out = append(out, erToken{kind: "EOF", line: lineOf()})
 	return out, nil
 }
 

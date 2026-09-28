@@ -27,6 +27,8 @@ func outcome(src string) string {
 	switch d := d.(type) {
 	case *ER:
 		return dumpER(d)
+	case *Sequence:
+		return dumpSeq(d)
 	default:
 		return dump(d.(*Flowchart))
 	}

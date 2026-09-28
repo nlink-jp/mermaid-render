@@ -4,7 +4,6 @@ import "testing"
 
 func TestDiagramTypes(t *testing.T) {
 	for src, kind := range map[string]ErrorKind{
-		"sequenceDiagram\n A->>B: hi": UnsupportedType, // until its parser lands
 		"stateDiagram-v2\n [*] --> A": UnsupportedType,
 		"classDiagram\n A <|-- B":     UnsupportedType,
 		"gantt\n title x":             UnsupportedType,

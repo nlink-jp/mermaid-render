@@ -1,1 +1,15 @@
-error: line 1: unsupported diagram type: sequenceDiagram
+participant Analyst "Analyst" actor
+participant Agent "Investigation Agent"
+participant MCP "MCP Tools"
+participant TI "Threat Intel & DNS"
+msg Analyst -> Agent solid filled #1 "Request IP attribution (e.g. 192.0.2.1)"
+msg Agent -> MCP solid filled #2 "lookup_ip (ASN / GeoIP)"
+msg MCP -> TI solid filled #3 "Query IPinfo Lite DB"
+msg TI -> MCP dotted filled #4 "ASN & Organization details"
+msg MCP -> Agent dotted filled #5 "Return IP metadata"
+msg Agent -> MCP solid filled #6 "check_ip (Abuse & Tor check)"
+msg MCP -> TI solid filled #7 "Query AbuseIPDB / Tor node list"
+msg TI -> MCP dotted filled #8 "Reputation & Exit status"
+msg MCP -> Agent dotted filled #9 "Return Reputation score"
+msg Agent -> Agent solid filled #10 "Correlate findings & Evaluate confidence"
+msg Agent -> Analyst dotted filled #11 "Return Attribution Report"

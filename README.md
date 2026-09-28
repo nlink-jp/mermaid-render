@@ -32,6 +32,7 @@ if errors.As(err, &e) {
 switch d := d.(type) {
 case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities (attributes), Relationships, Direction
+case *mermaidrender.Sequence:  // Participants, Boxes, Events (messages, notes, blocks)
 }
 
 font, err := raster.DefaultFont() // load once, reuse
@@ -41,8 +42,8 @@ img, err = raster.RenderSource(src, raster.Options{Font: font})
 
 Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 (which characters an id may hold, how link symbols are read, subgraph
-membership) follow that version's own parser; `erDiagram` is read with a port
-of that version's lexer, rule by rule, so it agrees with mermaid on edge cases
+membership) follow that version's own parser; `erDiagram` and `sequenceDiagram`
+are read with a port of that version's lexers, rule by rule, so it agrees with mermaid on edge cases
 (keywords such as `one` or `to` are never names, and `direction TD` is two
 entities). `raster` draws flowcharts and ER diagrams (entities as tables,
 cardinalities in crow's foot notation) on a white card with a layered layout; the caller encodes the PNG and chooses the

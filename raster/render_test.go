@@ -60,7 +60,7 @@ func TestRenderErrors(t *testing.T) {
 		kind mr.ErrorKind
 		line int
 	}{
-		"sequenceDiagram\n A->>B: hi":             {mr.UnsupportedType, 1},
+		"stateDiagram-v2\n [*] --> A":             {mr.UnsupportedType, 1},
 		"flowchart TD\n A --> B C":                {mr.SyntaxError, 2},
 		"flowchart TD\n A --> B[完了 ✅]":            {mr.UnsupportedConstruct, 2}, // no face has U+2705
 		"flowchart TD\n A -->|✅| B":               {mr.UnsupportedConstruct, 2},
@@ -156,6 +156,9 @@ func TestRealBlocksRender(t *testing.T) {
 		d, err := mr.Parse(string(b))
 		if err != nil {
 			continue
+		}
+		if _, ok := d.(*mr.Sequence); ok {
+			continue // until sequence drawing lands (step 4b)
 		}
 		if _, err := Render(d, Options{Font: fn}); err != nil {
 			t.Errorf("%s: %v", filepath.Base(f), err)

@@ -1,1 +1,10 @@
-error: line 1: unsupported diagram type: sequenceDiagram
+participant Analyst "Analyst" actor
+participant Agent "AI Agent"
+participant DNS "DoH / DNS Server"
+participant Intel "Threat Intel API"
+msg Analyst -> Agent solid filled #1 "Request Attribution (example.com)"
+msg Agent -> DNS solid filled #2 "Query A/AAAA/MX Records"
+msg DNS -> Agent dotted filled #3 "Return DNS Records & IPs"
+msg Agent -> Intel solid filled #4 "Query Indicators & Pulses"
+msg Intel -> Agent dotted filled #5 "Return Reputation & Threat Data"
+msg Agent -> Analyst solid filled #6 "Output Attribution Report"

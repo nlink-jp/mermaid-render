@@ -1,1 +1,19 @@
-error: line 1: unsupported diagram type: sequenceDiagram
+participant User "ユーザー" actor
+participant Client "フロントエンド"
+participant API "APIサーバー"
+participant DB "データベース"
+msg User -> Client solid filled #1 "ログイン情報入力"
+msg Client -> API solid filled #2 "POST /api/login (ID, PW)"
+activate API
+msg API -> DB solid filled #3 "ユーザー照会・パスワード照合"
+msg DB -> API dotted filled #4 "照合成功"
+msg API -> Client dotted filled #5 "200 OK (JWTトークン返却)"
+deactivate API
+note over Client,API "認証完了後のリクエスト"
+msg Client -> API solid filled #6 "GET /api/data (Authorizationヘッダー)"
+activate API
+msg API -> DB solid filled #7 "データ取得クエリ"
+msg DB -> API dotted filled #8 "レコード返却"
+msg API -> Client dotted filled #9 "JSONデータ"
+deactivate API
+msg Client -> User dotted filled #10 "画面にデータ描画"

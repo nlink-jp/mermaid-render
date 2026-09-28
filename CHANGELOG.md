@@ -90,6 +90,13 @@ to [Semantic Versioning](https://semver.org/).
   layers 2.2 em apart so a label clears both markers, and a stepped run may
   push the runs in its way aside whole when that removes steps (bends
   46 -> 40).
+- `Parse` for `sequenceDiagram` (mermaid 12.0.0): participants and actors
+  with aliases, boxes, the ten message arrows, activations (statements and
+  +/-), notes, loop / opt / alt / par / critical / break blocks, autonumber
+  with start and step, title. The lexer is a rule-by-rule port of
+  `sequenceDiagram.jison`. create / destroy, half arrows, central
+  connections, typed participants and par_over are unsupported constructs;
+  rect draws its contents without the colour. At most 2000 events.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings.
 - Layout property tests (placement, overlaps, link ends on outlines, no link
   through a node, distinct link ends, determinism) on synthetic cases in four

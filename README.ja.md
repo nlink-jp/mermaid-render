@@ -31,6 +31,7 @@ if errors.As(err, &e) {
 switch d := d.(type) {
 case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities（属性つき）, Relationships, Direction
+case *mermaidrender.Sequence:  // Participants, Boxes, Events（メッセージ・注記・枠）
 }
 
 font, err := raster.DefaultFont() // 一度読んで使い回す
@@ -40,7 +41,7 @@ img, err = raster.RenderSource(src, raster.Options{Font: font})
 
 構文の読み取りは mermaid 12.0.0 のドキュメントに従う。ドキュメントが決めていない細部
 （ID に使える文字、線の記号の読み方、subgraph の所属）は、同じ版の mermaid 自身の
-パーサに従う。`erDiagram` は同じ版の字句解析を規則ごとに移植して読むので、細部まで mermaid と
+パーサに従う。`erDiagram` と `sequenceDiagram` は同じ版の字句解析を規則ごとに移植して読むので、細部まで mermaid と
 一致する（`one` や `to` のような語は名前にならない、`direction TD` は 2 つの実体になる）。
 `raster` は flowchart と ER 図（実体は表、多重度はカラスの足の記法）を段に分けて配置し、
 白地のカードに描く。PNG への変換と

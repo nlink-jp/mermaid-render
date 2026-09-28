@@ -608,6 +608,18 @@ same way as pathguard.
     links go down (pushing apart only widens gaps, so no constraint breaks). Bends over the 11:
     46 to 40. ER only for now.
     Round 3 (2026-09-28): all 11 marked ○ on all four items, no notes. This closes the ER check.
+  - **Step 4a: reading sequence diagrams (2026-09-28)**: as for ER, the lexer rules of
+    `sequenceDiagram.jison` are ported in order (the ID, ALIAS, LINE and CONFIG states, and the
+    lookahead that stops a name before an arrow, by hand). Shared with mermaid: `#` starts a comment
+    anywhere, so message text stops at it; a name may hold spaces and single hyphens but stops
+    before an arrow; `;` ends a statement; a stray character at the start of a line is dropped; a
+    later declaration with `as` relabels a participant and one without does not; `autonumber`
+    advances on every message, shown or not, and a start or step of 0 keeps the one before.
+    Unsupported: create / destroy, half arrows, central connections `()` (as the RFP says),
+    participant `@{ "type": … }` (a symbol the engine does not draw, as flowchart `@{ shape }`),
+    and `par_over` (in the grammar, not the documentation). Ignored: rect's colour (its contents
+    are drawn), link / links / properties / details (menus), `wrap:`, accTitle / accDescr. The 10
+    real blocks were checked against an independently written reader.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

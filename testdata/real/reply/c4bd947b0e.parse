@@ -1,1 +1,10 @@
-error: line 1: unsupported diagram type: sequenceDiagram
+participant User "User"
+participant Client "Web App"
+participant API "API Server"
+participant DB "Database"
+msg User -> Client solid filled "Click Login"
+msg Client -> API solid filled "POST /api/login"
+msg API -> DB solid filled "Query User Record"
+msg DB -> API dotted filled "Return User Data"
+msg API -> Client dotted filled "200 OK (JWT Token)"
+msg Client -> User dotted filled "Show Dashboard"

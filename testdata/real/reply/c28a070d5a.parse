@@ -1,1 +1,11 @@
-error: line 1: unsupported diagram type: sequenceDiagram
+participant User "User" actor
+participant Agent "AI Agent"
+participant MCP "MCP Tools"
+participant API "External Service"
+msg User -> Agent solid filled #1 "Request IP attribution"
+msg Agent -> MCP solid filled #2 "Query ASN & Reputation"
+msg MCP -> API solid filled #3 "Fetch Whois / OTX / AbuseIPDB"
+msg API -> MCP dotted filled #4 "Return threat indicators"
+msg MCP -> Agent dotted filled #5 "Formatted intelligence data"
+msg Agent -> Agent solid filled #6 "Correlate & Assess confidence"
+msg Agent -> User dotted filled #7 "Present investigation report"

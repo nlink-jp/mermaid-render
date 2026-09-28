@@ -1,1 +1,16 @@
-error: line 1: unsupported diagram type: sequenceDiagram
+participant User "Client" actor
+participant API "Gateway"
+participant Auth "AuthService"
+participant DB "Database"
+msg User -> API solid filled #1 "POST /login (credentials)"
+activate API
+msg API -> Auth solid filled #2 "ValidateCredentials(user, pass)"
+activate Auth
+msg Auth -> DB solid filled #3 "FindUser(username)"
+activate DB
+msg DB -> Auth dotted filled #4 "UserRecord"
+deactivate DB
+msg Auth -> API dotted filled #5 "JWT Token"
+deactivate Auth
+msg API -> User dotted filled #6 "200 OK (Token)"
+deactivate API

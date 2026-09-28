@@ -1,1 +1,10 @@
-error: line 1: unsupported diagram type: sequenceDiagram
+participant Analyst "Analyst / Agent" actor
+participant DOH "DoH Resolver"
+participant RDAP "RDAP Server"
+participant ThreatDB "Threat Intel API"
+msg Analyst -> DOH solid filled #1 "Query A/AAAA/MX/TXT records"
+msg DOH -> Analyst dotted filled #2 "Return DNS answers + TTL"
+msg Analyst -> RDAP solid filled #3 "Lookup domain registration"
+msg RDAP -> Analyst dotted filled #4 "Return registrar & contact info"
+msg Analyst -> ThreatDB solid filled #5 "Check reputation / IoC hits"
+msg ThreatDB -> Analyst dotted filled #6 "Return pulse / report data"

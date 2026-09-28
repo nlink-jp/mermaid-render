@@ -32,6 +32,9 @@ mermaid-render/
 ├── er.go             # ER, Entity, Attribute, Relationship, Cardinality
 ├── erlex.go          # the erDiagram.jison lexer, ported rule by rule
 ├── erparse.go        # the erDiagram grammar; generics, markdown refusal
+├── sequence.go       # Sequence, Participant, Box, Event
+├── seqlex.go         # the sequenceDiagram.jison lexer (on erlex.go's runLexer)
+├── seqparse.go       # the sequenceDiagram grammar and sequenceDb's rules
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
 ├── raster/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
@@ -109,6 +112,10 @@ mermaid-render/
 - **Ranks are two-level**: a subgraph is ranked inside, then placed as one
   block. Ranking members directly let a cycle through subgraphs make one
   frame straddle another (the mermaid docs' own example did).
+- **Both jison lexers share `runLexer`** (erlex.go): rules may pop several
+  states, match with a hand-written function (Go's regexp has no lookahead)
+  and trim their text. The sequence lexer ends with a NEWLINE as jison's
+  `<<EOF>>` rule does, and its source gets a final newline (NUM needs one).
 - **The ER lexer is a port, not a reading of the docs** (`erlex.go`): rules
   in `erDiagram.jison` order, first match wins, case-insensitive, `\b`
   appended to a rule ending in a word character (jison-lex does that), and
