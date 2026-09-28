@@ -631,6 +631,10 @@ same way as pathguard.
     text above its arrow and within its ends, a message to itself short of the next lifeline, a
     note beside a lifeline crossing none and one over lifelines only its own, frames holding their
     rows and inner frames. 20,000 random sequence diagrams keep them.
+  - **Sequence check, round 1 (2026-09-28)**: the 10 real diagrams and 8 documentation samples for
+    the constructs the real data lacks. 16 of 18 unmarked. The other two noted "no arrowhead": their
+    sources use `->` and `-->`, which the documentation's table lists as solid and dotted lines
+    without an arrow, so they are drawn as specified and left as they are.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
