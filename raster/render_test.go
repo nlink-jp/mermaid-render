@@ -61,7 +61,7 @@ func TestRenderErrors(t *testing.T) {
 		"flowchart TD\n A --> B[完了 ✅]":            {mr.UnsupportedConstruct, 2}, // no face has U+2705
 		"flowchart TD\n A -->|✅| B":               {mr.UnsupportedConstruct, 2},
 		"flowchart TD\n subgraph s [✅]\n A\n end": {mr.UnsupportedConstruct, 2},
-		"---\ntitle: ✅\n---\nflowchart TD\n A":    {mr.UnsupportedConstruct, 1},
+		"---\ntitle: ✅\n---\nflowchart TD\n A":    {mr.UnsupportedConstruct, 2}, // the title's line
 	} {
 		_, err := RenderSource(src, Options{Font: fn})
 		var e *mr.Error

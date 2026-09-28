@@ -67,6 +67,7 @@ func (h Head) String() string { return [...]string{"none", "arrow", "circle", "c
 // Flowchart is a parsed flowchart or graph.
 type Flowchart struct {
 	title     string
+	titleLine int
 	Direction Direction
 	// Nodes in order of first appearance. Subgraph ids used as link
 	// endpoints are not nodes.
@@ -79,7 +80,10 @@ type Flowchart struct {
 }
 
 func (f *Flowchart) Title() string { return f.title }
-func (*Flowchart) diagram()        {}
+
+// TitleLine is the source line of the front matter's title, or 0.
+func (f *Flowchart) TitleLine() int { return f.titleLine }
+func (*Flowchart) diagram()         {}
 
 // Node is one flowchart node.
 type Node struct {

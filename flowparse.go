@@ -2,6 +2,7 @@ package mermaidrender
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -13,8 +14,8 @@ import (
 // membership — it follows the same version's parser/flow.jison and
 // flowDb.ts, and the comment says so.
 
-func parseFlowchart(lines []srcLine, title string) (Diagram, error) {
-	p := &flowParser{f: &Flowchart{title: title}, nodes: map[string]*Node{}}
+func parseFlowchart(lines []srcLine, title frontTitle) (Diagram, error) {
+	p := &flowParser{f: &Flowchart{title: title.text, titleLine: title.line}, nodes: map[string]*Node{}}
 	var stmts []srcLine
 	for _, l := range lines {
 		parts, err := splitStatements(l)
@@ -40,16 +41,24 @@ func parseFlowchart(lines []srcLine, title string) (Diagram, error) {
 	return p.f, nil
 }
 
-// splitStatements splits a line at ";" outside quotes and brackets
-// (flow.jison: SEMI separates statements, as NEWLINE does).
+var reEntityTail = regexp.MustCompile(`#([A-Za-z][A-Za-z0-9]*|[0-9]+)$`)
+
+// splitStatements splits a line at ";" outside quotes, brackets and |link
+// text| (flow.jison: SEMI separates statements, as NEWLINE does). The ";"
+// closing an entity code such as "#amp;" is not a separator: mermaid
+// replaces entity codes before it parses (encodeEntities).
 func splitStatements(l srcLine) ([]srcLine, error) {
 	var out []srcLine
-	depth, quoted, start := 0, false, 0
+	depth, quoted, piped, start := 0, false, false, 0
 	for i := 0; i < len(l.text); i++ {
 		switch c := l.text[i]; {
 		case c == '"':
 			quoted = !quoted
 		case quoted:
+		case c == '|' && depth == 0:
+			piped = !piped
+		case piped:
+		case c == ';' && reEntityTail.MatchString(l.text[:i]):
 		case c == '[' || c == '(' || c == '{':
 			depth++
 		case c == ']' || c == ')' || c == '}':
@@ -122,9 +131,10 @@ func (p *flowParser) statement(s srcLine) error {
 		return nil
 	case hasWord(t, "subgraph"):
 		return p.subgraph(strings.TrimSpace(t[len("subgraph"):]), s.no)
-	case hasWord(t, "direction"):
+	case isDirection(t):
 		// Presentation: a subgraph's own direction. The top-level direction
-		// is set by the header.
+		// is set by the header. flow.jison needs a direction word after
+		// it; "direction --> B" is a link from a node called direction.
 		return nil
 	case hasWord(t, "classDef"), hasWord(t, "class"), hasWord(t, "style"),
 		hasWord(t, "linkStyle"), hasWord(t, "click"):
@@ -140,6 +150,18 @@ func (p *flowParser) statement(s srcLine) error {
 		return nil
 	}
 	return p.vertexStatement(t)
+}
+
+func isDirection(t string) bool {
+	f := strings.Fields(t)
+	if len(f) != 2 || f[0] != "direction" {
+		return false
+	}
+	switch f[1] {
+	case "TB", "TD", "BT", "RL", "LR":
+		return true
+	}
+	return false
 }
 
 func (p *flowParser) subgraph(rest string, no int) error {
@@ -182,7 +204,7 @@ func (p *flowParser) subgraph(rest string, no int) error {
 		return errf(UnsupportedConstruct, no, "Markdown string")
 	}
 	if autoID {
-		id = "subGraph" + itoa(len(p.f.Subgraphs))
+		id = "subGraph" + strconv.Itoa(len(p.f.Subgraphs))
 	}
 	for _, other := range p.f.Subgraphs {
 		if other.ID == id {
@@ -193,17 +215,6 @@ func (p *flowParser) subgraph(rest string, no int) error {
 	p.f.Subgraphs = append(p.f.Subgraphs, sg)
 	p.open = &openSubgraph{sg: sg}
 	return nil
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for ; n > 0; n /= 10 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-	}
-	return string(b)
 }
 
 // cursor walks one statement.
@@ -243,6 +254,9 @@ func (p *flowParser) vertexStatement(t string) error {
 			return err
 		}
 		if visible {
+			if len(p.f.Links)+len(prev)*len(next) > MaxLinks {
+				return errf(UnsupportedConstruct, p.line, "more than %d links (mermaid's own limit)", MaxLinks)
+			}
 			for _, a := range prev {
 				for _, b := range next {
 					ln := *l
@@ -332,7 +346,9 @@ func (p *flowParser) node(c *cursor) (string, error) {
 	start := c.pos
 	for c.pos < len(c.s) {
 		r, w := utf8.DecodeRuneInString(c.s[c.pos:])
-		if !idRune(c.s, c.pos, r) {
+		// flow.jison's NODE_STRING holds "&": "API&DB" is one id. Only an
+		// "&" that starts a token is the AMP of a node group.
+		if !idRune(c.s, c.pos, r) && !(r == '&' && c.pos > start) {
 			break
 		}
 		c.pos += w
@@ -492,6 +508,7 @@ func destructEnd(tok string) (start, end Head, stroke Stroke, length int) {
 	if dots := strings.Count(line, "."); dots > 0 {
 		stroke, length = Dotted, dots
 	}
+	length = min(length, MaxLinkLength)
 	return
 }
 

@@ -475,3 +475,63 @@ func TestFrontMatter(t *testing.T) {
 	}
 	wantErr(t, "---\ntitle: x\nflowchart LR\n A", SyntaxError, 1)
 }
+
+// Findings of the step-2 review, each against mermaid 12.0.0's flow.jison /
+// flowDb.ts.
+func TestReviewParserFindings(t *testing.T) {
+	// "direction" not followed by a direction word is a node (the jison
+	// rule is direction\s+(TB|BT|RL|LR|TD)).
+	if got := links(t, "flowchart LR\n direction --> B\n A --> C"); got != "direction -> B solid none/arrow len=1\nA -> C solid none/arrow len=1" {
+		t.Errorf("direction as an id: %s", got)
+	}
+	// NODE_STRING holds "&": only a spaced or leading & groups nodes.
+	if got := links(t, "flowchart LR\n API&DB --> Cache\n A & B --> C"); got != "API&DB -> Cache solid none/arrow len=1\nA -> C solid none/arrow len=1\nB -> C solid none/arrow len=1" {
+		t.Errorf("& inside an id: %s", got)
+	}
+	// An entity code's ";" and a ";" in |link text| do not end a statement.
+	f := mustFlow(t, "flowchart LR\n subgraph 監視 #amp; 通知\n X --> Y\n end\n A -->|a;b| B; B --> C")
+	if s := f.Subgraphs[0]; s.Title != "監視 & 通知" || len(s.Nodes) != 2 {
+		t.Errorf("entity in a title: %+v", s)
+	}
+	if got := links(t, "flowchart LR\n A -->|a;b| B; B --> C"); got != "A -> B solid none/arrow len=1 \"a;b\"\nB -> C solid none/arrow len=1" {
+		t.Errorf("; in link text: %s", got)
+	}
+	if got := links(t, `flowchart LR
+ A -- "say #quot;hi#quot;" --> B`); got != `A -> B solid none/arrow len=1 "say \"hi\""` {
+		t.Errorf("entity in link text: %s", got)
+	}
+	// mermaid stops a link's length at 10.
+	if got := links(t, "flowchart LR\n A "+strings.Repeat("-", 40)+"> B"); got != "A -> B solid none/arrow len=10" {
+		t.Errorf("long link: %s", got)
+	}
+	// mermaid's own edge limit, checked before an & product is built.
+	var group []string
+	for i := range 30 {
+		group = append(group, fmt.Sprintf("a%d", i))
+	}
+	g := strings.Join(group, " & ")
+	wantErr(t, "flowchart LR\n "+g+" --> "+g, UnsupportedConstruct, 2)
+}
+
+func TestReviewSourceFindings(t *testing.T) {
+	// A CR alone ends a line; a directive may span lines.
+	if _, err := Parse("flowchart LR\r A --> B\r"); err != nil {
+		t.Errorf("CR line ends: %v", err)
+	}
+	if got := links(t, "%%{init: {\n  \"theme\": \"dark\"\n}}%%\nflowchart LR\n A --> B"); got != "A -> B solid none/arrow len=1" {
+		t.Errorf("multi-line directive: %s", got)
+	}
+	wantErr(t, "%%{init: {\nflowchart LR\n A", SyntaxError, 1)
+	// The title is a YAML scalar, and its line is kept.
+	for src, want := range map[string]string{
+		"title: 'it''s'":      "it's",
+		`title: "a\"b"`:       `a"b`,
+		"title: hello # note": "hello",
+		"title: plain":        "plain",
+	} {
+		f := mustFlow(t, "---\n"+src+"\n---\nflowchart LR\n A")
+		if f.Title() != want || f.TitleLine() != 2 {
+			t.Errorf("%s: title %q line %d, want %q line 2", src, f.Title(), f.TitleLine(), want)
+		}
+	}
+}

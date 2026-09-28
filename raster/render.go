@@ -20,8 +20,8 @@ type Options struct {
 }
 
 const (
-	baseEm    = 14.0
-	cardPad   = 1.2 // em, card edge to content
+	baseEm  = 14.0
+	cardPad = 1.2 // em, card edge to content
 	// MaxPixels keeps the encoded PNG under termimg's 2 MiB: a dense
 	// diagram measured 0.30 bytes per pixel (150 nodes, 300 links, six
 	// subgraphs: 6.1 Mpx, 1856 KB), the real session diagrams 0.10-0.12.
@@ -63,7 +63,7 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 	var tw, th float64
 	if title != "" {
 		if tw, th, err = fn.measureEm(title, true); err != nil {
-			return nil, glyphErr(err, 1)
+			return nil, glyphErr(err, f.TitleLine())
 		}
 		th += 0.8
 	}
@@ -80,7 +80,7 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 	c.outlineShape(roundRect(Rect{0.06, 0.06, wEm - 0.06, hEm - 0.06}, 0.5), nil, colCard, 0.06, false)
 	if title != "" {
 		if err := fn.drawText(img, wEm/2*em, (cardPad+th/2-0.2)*em, title, true, em, colText); err != nil {
-			return nil, glyphErr(err, 1)
+			return nil, glyphErr(err, f.TitleLine())
 		}
 	}
 	c.offX, c.offY = cardPad+(wEm-2*cardPad-lay.W)/2, cardPad+th
