@@ -38,6 +38,7 @@ mermaid-render/
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
 ├── raster/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
+│   ├── seq.go        # sequence: columns from pairwise needs, events stacked, drawing
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, MissingGlyphError
 │   ├── layout.go     # layered layout: chains, two-level ranks, items, ordering
 │   ├── coords.go     # cross-axis coordinates: difference constraints + descent
@@ -122,6 +123,12 @@ mermaid-render/
   Go-side lookaheads for the four `(?=...)` rules. JavaScript's `\s` and `.`
   are spelled out (`jsSpace`, `jsDot`). Do not "fix" a surprising result
   (`direction TD` as two entities) without checking mermaid does otherwise.
+- **A mutant that does not compile proves nothing**: when checking a
+  property by breaking the code, make sure the broken copy builds (an
+  unused variable once passed for "not caught").
+- **Sequence columns are a longest path over pairwise needs**: every
+  constraint is between a column and one to its left, so one pass from the
+  left places them. A frame's width comes from what lies in its rows.
 - **Spacing is per layout** (`layouter.portGap`, `rankGap`, `endRoom`,
   `faceSpread`, `labelRoom`, `pushSteps`, and `sizes` for caller-measured
   nodes): flowcharts keep the constants, ER

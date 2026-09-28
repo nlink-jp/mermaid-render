@@ -63,6 +63,7 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 	var (
 		lay       *Layout
 		er        *erLayout
+		seq       *seqLayout
 		nodeLines []int
 		title     string
 		titleLine int
@@ -86,6 +87,13 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 		for _, e := range d.Entities {
 			nodeLines = append(nodeLines, e.Line)
 		}
+		title, titleLine = d.Title(), d.TitleLine()
+	case *mr.Sequence:
+		var err error
+		if seq, err = layoutSequence(d, fn.measureEm); err != nil {
+			return nil, err
+		}
+		lay = &Layout{W: seq.W, H: seq.H}
 		title, titleLine = d.Title(), d.TitleLine()
 	default:
 		return nil, &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("%T", d)}
@@ -117,6 +125,12 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 	c.offX, c.offY = cardPad+(wEm-2*cardPad-lay.W)/2, cardPad+th
 	if er != nil {
 		c.rels = er.rels
+	}
+	if seq != nil {
+		if err := c.drawSequence(seq, fn); err != nil {
+			return nil, glyphErr(err, 0)
+		}
+		return img, nil
 	}
 	text := func(p Pt, s string, bold bool) error {
 		return fn.drawText(img, (p.X+c.offX)*em, (p.Y+c.offY)*em, s, bold, em, colText)

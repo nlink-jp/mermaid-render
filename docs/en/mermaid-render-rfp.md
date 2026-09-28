@@ -620,6 +620,17 @@ same way as pathguard.
     and `par_over` (in the grammar, not the documentation). Ignored: rect's colour (its contents
     are drawn), link / links / properties / details (menus), `wrap:`, accTitle / accDescr. The 10
     real blocks were checked against an independently written reader.
+  - **Step 4b: laying out and drawing sequence diagrams (2026-09-28)**: participants take columns
+    in order of first mention; each column is placed, left to right, as far from every column
+    before it as the headers, message texts, self-message loops and notes between them need.
+    Events stack down the page in order. Activations are bars on the lifelines (nested ones set
+    aside), and arrows stop at a bar's edge. A block's frame holds everything in its rows, with its
+    kind's tab and its condition on top and its sections as dashed lines. Headers are repeated at
+    the bottom (mermaid's mirrorActors default); numbers sit in a circle at the arrow's start.
+    Properties: inside the picture, no text over another, messages down the page in order, each
+    text above its arrow and within its ends, a message to itself short of the next lifeline, a
+    note beside a lifeline crossing none and one over lifelines only its own, frames holding their
+    rows and inner frames. 20,000 random sequence diagrams keep them.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

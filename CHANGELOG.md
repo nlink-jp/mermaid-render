@@ -97,6 +97,11 @@ to [Semantic Versioning](https://semver.org/).
   `sequenceDiagram.jison`. create / destroy, half arrows, central
   connections, typed participants and par_over are unsupported constructs;
   rect draws its contents without the colour. At most 2000 events.
+- `raster` draws sequence diagrams: participant boxes and actor figures
+  (repeated at the bottom), dashed lifelines, the ten arrows, messages to
+  self as loops, activation bars, notes, loop / opt / alt / par / critical /
+  break frames with sections, boxes, autonumber circles. Columns are placed
+  from what lies between them; events stack in order.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings.
 - Layout property tests (placement, overlaps, link ends on outlines, no link
   through a node, distinct link ends, determinism) on synthetic cases in four
