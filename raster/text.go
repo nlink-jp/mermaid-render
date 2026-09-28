@@ -8,6 +8,8 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync"
+	"unicode"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -17,8 +19,10 @@ import (
 
 // Font is the set of faces text is drawn with: the chosen faces first, then
 // Hiragino as the fallback, character by character. Load it once and share
-// it; it is safe for one goroutine at a time.
+// it: renders with one Font may run from several goroutines, and take turns
+// (the faces cache what they learn).
 type Font struct {
+	mu         sync.Mutex
 	body, bold []*face
 }
 
@@ -70,6 +74,10 @@ func (f *face) at(size float64) font.Face {
 	if fc := f.sized[size]; fc != nil {
 		return fc
 	}
+	if len(f.sized) >= maxSizes {
+		// A caller varying Scale would grow this without end.
+		clear(f.sized)
+	}
 	fc, err := opentype.NewFace(f.sf, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingNone})
 	if err != nil {
 		// NewFace fails only for an invalid size.
@@ -83,18 +91,42 @@ func (f *face) at(size float64) font.Face {
 // size, and hinting is off.
 const probeSize = 32
 
+// maxSizes bounds the sizes a face keeps ready.
+const maxSizes = 8
+
 // can reports whether r can be drawn with this face: its glyph index is not
-// 0 (Face.Glyph would draw .notdef and say ok) and its glyph loads.
+// 0, its glyph loads, and it leaves ink unless r is a space. A face may map
+// a character to a glyph without an outline (Apple Color Emoji's bitmaps
+// have none): drawn, it would leave nothing, a missing character that looks
+// drawn. (x/image's Glyph also reports index 0 as not ok; the index is
+// checked here as well so no version can draw .notdef.)
 func (f *face) can(r rune) bool {
 	if v, seen := f.ok[r]; seen {
 		return v
 	}
 	v := false
 	if gi, err := f.sf.GlyphIndex(&f.buf, r); err == nil && gi != 0 {
-		_, _, _, _, v = f.at(probeSize).Glyph(fixed.Point26_6{}, r)
+		dr, mask, mp, _, ok := f.at(probeSize).Glyph(fixed.Point26_6{}, r)
+		v = ok && (blank(r) || inked(dr, mask, mp))
 	}
 	f.ok[r] = v
 	return v
+}
+
+// blank are the characters whose glyph is meant to leave no ink.
+func blank(r rune) bool {
+	return unicode.IsSpace(r) || unicode.Is(unicode.Zs, r) || r == 0x2800
+}
+
+func inked(dr image.Rectangle, mask image.Image, mp image.Point) bool {
+	for y := 0; y < dr.Dy(); y++ {
+		for x := 0; x < dr.Dx(); x++ {
+			if _, _, _, a := mask.At(mp.X+x, mp.Y+y).RGBA(); a > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ignorable are characters that carry no glyph: variation selectors, ZWJ,
@@ -151,6 +183,12 @@ func (fn *Font) runs(line string, bold bool) ([]run, error) {
 			}
 		}
 		if pick == nil {
+			// A format or default-ignorable character no face draws
+			// (LRM, word joiner, a BOM inside a label) carries no glyph:
+			// skipped, as mermaid's browser would show nothing for it.
+			if unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r) {
+				continue
+			}
 			return nil, &MissingGlyphError{Rune: r}
 		}
 		if n := len(buf); n > 0 && buf[n-1].f == pick {

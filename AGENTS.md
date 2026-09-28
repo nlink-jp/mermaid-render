@@ -148,6 +148,12 @@ mermaid-render/
   flowcharts and compare bytes with the last reviewed set.
 - **Link tokens follow flowDb.destructEndLink**: a start mark counts only when
   the end mark is the same kind; `A---oB` has length 2.
+- **A glyph index is not a glyph**: `face.can` also checks the probe glyph
+  leaves ink (spaces aside). Apple Color Emoji maps ✅ to a bitmap glyph
+  x/image cannot draw; index and `Glyph`'s ok both said yes. Format and
+  default-ignorable characters no face draws are skipped, not missing.
+- **Font is shared under a lock** (`Font.mu`, taken for a whole render):
+  faces cache sizes and drawability in maps; concurrent renders panicked.
 - **Font names**: `sfnt.Name` returns the first name record whatever its
   language. Matching by name means walking the name table for every language's
   full name (ID 4) and PostScript name (ID 6). Font Book shows Japanese names

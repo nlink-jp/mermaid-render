@@ -3,9 +3,11 @@ package raster
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf16"
 )
@@ -201,5 +203,141 @@ func TestLoadFontFallback(t *testing.T) {
 	}
 	if _, err := RenderSource("flowchart LR\n A[設定] --> B[config]", Options{Font: fn}); err != nil {
 		t.Errorf("render with Menlo: %v", err)
+	}
+}
+
+// Only names 4 and 6 choose a face; the first face that has the name wins.
+func TestOpenFaceNameRules(t *testing.T) {
+	faces := [][]nameRec{
+		{
+			{3, 1, 0x409, 1, utf16be("Test Family")},
+			{3, 1, 0x409, 4, utf16be("Shared Name")},
+			{3, 1, 0x409, 6, utf16be("First-Face")},
+		},
+		{
+			{3, 1, 0x409, 4, utf16be("Shared Name")},
+			{3, 1, 0x409, 6, utf16be("Second-Face")},
+		},
+	}
+	path := filepath.Join(t.TempDir(), "rules.ttc")
+	if err := os.WriteFile(path, collection(faces), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openFace(path, "Test Family"); err == nil || !strings.Contains(err.Error(), "no face named") {
+		t.Errorf("a family name (ID 1) chose a face: %v", err)
+	}
+	if _, err := openFace(path, "Shared Name"); err == nil || !strings.Contains(err.Error(), `"First-Face"`) {
+		t.Errorf("a shared name: %v, want the first face", err)
+	}
+}
+
+// Records all pointing at one long string are refused before decoding
+// costs anything.
+func TestFaceNamesBounded(t *testing.T) {
+	long := utf16be(strings.Repeat("x", 30000))
+	var recs []nameRec
+	for range 3 {
+		recs = append(recs, nameRec{3, 1, 0x409, 4, long})
+	}
+	b := collection([][]nameRec{recs})
+	offs, _ := faceOffsets(b)
+	if _, err := faceNames(b, offs[0]); err == nil {
+		t.Error("an oversized name table was decoded")
+	}
+}
+
+func TestGlyphRules(t *testing.T) {
+	needFont(t, menlo)
+	fn, err := LoadFont(FontSpec{Path: menlo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Line height: the largest ascent and descent of the faces used.
+	var asc, dsc float64
+	for _, f := range []*face{fn.body[0], fn.body[1]} {
+		m := f.at(100).Metrics()
+		asc, dsc = math.Max(asc, fix(m.Ascent)), math.Max(dsc, fix(m.Descent))
+	}
+	for _, s := range []string{"A日", "日A"} { // either face first
+		lm, err := fn.line(s, false, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lm.ascent != asc || lm.dsc != dsc {
+			t.Errorf("%s: line extent %v/%v, want the faces' largest %v/%v", s, lm.ascent, lm.dsc, asc, dsc)
+		}
+	}
+	// Bold: the chosen face, then Hiragino W6.
+	rs, err := fn.runs("日", true)
+	if err != nil || len(rs) != 1 || rs[0].f.name != hiraginoW6 {
+		t.Errorf("bold 日 drawn with %+v (%v), want Hiragino W6", rs, err)
+	}
+	// Characters without glyphs, and format characters no face draws, are
+	// skipped: ZWJ, LRM, word joiner.
+	for _, s := range []string{"a‍b", "a‎b", "a⁠b", "a️b"} {
+		if _, _, err := fn.measureEm(s, false); err != nil {
+			t.Errorf("%q: %v", s, err)
+		}
+	}
+}
+
+// Bold text a bold face lacks comes from the body faces.
+func TestBoldFallsBackToBody(t *testing.T) {
+	needFont(t, menlo)
+	body, err := loadFace(hiraginoW3, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bold, err := openFace(menlo, "Menlo-Bold")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := &Font{body: []*face{body}, bold: []*face{bold}}
+	rs, err := fn.runs("A日", true)
+	if err != nil || len(rs) != 2 || rs[0].f != bold || rs[1].f != body {
+		t.Errorf("runs %+v (%v), want Menlo-Bold then the body face", rs, err)
+	}
+}
+
+// A face that maps a character to a glyph without an outline does not draw
+// it: Apple Color Emoji's glyphs are bitmaps x/image cannot draw.
+func TestOutlinelessGlyphIsMissing(t *testing.T) {
+	const emoji = "/System/Library/Fonts/Apple Color Emoji.ttc"
+	needFont(t, emoji)
+	fn, err := LoadFont(FontSpec{Path: emoji})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RenderSource("flowchart LR\n A[ok ✅] --> B", Options{Font: fn}); err == nil || !strings.Contains(err.Error(), "no font can draw") {
+		t.Errorf("✅ with an emoji face: %v, want a missing-glyph error", err)
+	}
+}
+
+// One Font serves renders on several goroutines.
+func TestFontSharedAcrossGoroutines(t *testing.T) {
+	fn, err := DefaultFont()
+	if err != nil {
+		t.Skipf("no system font: %v", err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			kanji := []rune("日本語調査設定変更確認完了開始終了入力出力")
+			src := "flowchart LR\n A[" + string(kanji[i]) + string(kanji[i+8]) + "] --> B[" + string(rune(0x3042+i)) + "]"
+			for range 5 {
+				if _, err := RenderSource(src, Options{Font: fn, Scale: 1 + float64(i)/4}); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
 	}
 }

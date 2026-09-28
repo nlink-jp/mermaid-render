@@ -45,16 +45,20 @@ img, err = raster.RenderSource(src, raster.Options{Font: font})
 
 Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 (which characters an id may hold, how link symbols are read, subgraph
-membership) follow that version's own parser; `erDiagram` and `sequenceDiagram`
+membership) follow that version's own parser (one recorded exception: `A -- go--> B`
+is read as label "go", where mermaid reads "g" and a start mark); `erDiagram` and `sequenceDiagram`
 are read with a port of that version's lexers, rule by rule, so it agrees with mermaid on edge cases
 (keywords such as `one` or `to` are never names, and `direction TD` is two
 entities). `raster` draws flowcharts, ER diagrams (entities as tables,
 cardinalities in crow's foot notation) and sequence diagrams on a white card with a layered layout; the caller encodes the PNG and chooses the
 terminal box. Limits keep a render bounded: 50,000 characters of source (mermaid's own
 maxTextSize), 300 nodes and subgraphs (at most
-100 subgraphs), 500 links (mermaid's own limit, checked while parsing), 1000
+100 subgraphs), 500 links or relationships (mermaid's own limit, checked while
+parsing), 300 ER entities with at most 200 attributes each, 300 sequence
+participants with at most 2000 events and blocks nested 50 deep, 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
-per image (for time and memory). The PNG's size is the caller's to check — it
+per image (for time and memory). A flowchart whose links would need more than
+20,000 layout items (very long links through many layers) is refused too. The PNG's size is the caller's to check — it
 ran from 0.10 to 0.67 bytes per pixel — against its own limit (termimg's
 2 MiB), showing the source when over. Beyond the limits the result is an
 `UnsupportedConstruct` error, like a label character no font can draw.
@@ -67,8 +71,11 @@ name or PostScript name, in any language the file records, ignoring case:
 error that lists the file's faces; a face that fails to load is reported by
 name, since a collection's faces can fail one by one. Characters the chosen
 faces lack are drawn with Hiragino Sans, one by one; a character no face has
-(an emoji, say) is an error, never a gap. Variation selectors, ZWJ and ZWSP
-are skipped. `mmdpng -font path -font-name name` tries a face.
+(an emoji, say) is an error, never a gap; a glyph that leaves no ink (Apple
+Color Emoji's bitmaps, which x/image cannot draw) counts as missing, except
+for spaces. Variation selectors, ZWJ, ZWNJ and ZWSP are skipped, and so is any
+format or default-ignorable character (LRM, word joiner) no face draws. One
+Font may serve renders on several goroutines; they take turns. `mmdpng -font path -font-name name` tries a face.
 
 ## Dependencies
 

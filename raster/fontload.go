@@ -192,6 +192,7 @@ func faceNames(b []byte, off uint32) ([]faceName, error) {
 	count, _ := u16(t + 2)
 	strOff, _ := u16(t + 4)
 	var out []faceName
+	decoded := 0
 	for i := uint64(0); i < uint64(count); i++ {
 		r := t + 6 + 12*i
 		if r+12 > t+uint64(nameLen) {
@@ -200,6 +201,9 @@ func faceNames(b []byte, off uint32) ([]faceName, error) {
 		platform, _ := u16(r)
 		encoding, _ := u16(r + 2)
 		id, _ := u16(r + 6)
+		if id != 4 && id != 6 {
+			continue // only the names a face is chosen and reported by
+		}
 		length, _ := u16(r + 8)
 		sOff, _ := u16(r + 10)
 		s := t + uint64(strOff) + uint64(sOff)
@@ -207,6 +211,11 @@ func faceNames(b []byte, off uint32) ([]faceName, error) {
 			return nil, errors.New("name string out of range")
 		}
 		raw := b[s : s+uint64(length)]
+		if decoded += len(raw); decoded > maxNameBytes {
+			// Records may all point at one long string: decoding each
+			// would cost gigabytes for a small file.
+			return nil, errors.New("name table too large")
+		}
 		var text string
 		switch {
 		case platform == 0 || platform == 3:
@@ -227,6 +236,9 @@ func faceNames(b []byte, off uint32) ([]faceName, error) {
 	}
 	return out, nil
 }
+
+// maxNameBytes bounds the name strings one face's table may make us decode.
+const maxNameBytes = 64 << 10
 
 // macRoman decodes Macintosh Roman.
 func macRoman(b []byte) string {

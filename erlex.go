@@ -324,12 +324,15 @@ func firstRunes(s string, n int) string {
 // takes the rest of the line.
 func directionMatcher(dir string) func() func(string) int {
 	occ := regexp.MustCompile(`(?i)direction[` + jsSpace + `]+` + dir)
+	// "direction" that only whitespace follows to the line's end: \s+ may
+	// run on across the newline to XX on a later line.
 	tail := regexp.MustCompile(`(?i)direction[` + jsSpace + `]*$`)
-	full := lexRE(`(DOT)*direction\s+` + dir + `[^\n]*`)
+	cross := lexRE(`direction\s+` + dir + `[^\n]*`)
 	return func() func(string) int {
 		var base, lineEnd int
 		var starts, stops []int // byte offsets from the line's first queried position
-		endsWithWord, valid := false, false
+		tailAt, crossEnd := -1, -1
+		valid := false
 		return func(rest string) int {
 			d := len(rest)
 			if !valid || d <= lineEnd {
@@ -348,18 +351,24 @@ func directionMatcher(dir string) func() func(string) int {
 					}
 				}
 				stops = append(stops, le)
-				endsWithWord = tail.MatchString(rest[:le])
+				// Once per line: does the line's last "direction" run on to
+				// XX on a later line, and where does that match end?
+				tailAt, crossEnd = -1, -1
+				if loc := tail.FindStringIndex(rest[:le]); loc != nil {
+					if m := cross.FindStringIndex(rest[loc[0]:]); m != nil {
+						tailAt, crossEnd = loc[0], loc[0]+m[1]
+					}
+				}
 			}
 			i0 := base - d
-			// An occurrence that (DOT)* reaches: before the next stop.
-			if k := sort.SearchInts(starts, i0); k < len(starts) && starts[k] < stops[sort.SearchInts(stops, i0)] {
-				return d - lineEnd
+			next := stops[sort.SearchInts(stops, i0)]
+			// (DOT)* is greedy: the last reachable "direction" decides, and
+			// the one ending the line is the last.
+			if tailAt >= i0 && tailAt < next {
+				return crossEnd - i0
 			}
-			if endsWithWord {
-				// "direction" ends the line: \s+ may cross the newline.
-				if loc := full.FindStringIndex(rest); loc != nil {
-					return loc[1]
-				}
+			if k := sort.SearchInts(starts, i0); k < len(starts) && starts[k] < next {
+				return d - lineEnd
 			}
 			return -1
 		}

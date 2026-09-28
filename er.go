@@ -35,6 +35,7 @@ type Attribute struct {
 	Name    string
 	Keys    []string // PK, FK, UK in the order written
 	Comment string
+	Line    int
 }
 
 // Cardinality is how many of an entity one of the other relates to.

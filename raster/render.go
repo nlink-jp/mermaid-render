@@ -58,6 +58,8 @@ func render(d mr.Diagram, opts Options, trace func(string)) (*image.RGBA, error)
 			return nil, err
 		}
 	}
+	fn.mu.Lock()
+	defer fn.mu.Unlock()
 	scale := opts.Scale
 	if scale == 0 {
 		scale = 2

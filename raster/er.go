@@ -146,15 +146,16 @@ func measureTable(e *mr.Entity, m measurer) (erTable, error) {
 		t.cells = append(t.cells, row)
 	}
 	t.cols = make([]float64, len(t.cells[0]))
-	for _, row := range t.cells {
+	for ri, row := range t.cells {
+		line := e.Attributes[ri].Line
 		rh := 0.0
 		for j, s := range row {
 			if utf8.RuneCountInString(s) > MaxLabel {
-				return t, &mr.Error{Kind: mr.UnsupportedConstruct, Line: e.Line, Msg: fmt.Sprintf("an attribute longer than %d characters", MaxLabel)}
+				return t, &mr.Error{Kind: mr.UnsupportedConstruct, Line: line, Msg: fmt.Sprintf("an attribute longer than %d characters", MaxLabel)}
 			}
 			w, h, err := m(s, false)
 			if err != nil {
-				return t, glyphErr(err, e.Line)
+				return t, glyphErr(err, line)
 			}
 			if s == "" {
 				_, h, _ = m("x", false)

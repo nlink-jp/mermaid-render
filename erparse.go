@@ -260,7 +260,7 @@ func (p *erParser) block(e *Entity) error {
 			return p.unexpected(t)
 		}
 		p.i++
-		a := Attribute{Type: t.text}
+		a := Attribute{Type: t.text, Line: t.line}
 		if p.peek().kind == "?" {
 			p.i++
 			a.Type += "?"

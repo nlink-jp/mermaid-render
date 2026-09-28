@@ -126,6 +126,14 @@ to [Semantic Versioning](https://semver.org/).
   longer yields broken UTF-8; wrap: is dropped only in lower case; a
   declared name backtracks before a # comment as jison does; CSS system
   colours open a box line.
+- Step-5 review, fonts and docs: a glyph that leaves no ink (spaces aside)
+  counts as missing, so a face like Apple Color Emoji can no longer draw a
+  character blank; format and default-ignorable characters no face draws
+  (LRM, word joiner) are skipped; one Font may serve renders on several
+  goroutines (they take turns; it crashed before); a face keeps at most 8
+  sizes ready; name tables decode only IDs 4 and 6, at most 64 KB; an ER
+  attribute's errors carry its own line; mmdpng refuses -bold, -font-name
+  or -bold-name without -font. README and RFP list every limit.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings;
   `-font`, `-font-name`, `-bold`, `-bold-name` pick faces.
 - Layout property tests (placement, overlaps, link ends on outlines, no link

@@ -1,6 +1,7 @@
 package raster
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -343,5 +344,15 @@ func TestERDrawnMarkers(t *testing.T) {
 				t.Errorf("%s %s: no %q", dir, r.Label, line)
 			}
 		}
+	}
+}
+
+// A character no font can draw in an attribute is reported at the
+// attribute's line, not the entity's.
+func TestERAttributeErrorLine(t *testing.T) {
+	_, err := RenderSource("erDiagram\n A {\n int x \"ok 😀\"\n }", Options{Font: nil})
+	var pe *mr.Error
+	if !errors.As(err, &pe) || pe.Line != 3 {
+		t.Errorf("err %v, want line 3", err)
 	}
 }

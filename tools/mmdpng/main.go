@@ -50,6 +50,9 @@ func run(in, out string, scale float64, spec raster.FontSpec) error {
 		return err
 	}
 	var font *raster.Font
+	if spec.Path == "" && (spec.BoldPath != "" || spec.Name != "" || spec.BoldName != "") {
+		return fmt.Errorf("-font-name, -bold and -bold-name need -font")
+	}
 	if spec.Path != "" {
 		font, err = raster.LoadFont(spec)
 	} else {

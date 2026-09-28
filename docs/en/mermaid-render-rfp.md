@@ -112,8 +112,11 @@ Behaviour:
 3. **Still missing is an error** — a character missing from a label is a wrong picture, not an
    ugly one, so no image with missing characters is returned. The caller shows the source.
    Emoji (✅ and the like) are not in Hiragino and fall under this rule.
-4. **Characters without glyphs are skipped** — variation selectors (U+FE00–FE0F), ZWJ (U+200D)
-   and ZWSP (U+200B) are not drawn and are not errors.
+4. **Characters without glyphs are skipped** — variation selectors (U+FE00–FE0F and VS17–256),
+   ZWJ (U+200D), ZWNJ (U+200C) and ZWSP (U+200B) are not drawn and are not errors; so is any
+   format (Cf) or default-ignorable character (LRM, word joiner) no face draws. Conversely, a glyph
+   that leaves no ink (spaces aside; Apple Color Emoji's bitmaps, which x/image cannot draw) counts
+   as missing.
 5. **Line height** — the largest ascent plus the largest descent among the faces used on that
    line. Hiragino's line gap (1.5em) is not used.
 6. **An unreadable face is an error** — errors are reported per face, not per file (a .ttc can
@@ -134,9 +137,13 @@ files (gem-agent ADR-0089 §5 / ADR-0090 §5).
   - **Unsupported diagram type** — state, class, gantt and so on.
   - **Unsupported construct** — a construct this engine does not draw, inside a supported type.
   - **Syntax error** — not valid mermaid.
-- Resource limits: node count and image pixel count are capped; exceeding them is treated like an
-  unsupported construct. The caps are chosen so the encoded PNG stays under `termimg.MaxBytes`
-  (2MiB). Today's `drawImage` silently draws nothing for an image over that limit; making sure a
+- Resource limits bound time and memory; exceeding one is treated like an unsupported construct:
+  50,000 characters of source (mermaid's own maxTextSize), 300 nodes and subgraphs (100
+  subgraphs), 500 links or relationships, 300 ER entities with at most 200 attributes each, 300
+  sequence participants, 2000 events and blocks nested 50 deep, 1000 characters per label,
+  `Scale` 8, 12 Mpx per image. Pixels cannot bound the PNG's size (0.10 to 0.67 bytes per pixel),
+  so the caller compares the encoded size with `termimg.MaxBytes` (2MiB) and shows the source when
+  over. Today's `drawImage` silently draws nothing for an image over that limit; making sure a
   diagram never vanishes from the screen together with its source is an integration requirement
   (§4, phase 3).
 - The same input with the same font always produces the same image. A test fixes that nothing
@@ -643,6 +650,24 @@ same way as pathguard.
     (without Hiragino, the chosen face alone). An unknown name is an error listing the faces; a
     face that fails to load is reported by name. The name reader is tested on fonts built in the
     test, and truncated files do not stop it.
+  - **Independent review after step 5 (2026-09-28)**: three reviewers in parallel (parser ports,
+    layout and drawing, fonts, limits and rules); every finding was taken. The heavy ones: deep
+    block nesting overflowed the stack and killed the host (now at most 50 deep); quadratic lexing
+    (sequence 23 s at 32,000 lines, ER 106 s on one 40 KB line; the rules that run to a line's end
+    now answer from facts gathered once per line, checked against the original regular expressions
+    by a differential test, and mermaid's own maxTextSize of 50,000 characters is a limit); sharing
+    a Font across goroutines crashed (now locked); a glyph without an outline, as in Apple Color
+    Emoji, counted as drawable and was drawn blank (a breach of "never draw a missing character";
+    ink is now checked); a crafted name table allocated gigabytes. Differences from mermaid:
+    activate places no participant, link and the like do, wrap: only in lower case, backtracking in
+    `participant Alice # …`, a title after a full-width space. Layout: arrows ran into nested
+    activation bars, a block holding only activations framed another column, deep nesting turned
+    arrows and loops backwards, a box over participants not side by side took in another (now
+    refused). Test gaps: nothing tied the drawn markers, heads and dashes to the source (a drawing
+    trace now does), and the layout properties did not pin arrow ends, bars and note sides. Every
+    surviving mutant the reviewers listed now fails a test, except where a value is checked twice
+    (name IDs). Recorded only: a leading NBSP or full-width space in an ER name, Go's case folding
+    (ſ), an emoji just before `%%`.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
