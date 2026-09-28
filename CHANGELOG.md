@@ -8,6 +8,11 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Every render checks its layout before drawing (raster/verify.go: the
+  properties the tests hold, less what is only a matter of looks); a drawing
+  that breaks one is a `LayoutFault` error, so the caller shows the source
+  rather than a wrong picture (gem-agent ADR-0092 §5). Tens of milliseconds
+  at the limits.
 - `Parse` for `flowchart` / `graph` (mermaid 12.0.0): directions, the 14
   classic shapes, quoted text, entity codes and `<br>`, solid / thick / dotted
   links with their heads and lengths (flowDb.destructEndLink's rules), link

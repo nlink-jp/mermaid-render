@@ -25,6 +25,10 @@ const (
 	// UnsupportedConstruct: a construct this engine does not draw, inside a
 	// supported type.
 	UnsupportedConstruct
+	// LayoutFault: the drawing broke a property the engine checks on every
+	// render (boxes overlapping, a label lost, an arrow on the wrong end).
+	// The source is fine; the engine laid it out wrong. Only Render returns it.
+	LayoutFault
 )
 
 func (k ErrorKind) String() string {
@@ -33,6 +37,8 @@ func (k ErrorKind) String() string {
 		return "unsupported diagram type"
 	case UnsupportedConstruct:
 		return "unsupported construct"
+	case LayoutFault:
+		return "layout fault"
 	default:
 		return "syntax error"
 	}

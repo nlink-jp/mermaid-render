@@ -118,6 +118,11 @@ func segmentHitsRect(a, b Pt, r Rect, eps float64) bool {
 	if r.W() <= 0 || r.H() <= 0 {
 		return false
 	}
+	// Wholly beside the rectangle, it can touch no edge (the common case,
+	// and the one the checks run thousands of times).
+	if math.Max(a.X, b.X) < r.X0 || math.Min(a.X, b.X) > r.X1 || math.Max(a.Y, b.Y) < r.Y0 || math.Min(a.Y, b.Y) > r.Y1 {
+		return false
+	}
 	in := func(p Pt) bool { return p.X > r.X0 && p.X < r.X1 && p.Y > r.Y0 && p.Y < r.Y1 }
 	if in(a) || in(b) {
 		return true

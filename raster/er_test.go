@@ -28,100 +28,12 @@ func erOf(t *testing.T, src string, m measurer) (*mr.ER, *erLayout) {
 }
 
 // checkER checks the flowchart layout properties on the laid-out graph,
-// then what an ER diagram adds: each end runs straight past its marker,
-// link ends on one face stay far enough apart that crow's feet side by
-// side do not touch, no label lies over a marker, and every table fits its box.
+// then what an ER diagram adds (erFaults), strictly.
 func checkER(t *testing.T, name string, d *mr.ER, el *erLayout, m measurer) {
 	t.Helper()
 	checkLayout(t, name, el.graph, el.Layout, m)
-	fail := func(format string, a ...any) { t.Errorf("%s: %s", name, fmt.Sprintf(format, a...)) }
-	type endAt struct {
-		p    Pt
-		node int
-	}
-	var ends []endAt
-	var zones []Rect
-	idx := map[string]int{}
-	for i, n := range el.Nodes {
-		idx[n.ID] = i
-	}
-	for _, e := range el.Edges {
-		p := e.Points
-		for _, s := range [][2]Pt{{p[0], p[1]}, {p[len(p)-1], p[len(p)-2]}} {
-			tip, next := s[0], s[1]
-			if d := math.Hypot(next.X-tip.X, next.Y-tip.Y); d < markerReach+0.1 {
-				fail("link %s->%s: a marker's run is %.3f em (needs %.2f)", e.Link.From.ID, e.Link.To.ID, d, markerReach+0.1)
-			}
-			ux, uy := (next.X - tip.X), (next.Y - tip.Y)
-			l := math.Hypot(ux, uy)
-			ux, uy = ux/l, uy/l
-			a := Pt{tip.X - uy*markHalf, tip.Y + ux*markHalf}
-			b := Pt{tip.X + ux*markerReach + uy*markHalf, tip.Y + uy*markerReach - ux*markHalf}
-			zones = append(zones, Rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)})
-		}
-		ends = append(ends, endAt{p[0], idx[e.Link.From.ID]}, endAt{p[len(p)-1], idx[e.Link.To.ID]})
-	}
-	for i, a := range ends {
-		for _, b := range ends[i+1:] {
-			if a.node != b.node {
-				continue
-			}
-			sameFace := math.Abs(a.p.X-b.p.X) < 1e-6 || math.Abs(a.p.Y-b.p.Y) < 1e-6
-			// Two crow's feet side by side, with 0.4 em between them —
-			// from the marker's width, not from erPortGap, so a change to
-			// the spacing is checked against what it must hold.
-			need := 2*markHalf + 0.4
-			if d := math.Hypot(a.p.X-b.p.X, a.p.Y-b.p.Y); sameFace && d < need-0.05 {
-				fail("two link ends on %s are %.3f em apart (needs %.2f)", el.Nodes[a.node].Label, d, need)
-			}
-		}
-	}
-	for i, e := range el.Edges {
-		if e.Label == "" {
-			continue
-		}
-		for j, z := range zones {
-			if e.LabelBox.overlaps(z) {
-				fail("label %q lies over a marker", e.Label)
-			}
-			// Its own markers: 0.7 em clear (the operator's second ER
-			// check: labels against the lower marker read as too low).
-			if j/2 == i && e.Link.From != e.Link.To {
-				dx := math.Max(0, math.Max(z.X0-e.LabelBox.X1, e.LabelBox.X0-z.X1))
-				dy := math.Max(0, math.Max(z.Y0-e.LabelBox.Y1, e.LabelBox.Y0-z.Y1))
-				if d := math.Hypot(dx, dy); d < 0.7 {
-					fail("label %q is %.3f em from its link's marker", e.Label, d)
-				}
-			}
-		}
-	}
-	// A bend keeps its distance from its own link's label (a self-link's
-	// label sits beside its loop by design).
-	for _, e := range el.Edges {
-		if e.Label == "" || e.Link.From == e.Link.To {
-			continue
-		}
-		p := e.Points
-		for _, q := range p[1 : len(p)-1] {
-			dx := math.Max(0, math.Max(e.LabelBox.X0-q.X, q.X-e.LabelBox.X1))
-			dy := math.Max(0, math.Max(e.LabelBox.Y0-q.Y, q.Y-e.LabelBox.Y1))
-			// 1.2 em as the operator's check asked, not erLabelRoom: the
-			// check must not loosen with the constant it guards.
-			if d := math.Hypot(dx, dy); d < 1.2-0.05 && d > 1e-9 {
-				fail("link %s->%s bends %.3f em from its label", e.Link.From.ID, e.Link.To.ID, d)
-			}
-		}
-	}
-	for i, n := range el.Nodes {
-		t := el.tables[i]
-		if t.cols == nil {
-			continue
-		}
-		lw, _, _ := m(d.Entities[i].Label, true)
-		w, h := t.size(lw)
-		if w > n.Box.W()+1e-6 || h > n.Box.H()+1e-6 {
-			fail("table %s (%.2fx%.2f) does not fit its box %.2fx%.2f", n.Label, w, h, n.Box.W(), n.Box.H())
-		}
+	for _, msg := range erFaults(d, el, m, true) {
+		t.Errorf("%s: %s", name, msg)
 	}
 }
 
@@ -321,13 +233,13 @@ func TestERDrawnMarkers(t *testing.T) {
 			t.Fatal(err)
 		}
 		drawn := map[string]string{}
-		if _, err := render(d, Options{Font: fn}, func(s string) {
+		if _, err := render(d, Options{Font: fn}, probe{trace: func(s string) {
 			if k, v, ok := strings.Cut(s, ": "); ok {
 				drawn[k] = v
 			} else {
 				drawn[s] = ""
 			}
-		}); err != nil {
+		}}); err != nil {
 			t.Fatal(err)
 		}
 		for _, e := range el.Edges {

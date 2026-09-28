@@ -2,7 +2,6 @@ package raster
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -26,236 +25,11 @@ func seqOf(t *testing.T, src string, m measurer) (*mr.Sequence, *seqLayout) {
 	return s, sl
 }
 
-// checkSeq checks a sequence layout's properties: everything inside the
-// picture; no text over another; messages down the page in order, each
-// text above its arrow and centred between its ends, each end on its
-// lifeline or bar; a note beside a lifeline crossing none, a note over
-// lifelines crossing only its own; every frame holding what lies in its
-// rows, and nested frames nested.
+// checkSeq checks a sequence layout's properties (seqFaults), strictly.
 func checkSeq(t *testing.T, name string, d *mr.Sequence, sl *seqLayout) {
 	t.Helper()
-	fail := func(format string, a ...any) { t.Errorf("%s: %s", name, fmt.Sprintf(format, a...)) }
-	const eps = 1e-6
-	all := Rect{-eps, -eps, sl.W + eps, sl.H + eps}
-	type labelled struct {
-		r    Rect
-		what string
-	}
-	var texts []labelled
-	for _, h := range sl.heads {
-		texts = append(texts, labelled{h.box, "header " + h.label})
-	}
-	idx := map[*mr.Participant]int{}
-	for i, p := range d.Participants {
-		idx[p] = i
-	}
-	var msgEvents, noteEvents []*mr.Event
-	for _, e := range d.Events {
-		switch e.Kind {
-		case mr.Message:
-			msgEvents = append(msgEvents, e)
-		case mr.Note:
-			noteEvents = append(noteEvents, e)
-		}
-	}
-	if len(msgEvents) != len(sl.msgs) || len(noteEvents) != len(sl.notes) {
-		fail("%d messages and %d notes placed, want %d and %d", len(sl.msgs), len(sl.notes), len(msgEvents), len(noteEvents))
-		return
-	}
-	reach := func(i int, x float64) bool {
-		return math.Abs(x-sl.cols[i]) <= sqActW/2+10*sqActStep+eps
-	}
-	prevY := math.Inf(-1)
-	for k, m := range sl.msgs {
-		e := msgEvents[k]
-		a, b := idx[e.From], idx[e.To]
-		first, last := m.pts[0], m.pts[len(m.pts)-1]
-		if !all.contains(Rect{first.X, first.Y, first.X, first.Y}) || !all.contains(Rect{last.X, last.Y, last.X, last.Y}) {
-			fail("message %d runs outside the picture", k)
-		}
-		if first.Y <= prevY {
-			fail("message %d (%q) is not below the one before", k, e.Text)
-		}
-		prevY = first.Y
-		if !reach(a, first.X) || !reach(b, last.X) {
-			fail("message %d (%q) does not start and end on its lifelines", k, e.Text)
-		}
-		// Each end is on its lifeline, or on the side of the outermost bar
-		// open there, facing the other end.
-		endAt := func(i int, p Pt, right bool) float64 {
-			x := sl.cols[i]
-			for _, bar := range sl.acts {
-				if bar.Y0-eps <= p.Y && p.Y <= bar.Y1+eps && bar.X0 < x+10*sqActStep && bar.X1 > x-sqActW {
-					if right {
-						x = math.Max(x, bar.X1)
-					} else {
-						x = math.Min(x, bar.X0)
-					}
-				}
-			}
-			return x
-		}
-		// An arrow points at its receiver; a loop to itself goes right.
-		if a != b && (last.X-first.X)*(sl.cols[b]-sl.cols[a]) <= 0 {
-			fail("message %d (%q) points the wrong way", k, e.Text)
-		}
-		if a == b && m.pts[1].X <= first.X {
-			fail("message %d (%q) to itself loops the wrong way", k, e.Text)
-		}
-		toRight := a == b || sl.cols[b] > sl.cols[a]
-		if want := endAt(a, first, toRight); math.Abs(first.X-want) > eps {
-			fail("message %d (%q) starts at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, first.X, want)
-		}
-		fromRight := a == b || sl.cols[a] > sl.cols[b]
-		if want := endAt(b, last, fromRight); math.Abs(last.X-want) > eps {
-			fail("message %d (%q) ends at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, last.X, want)
-		}
-		if m.tbox != (Rect{}) {
-			texts = append(texts, labelled{m.tbox, "message " + e.Text})
-			if m.tbox.Y1 > first.Y+eps {
-				fail("message %d's text is not above its arrow", k)
-			}
-			if a != b && math.Abs(m.tbox.Center().X-(first.X+last.X)/2) > eps {
-				fail("message %d's text is not centred on its arrow", k)
-			}
-			if !all.contains(m.tbox) {
-				fail("message %d's text is outside the picture", k)
-			}
-			if a != b && (m.tbox.X0 < math.Min(first.X, last.X)-eps || m.tbox.X1 > math.Max(first.X, last.X)+eps) {
-				fail("message %d's text (%q) is longer than its arrow", k, e.Text)
-			}
-		}
-		// A number stands clear of a head at the start.
-		if m.both && m.number != "" && math.Abs(m.numAt.X-first.X) < arrowLen+sqNumR-eps {
-			fail("message %d's number covers its start head", k)
-		}
-		// A message to itself stays short of the next lifeline, text and
-		// loop.
-		if a == b && a+1 < len(sl.cols) {
-			right := 0.0
-			for _, p := range m.pts {
-				right = math.Max(right, p.X)
-			}
-			if m.tbox != (Rect{}) {
-				right = math.Max(right, m.tbox.X1)
-			}
-			if right >= sl.cols[a+1]-eps {
-				fail("message %d (%q) to itself reaches the next lifeline", k, e.Text)
-			}
-		}
-	}
-	for k, nt := range sl.notes {
-		e := noteEvents[k]
-		texts = append(texts, labelled{nt.box, "note " + e.Text})
-		if !all.contains(nt.box) {
-			fail("note %q is outside the picture", e.Text)
-		}
-		lo, hi := min(idx[e.From], idx[e.To]), max(idx[e.From], idx[e.To])
-		switch x := sl.cols[lo]; e.Place {
-		case mr.LeftOf:
-			if nt.box.X1 > x-eps {
-				fail("note %q is not left of %s", e.Text, e.From.ID)
-			}
-		case mr.RightOf:
-			if nt.box.X0 < x+eps {
-				fail("note %q is not right of %s", e.Text, e.From.ID)
-			}
-		}
-		for i, x := range sl.cols {
-			crosses := x > nt.box.X0+eps && x < nt.box.X1-eps
-			own := e.Place == mr.Over && i >= lo && i <= hi
-			if crosses && !own {
-				fail("note %q covers %s's lifeline", e.Text, d.Participants[i].ID)
-			}
-			if own && !crosses {
-				fail("note %q is not over %s's lifeline", e.Text, d.Participants[i].ID)
-			}
-		}
-	}
-	for _, f := range sl.frames {
-		if !all.contains(f.box) {
-			fail("a %s frame is outside the picture", f.kind)
-		}
-		texts = append(texts, labelled{f.tab, f.kind + " tab"})
-		if f.cond != "" {
-			texts = append(texts, labelled{f.condBox, f.kind + " " + f.cond})
-			if !f.box.contains(f.condBox) {
-				fail("a %s frame's condition sticks out", f.kind)
-			}
-		}
-		for _, s := range f.sections {
-			if s.text != "" {
-				texts = append(texts, labelled{s.tbox, f.kind + " " + s.text})
-			}
-		}
-		in := func(y0, y1 float64) bool { return y0 > f.box.Y0 && y1 < f.box.Y1 }
-		for _, m := range sl.msgs {
-			for _, p := range m.pts {
-				if in(p.Y, p.Y) && (p.X < f.box.X0 || p.X > f.box.X1) {
-					fail("a %s frame does not hold a message in its rows", f.kind)
-				}
-			}
-			if m.tbox != (Rect{}) && in(m.tbox.Y0, m.tbox.Y1) && !f.box.contains(m.tbox) {
-				fail("a %s frame does not hold the text %q in its rows", f.kind, m.text)
-			}
-		}
-		for _, nt := range sl.notes {
-			if in(nt.box.Y0, nt.box.Y1) && !f.box.contains(nt.box) {
-				fail("a %s frame does not hold the note %q in its rows", f.kind, nt.text)
-			}
-		}
-		for _, bar := range sl.acts {
-			for _, y := range []float64{bar.Y0, bar.Y1} {
-				if in(y, y) && (bar.X0 < f.box.X0 || bar.X1 > f.box.X1) {
-					fail("a %s frame does not hold an activation that starts or ends in its rows", f.kind)
-				}
-			}
-		}
-		for _, g := range sl.frames {
-			if g != f && in(g.box.Y0, g.box.Y1) && !f.box.contains(g.box) {
-				fail("a %s frame does not hold the %s frame inside it", f.kind, g.kind)
-			}
-		}
-	}
-	for i, a := range texts {
-		for _, b := range texts[i+1:] {
-			if a.r.overlaps(b.r) {
-				fail("%s overlaps %s", a.what, b.what)
-			}
-		}
-	}
-	// A bar starts at the message that activates its participant (A->>+B,
-	// or a message followed by activate) and ends at the one it sends
-	// before deactivating (B-->>-A).
-	mi := -1
-	for k, e := range d.Events {
-		if e.Kind == mr.Message {
-			mi++
-		}
-		if mi < 0 || k == 0 || d.Events[k-1].Kind != mr.Message {
-			continue
-		}
-		prev, y := d.Events[k-1], sl.msgs[mi].pts[0].Y
-		if prev.From == prev.To {
-			y = sl.msgs[mi].pts[len(sl.msgs[mi].pts)-1].Y
-		}
-		col := sl.cols[idx[e.From]]
-		found := false
-		for _, bar := range sl.acts {
-			near := bar.X0 < col+10*sqActStep && bar.X1 > col-sqActW
-			if e.Kind == mr.Activate && e.From == prev.To && near && math.Abs(bar.Y0-y) < eps ||
-				e.Kind == mr.Deactivate && e.From == prev.From && near && math.Abs(bar.Y1-y) < eps {
-				found = true
-			}
-		}
-		if (e.Kind == mr.Activate && e.From == prev.To || e.Kind == mr.Deactivate && e.From == prev.From) && !found {
-			fail("no bar of %s %ss at message %d's arrow", e.From.ID, e.Kind, mi)
-		}
-	}
-	for _, a := range sl.acts {
-		if a.Y1 <= a.Y0 || !all.contains(a) {
-			fail("an activation bar %v is empty or outside", a)
-		}
+	for _, msg := range seqFaults(d, sl, true) {
+		t.Errorf("%s: %s", name, msg)
 	}
 }
 
@@ -485,7 +259,7 @@ func TestSequenceDrawnHeads(t *testing.T) {
 		t.Fatal(err)
 	}
 	drawn := map[string]bool{}
-	if _, err := render(d, Options{Font: fn}, func(t string) { drawn[t] = true }); err != nil {
+	if _, err := render(d, Options{Font: fn}, probe{trace: func(t string) { drawn[t] = true }}); err != nil {
 		t.Fatal(err)
 	}
 	k := 0

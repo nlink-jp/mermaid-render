@@ -46,11 +46,20 @@ func RenderSource(src string, opts Options) (*image.RGBA, error) {
 // Render draws a diagram on a white card. Every error means the caller
 // should show the source instead; a *mr.Error tells why.
 func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
-	return render(d, opts, nil)
+	return render(d, opts, probe{})
 }
 
-// render is Render with an optional trace of what is drawn.
-func render(d mr.Diagram, opts Options, trace func(string)) (*image.RGBA, error) {
+// probe lets tests see into a render.
+type probe struct {
+	// trace is told what is drawn: markers, heads, lines.
+	trace func(string)
+	// corrupt changes the layout before it is checked, to prove the check
+	// runs: a fault no real layout has cannot be reached otherwise.
+	corrupt func(lay *Layout, seq *seqLayout)
+}
+
+// render is Render with a probe.
+func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	fn := opts.Font
 	if fn == nil {
 		var err error
@@ -105,6 +114,12 @@ func render(d mr.Diagram, opts Options, trace func(string)) (*image.RGBA, error)
 	default:
 		return nil, &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("%T", d)}
 	}
+	if pr.corrupt != nil {
+		pr.corrupt(lay, seq)
+	}
+	if fs := verify(d, lay, er, seq, fn.measureEm); len(fs) > 0 {
+		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fs[0]}
+	}
 	var tw, th float64
 	var err error
 	if title != "" {
@@ -122,7 +137,7 @@ func render(d mr.Diagram, opts Options, trace func(string)) (*image.RGBA, error)
 	}
 	img := image.NewRGBA(image.Rect(0, 0, wPx, hPx))
 	draw.Draw(img, img.Bounds(), image.NewUniform(colBG), image.Point{}, draw.Src)
-	c := &canvas{img: img, em: em, trace: trace}
+	c := &canvas{img: img, em: em, trace: pr.trace}
 	c.outlineShape(roundRect(Rect{0.06, 0.06, wEm - 0.06, hEm - 0.06}, 0.5), nil, colCard, 0.06, false)
 	if title != "" {
 		if err := fn.drawText(img, wEm/2*em, (cardPad+th/2-0.2)*em, title, true, em, colText); err != nil {

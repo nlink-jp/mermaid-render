@@ -46,6 +46,7 @@ mermaid-render/
 │   ├── place.go      # rank positions, frames, ports, routing, direction transform
 │   ├── geom.go       # shape outlines, clipping, segment tests
 │   ├── draw.go       # rasterizing shapes, links, heads, frames
+│   ├── verify.go     # layout properties, checked on every render and (strictly) by tests
 │   └── render.go     # Options, Render, RenderSource, MaxPixels
 ├── tools/mmdpng/     # development CLI: mermaid file -> PNG
 ├── Makefile
@@ -59,8 +60,14 @@ mermaid-render/
   changed file against its `.mmd` before committing, or the golden only
   proves the code agrees with itself.
 - **Layout properties are the correctness gate** (they replace the text-art
-  faithfulness checks of gem-agent ADR-0042). `checkLayout` in
-  `raster/layout_test.go` is the list; run `go test ./raster/ -random 20000`
+  faithfulness checks of gem-agent ADR-0042). `flowFaults`, `erFaults` and
+  `seqFaults` in `raster/verify.go` are the list, run on every render
+  (`LayoutFault`) and strictly by the tests. `strict` adds what is only a
+  matter of looks (0.6 em spacing, 20° crossings, centring, frame
+  crossings, label-to-bend room); a render must never refuse for those, and
+  `TestVerifyRefusesWrongNotUgly` / `TestVerifyAcceptsAFrameCrossing` hold
+  that. A new property goes in verify.go, decided wrong or ugly, with its
+  loose threshold at most the strict one. Run `go test ./raster/ -random 20000`
   after any layout change — 20000 seeds found defects 400 did not. Pin a seed
   that exposed a defect in `TestLayoutRegressions`.
 - **A link crossing a foreign subgraph frame is counted, not failed**, in the
@@ -133,7 +140,11 @@ mermaid-render/
 - **A mutant that does not compile proves nothing**: when checking a
   property by breaking the code, make sure the broken copy builds (an
   unused variable once passed for "not caught").
-- **Drawing is checked through a trace** (`render(d, opts, trace)`,
+- **The render-time check must stay cheap**: pairs of segments are swept by
+  x, and `segmentHitsRect` rejects by bounding box first; comparing every
+  pair took half a second at the limits (`TestVerifyCost`, which catches
+  only a slide of that order).
+- **Drawing is checked through a trace** (`render(d, opts, probe{trace: …})`,
   `canvas.tracef`): markers, heads and every polyline's dash flag are
   reported, and tests compare them with the source. Trace inside the
   primitive (polyline), not beside the call: a trace line computed apart

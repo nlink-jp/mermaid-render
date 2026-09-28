@@ -381,7 +381,7 @@ Tests:
 
 - First release of mermaid-render and registration in lib-series. Before release, an independent
   implementation review and govulncheck.
-- Added to the engine before release (from the design verification of gem-agent ADR-0092):
+- Added to the engine before release (from the design verification of gem-agent ADR-0092) — **done (2026-09-29)**:
   - **Invariants checked on every render**: the invariants the property tests hold (no two boxes
     overlap, a box holds its label, a frame holds its members and no other box, an edge keeps its
     label and every head has a run of line) are checked after layout on every render, and a

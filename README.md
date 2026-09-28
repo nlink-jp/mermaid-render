@@ -11,7 +11,9 @@ support the iTerm2 or kitty image protocol.
   the source verbatim.
 - **Wrong pictures are refused; ugly ones are not.** Anything the engine
   cannot read, or a label character no font has, is an error, and the caller
-  shows the source instead. Crossings and size never cause a refusal.
+  shows the source instead. So is a drawing that breaks the engine's own
+  layout properties: every render checks them. Crossings and size never cause
+  a refusal.
 
 ## Diagrams
 
@@ -26,8 +28,9 @@ returned as "unsupported diagram type".
 d, err := mermaidrender.Parse(src) // src: the fence's contents
 var e *mermaidrender.Error
 if errors.As(err, &e) {
-	// e.Kind: SyntaxError, UnsupportedType or UnsupportedConstruct; e.Line
-	// is 1-based in src. Every kind means: show the source instead.
+	// e.Kind: SyntaxError, UnsupportedType or UnsupportedConstruct (and
+	// LayoutFault, from Render only); e.Line is 1-based in src. Every kind
+	// means: show the source instead.
 }
 switch d := d.(type) {
 case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
@@ -62,6 +65,18 @@ per image (for time and memory). A flowchart whose links would need more than
 ran from 0.10 to 0.67 bytes per pixel — against its own limit (termimg's
 2 MiB), showing the source when over. Beyond the limits the result is an
 `UnsupportedConstruct` error, like a label character no font can draw.
+
+Every render checks its own layout before drawing: no box on another, every
+label inside its box and clear of other text, frames holding their members,
+links starting and ending on their ends' outlines and passing through no other
+node, heads and crow's feet with a run of line behind them, sequence arrows
+pointing at their receivers and frames holding their rows. A drawing that
+breaks one is a `LayoutFault` error — the engine's defect, not the source's —
+so a layout bug the tests never met shows the source rather than a wrong
+picture. The check holds only what makes a picture wrong; the tests hold the
+same properties more strictly (spacing, centring, frame crossings), which are
+matters of looks and never refuse a render. At the limits it takes tens of
+milliseconds.
 
 ## Fonts
 
