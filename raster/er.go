@@ -21,9 +21,13 @@ const (
 	erPortGap = 1.4 // two crow's feet side by side keep 0.6 em apart (1.2 looked crowded)
 	erRankGap = 1.6 // a straight link leaves room for its markers
 	erEndRoom = 1.6 // a bent link runs straight this far into its end
-	cellPadX  = 0.5
-	cellPadY  = 0.22
-	hdrPadY   = 0.4
+	// A table is wide: its links may use 80% of a face (a shape's 60%
+	// kept a link from standing under the box it goes to).
+	erFaceSpread = 0.8
+	erLabelRoom  = 1.2 // a label to a bend below it (0.45 looked cramped)
+	cellPadX     = 0.5
+	cellPadY     = 0.22
+	hdrPadY      = 0.4
 	// markerReach is how far the longest marker (zero or more: a crow's
 	// foot and a circle) runs along its line from the entity.
 	markerReach = 1.32
@@ -103,7 +107,8 @@ func layoutER(d *mr.ER, m measurer) (*erLayout, error) {
 		f.Links = append(f.Links, lk)
 		rels[lk] = r
 	}
-	lay, err := layoutGraph(f, m, &layouter{portGap: erPortGap, rankGap: erRankGap, endRoom: erEndRoom, sizes: sizes})
+	lay, err := layoutGraph(f, m, &layouter{portGap: erPortGap, rankGap: erRankGap, endRoom: erEndRoom,
+		faceSpread: erFaceSpread, labelRoom: erLabelRoom, sizes: sizes})
 	if err != nil {
 		return nil, err
 	}

@@ -111,8 +111,8 @@ mermaid-render/
   Go-side lookaheads for the four `(?=...)` rules. JavaScript's `\s` and `.`
   are spelled out (`jsSpace`, `jsDot`). Do not "fix" a surprising result
   (`direction TD` as two entities) without checking mermaid does otherwise.
-- **Spacing is per layout** (`layouter.portGap`, `rankGap`, `endRoom`, and
-  `sizes` for caller-measured nodes): flowcharts keep the constants, ER
+- **Spacing is per layout** (`layouter.portGap`, `rankGap`, `endRoom`,
+  `faceSpread`, `labelRoom`, and `sizes` for caller-measured nodes): flowcharts keep the constants, ER
   widens them for its markers. After touching the layout, render the 22 real
   flowcharts and compare bytes with the last reviewed set.
 - **Link tokens follow flowDb.destructEndLink**: a start mark counts only when

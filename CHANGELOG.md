@@ -85,6 +85,8 @@ to [Semantic Versioning](https://semver.org/).
   with crow's foot markers at both ends, labels, all four directions. The
   flowchart layout is reused with spacing for the markers (1.6 em straight
   into each end and between layers, 1.4 em between ends on a face).
+  After the operator's first ER check: 1.2 em between a label and a bend
+  below it, and a table's links may use 80% of its face.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings.
 - Layout property tests (placement, overlaps, link ends on outlines, no link
   through a node, distinct link ends, determinism) on synthetic cases in four

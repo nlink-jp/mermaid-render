@@ -85,6 +85,21 @@ func checkER(t *testing.T, name string, d *mr.ER, el *erLayout, m measurer) {
 			}
 		}
 	}
+	// A bend keeps its distance from its own link's label (a self-link's
+	// label sits beside its loop by design).
+	for _, e := range el.Edges {
+		if e.Label == "" || e.Link.From == e.Link.To {
+			continue
+		}
+		p := e.Points
+		for _, q := range p[1 : len(p)-1] {
+			dx := math.Max(0, math.Max(e.LabelBox.X0-q.X, q.X-e.LabelBox.X1))
+			dy := math.Max(0, math.Max(e.LabelBox.Y0-q.Y, q.Y-e.LabelBox.Y1))
+			if d := math.Hypot(dx, dy); d < erLabelRoom-0.05 && d > 1e-9 {
+				fail("link %s->%s bends %.3f em from its label", e.Link.From.ID, e.Link.To.ID, d)
+			}
+		}
+	}
 	for i, n := range el.Nodes {
 		t := el.tables[i]
 		if t.cols == nil {
@@ -216,3 +231,48 @@ func TestERLayoutRandom(t *testing.T) {
 		}
 	}
 }
+
+// TestRealERBends counts direction changes over the 11 real ER diagrams:
+// a baseline like TestRealBends. The operator's first ER check marked a
+// link that could have run straight (b6ffb9fc3c) and too many bends
+// (0a1fd38f5f); letting a table's links use 80% of its face fixed both.
+func TestRealERBends(t *testing.T) {
+	fn, err := DefaultFont()
+	if err != nil {
+		t.Skipf("no system font: %v", err)
+	}
+	files, _ := filepath.Glob("../testdata/real/*/*.mmd")
+	total := 0
+	for _, file := range files {
+		b, _ := os.ReadFile(file)
+		d, err := mr.Parse(string(b))
+		if err != nil {
+			continue
+		}
+		e, ok := d.(*mr.ER)
+		if !ok {
+			continue
+		}
+		el, err := layoutER(e, fn.measureEm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ed := range el.Edges {
+			p := ed.Points
+			for i := 1; i+1 < len(p); i++ {
+				ax, ay := p[i].X-p[i-1].X, p[i].Y-p[i-1].Y
+				bx, by := p[i+1].X-p[i].X, p[i+1].Y-p[i].Y
+				if math.Abs(ax*by-ay*bx) > 1e-6 {
+					total++
+				}
+			}
+		}
+	}
+	t.Logf("ER bends %d", total)
+	if total > erBendsBaseline {
+		t.Errorf("ER bends %d (baseline %d)", total, erBendsBaseline)
+	}
+}
+
+// erBendsBaseline: 46 after the first ER check (48 with a 60% face).
+const erBendsBaseline = 46

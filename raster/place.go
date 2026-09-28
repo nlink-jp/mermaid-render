@@ -101,7 +101,7 @@ func (l *layouter) place() *Layout {
 			var occ []float64
 			layer := -1
 			if k[0] == 0 {
-				c0, width := l.nodeItem[k[1]].x, 2*baseHalf[k[1]]*portSpreadOf(l.shapeOf(k[1]))
+				c0, width := l.nodeItem[k[1]].x, 2*baseHalf[k[1]]*l.spreadOf(k[1])
 				lo, hi = c0-width/2, c0+width/2
 				layer = l.rank[k[1]]
 			} else {
@@ -217,6 +217,17 @@ func (l *layouter) place() *Layout {
 			headTop[ch.lo] = true
 		}
 	}
+	// A link that bends in the gap right below its label keeps labelRoom
+	// between the two (the operator's ER check: labels too near a bend).
+	labelTop := make([]bool, nl)
+	for _, ch := range l.chains {
+		if ch.self || ch.label == nil {
+			continue
+		}
+		if ci := ch.label.layer - ch.lo; ci >= 0 && ci < len(chainCross[ch]) && chainCross[ch][ci].track >= 0 {
+			labelTop[ch.label.layer] = true
+		}
+	}
 
 	// Where a frame's title sits in abstract coordinates.
 	titleLow := l.f.Direction == mr.TB  // before the first layer
@@ -269,6 +280,9 @@ func (l *layouter) place() *Layout {
 		in := trackIn
 		if headTop[k] {
 			in = l.endRoom
+		}
+		if labelTop[k] {
+			in = math.Max(in, l.labelRoom)
 		}
 		trackTop[k] = below + margin + in
 		need := l.rankGap
@@ -702,7 +716,7 @@ func (l *layouter) tryWithShift(ch *chain, c float64, owner map[*item]*chain, do
 		if l.horiz {
 			half = l.nh[e.node] / 2
 		}
-		half *= portSpreadOf(l.shapeOf(e.node))
+		half *= l.spreadOf(e.node)
 		if math.Abs(col-l.nodeItem[e.node].x) > half {
 			return false
 		}
@@ -1306,6 +1320,14 @@ func (l *layouter) shapeOf(n int) mr.Shape {
 		return l.nodes[n].Shape
 	}
 	return mr.Rect
+}
+
+// spreadOf is the share of node n's faces its link ends may use.
+func (l *layouter) spreadOf(n int) float64 {
+	if l.faceSpread > 0 {
+		return l.faceSpread
+	}
+	return portSpreadOf(l.shapeOf(n))
 }
 
 // portSpreadOf narrows the port range to the part of a face a straight

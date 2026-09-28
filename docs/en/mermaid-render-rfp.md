@@ -590,6 +590,13 @@ same way as pathguard.
     checked byte for byte to be unchanged. Layout properties add: straight past each marker,
     crow's feet side by side do not touch (from the marker's width), no label over a marker, and
     every table fits its box; 20,000 random ER diagrams keep them.
+  - **ER check, round 1 (2026-09-28)**: all 11 marked ○ for entities, relationships and
+    cardinality (reading and markers are right). Notes of three kinds: labels too near a bend (6
+    diagrams), too many bends, and a link that would run straight if its neighbour left further
+    over. A link bending right below its label now keeps 1.2 em between them (was 0.45), and a
+    table, being wide, lets its links use 80% of a face (a shape's 60% kept an end from standing
+    over the box it goes to). Bends over the 11: 48 to 46 (the worst link 6 to 4; its remaining
+    four follow from where the boxes are). Both values are ER only; flowchart images are unchanged.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

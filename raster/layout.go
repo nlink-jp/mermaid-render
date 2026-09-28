@@ -169,6 +169,12 @@ type layouter struct {
 	// rankGap is the least gap between layers, endRoom the room before a
 	// link's end in a gap (an arrowhead's, or a cardinality marker's).
 	rankGap, endRoom float64
+	// faceSpread, when set, is the share of every node face its link ends
+	// may use (ER tables); else each shape's own (portSpreadOf).
+	faceSpread float64
+	// labelRoom is the least room between a link's label and a bend in
+	// the gap below it.
+	labelRoom float64
 	// sizes, when set, are the nodes' sizes: an ER entity is a table the
 	// caller measured, not a label in a shape.
 	sizes    [][2]float64
@@ -194,7 +200,7 @@ type layouter struct {
 }
 
 func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {
-	return layoutGraph(f, m, &layouter{portGap: portGap, rankGap: rankGap, endRoom: trackOut})
+	return layoutGraph(f, m, &layouter{portGap: portGap, rankGap: rankGap, endRoom: trackOut, labelRoom: trackIn})
 }
 
 // layoutGraph lays out f with the spacing (and node sizes) set in l.
@@ -416,7 +422,7 @@ func (l *layouter) attachmentsClear(i int, off float64) bool {
 			loopEnds = append(loopEnds, p)
 		}
 	}
-	half := cross / 2 * portSpreadOf(l.shapeOf(i))
+	half := cross / 2 * l.spreadOf(i)
 	steps := int(math.Ceil(2*half/0.1)) + 1
 	for _, face := range []float64{-rs, rs} {
 		for j := range steps {
@@ -729,7 +735,7 @@ func (l *layouter) makeItems() error {
 		if k < 2 {
 			continue
 		}
-		need := float64(k) * l.portGap / portSpreadOf(l.shapeOf(i))
+		need := float64(k) * l.portGap / l.spreadOf(i)
 		if l.horiz {
 			l.nh[i] = math.Max(l.nh[i], need)
 		} else {
