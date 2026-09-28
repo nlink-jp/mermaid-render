@@ -45,7 +45,10 @@ to [Semantic Versioning](https://semver.org/).
   up with that link; a node with one link on a face sits centred on it (a
   rhombus takes it at the vertex); tracks in a gap are 0.8 em apart (was
   0.45), so fanning links no longer look merged. The bend baseline rose to
-  116 / 5 on purpose. Link spacing is now checked at 0.6 em.
+  116 / 5 on purpose. Link spacing is now checked at 0.6 em. Tracks in a gap
+  are ordered so no across run passes another link's vertical where a rule
+  allows it: links sharing an end node no longer cross (8 to 0 over the 22
+  real diagrams, TestRealSiblingCrossings).
 - Limits: 300 nodes and subgraphs (at most 100 subgraphs), 1000 characters per
   label, Scale in (0, 8], 12 Mpx per image for time and memory (the PNG's
   size is the caller's to check: 0.10-0.67 bytes per pixel, so a pixel cap

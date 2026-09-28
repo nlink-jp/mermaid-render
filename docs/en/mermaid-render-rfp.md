@@ -227,7 +227,9 @@ above.
   6. Links run straight down through a layer and change column between layers with a
      down-across-down right-angle path. Each across run gets its own height (a track) in the gap,
      so links only ever meet at right angles; tracks are 0.8 em apart. When two links swap into
-     each other's columns, one detours through a free column. Ports sit, where they can, right above or below the column the
+     each other's columns, one detours through a free column. An across run that passes over
+     another link's leaving column turns below it, and one that passes over its arriving column turns
+     above it, so links fanning out of one node do not cross. Ports sit, where they can, right above or below the column the
      link goes on in.
   7. Links sharing a node get their own ports, at least 0.8 em apart per face; a node or frame grows
      when a face is short (self-link ends included, checked by measuring on the real outline). A link
@@ -536,7 +538,9 @@ same way as pathguard.
     fans out from lines up with that link, a node with one link on a face sits centred on it, and
     tracks are 0.8 em apart (was 0.45, now the port spacing). Lining nodes up costs bends elsewhere,
     so the baseline rose to 116 / 5, on purpose and with the reason in the test. The link spacing
-    check rose from 0.3 em to 0.6 em.
+    check rose from 0.3 em to 0.6 em. The three marked "could bend without overlapping" came from a
+    track order that ignored crossings; tracks now prefer the order in which no across run passes
+    another link's vertical (crossings between links sharing an end node 8 to 0, kept by a test).
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

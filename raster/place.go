@@ -974,6 +974,10 @@ type crossing struct {
 // (they swap near-equal columns) form a cycle; one of them then detours
 // through a free column between, which puts its two halves on either side
 // of the other and breaks the cycle.
+// maxSoftParts bounds the crossing-avoiding preferences of assignTracks
+// (quadratic pairs, each checked for a cycle).
+const maxSoftParts = 60
+
 func assignTracks(cs []*crossing) int {
 	type part struct {
 		c        *crossing
@@ -1025,6 +1029,57 @@ func assignTracks(cs []*crossing) int {
 				if near(a.top, b.bot) {
 					below[i] = append(below[i], j) // a turns above b
 					indeg[j]++
+				}
+			}
+		}
+		// Then, where no rule above decides, a run that passes over
+		// another crossing's drop column turns below it, and one that
+		// passes over its rise column turns above it, so neither crosses
+		// the other's vertical (a fan leaving one node stays uncrossed).
+		// A preference that would close a cycle is dropped; many parts
+		// in one gap skip this (ugly, not wrong).
+		if len(ps) <= maxSoftParts {
+			reaches := func(from, to int) bool {
+				seen := make([]bool, len(ps))
+				stack := []int{from}
+				for len(stack) > 0 {
+					v := stack[len(stack)-1]
+					stack = stack[:len(stack)-1]
+					if v == to {
+						return true
+					}
+					for _, w := range below[v] {
+						if !seen[w] {
+							seen[w] = true
+							stack = append(stack, w)
+						}
+					}
+				}
+				return false
+			}
+			inside := func(x float64, a *part) bool { return x > a.lo+1e-6 && x < a.hi-1e-6 }
+			for i, a := range ps {
+				for j, b := range ps {
+					if i == j || a.c == b.c {
+						continue
+					}
+					// b's drop column reaches the gap's top unless b is a
+					// detour's lower half; its rise column reaches the
+					// bottom unless b is an upper half.
+					over := b.half != 2 && inside(b.top, a)  // a turns below b
+					under := b.half != 1 && inside(b.bot, a) // a turns above b
+					if over == under {
+						continue // a crossing either way, or none
+					}
+					hi, lo := j, i
+					if under {
+						hi, lo = i, j
+					}
+					if reaches(lo, hi) {
+						continue
+					}
+					below[hi] = append(below[hi], lo)
+					indeg[lo]++
 				}
 			}
 		}

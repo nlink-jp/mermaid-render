@@ -62,7 +62,10 @@ mermaid-render/
   links swapping near-equal columns) is broken by a detour through a free
   column. A detour's two halves are ordered directly — the column rule
   assumes vertical runs reaching the gap's ends, which a detour's middle
-  column does not.
+  column does not. Below those hard rules, a soft preference orders runs so
+  none passes another's vertical (a run over another's drop column turns
+  below it, over its rise column above it); a preference that would close a
+  cycle is dropped, and gaps over 60 parts skip it (quadratic).
 - **Attachment spacing is measured, not ruled by shape** (`attachmentsClear`):
   shape-by-shape rules kept missing cases (a rhombus's shared slopes, a
   stadium's rounded ends). Measure after every other growth, and sample the
