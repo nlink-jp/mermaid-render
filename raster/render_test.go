@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"image/png"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -140,5 +142,27 @@ func TestResourceLimits(t *testing.T) {
 		if _, err := RenderSource("flowchart TD\n A", Options{Font: fn, Scale: sc}); err == nil {
 			t.Errorf("Scale %v accepted", sc)
 		}
+	}
+}
+
+// Every real flowchart renders at the default scale: a limit that refuses
+// one of them has lost what the engine is for (a pixel cap once did).
+func TestRealBlocksRender(t *testing.T) {
+	fn := systemFont(t)
+	files, _ := filepath.Glob("../testdata/real/*/*.mmd")
+	n := 0
+	for _, f := range files {
+		b, _ := os.ReadFile(f)
+		d, err := mr.Parse(string(b))
+		if err != nil {
+			continue
+		}
+		if _, err := Render(d, Options{Font: fn}); err != nil {
+			t.Errorf("%s: %v", filepath.Base(f), err)
+		}
+		n++
+	}
+	if n != 22 {
+		t.Errorf("rendered %d real flowcharts, want 22", n)
 	}
 }

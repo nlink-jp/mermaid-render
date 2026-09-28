@@ -42,8 +42,10 @@ to [Semantic Versioning](https://semver.org/).
   snap straight. Over the 22 real diagrams: 254 bends to 114, 61 small steps
   to 4 (TestRealBends keeps the baseline).
 - Limits: 300 nodes and subgraphs (at most 100 subgraphs), 1000 characters per
-  label, Scale in (0, 8], 3 Mpx per image (was 6: text-heavy diagrams measured
-  0.67 bytes per pixel); dummy items are counted before any is built; text
+  label, Scale in (0, 8], 12 Mpx per image for time and memory (the PNG's
+  size is the caller's to check: 0.10-0.67 bytes per pixel, so a pixel cap
+  low enough for 2 MiB refused a real diagram); dummy items are counted
+  before any is built; text
   runs no longer grow quadratically. Each adversarial input of the review is
   refused at once.
 - Layout properties now also check: link ends 0.8 em apart (was 0.2), links

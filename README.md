@@ -42,9 +42,10 @@ membership) follow that version's own parser. `raster` draws flowcharts on a
 white card with a layered layout; the caller encodes the PNG and chooses the
 terminal box. Limits keep a render bounded: 300 nodes and subgraphs (at most
 100 subgraphs), 500 links (mermaid's own limit, checked while parsing), 1000
-characters per label, link length 10 (as mermaid), `Scale` up to 8, and 3 Mpx
-per image (at the measured worst of 0.67 bytes per pixel the PNG stays under
-2 MiB — still check the encoded size). Beyond them the result is an
+characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
+per image (for time and memory). The PNG's size is the caller's to check — it
+ran from 0.10 to 0.67 bytes per pixel — against its own limit (termimg's
+2 MiB), showing the source when over. Beyond the limits the result is an
 `UnsupportedConstruct` error, like a label character no font can draw.
 
 ## Dependencies

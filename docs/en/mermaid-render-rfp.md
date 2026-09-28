@@ -513,8 +513,10 @@ same way as pathguard.
   - **Limits measured**: rendering takes 1-9 ms on the real diagrams, PNG encoding 4-49 ms. A dense
     diagram of 150 nodes, 300 links and six subgraphs is 3725×1634 at scale 1 (233 ms, PNG 1,856 KB,
     0.30 bytes per pixel). → The cap was first 6 Mpx; the step-2 review found text-heavy diagrams at
-    0.67 bytes per pixel, so it is 3 Mpx (the largest real diagram is 2.46 Mpx). The caller still
-    checks the encoded size.
+    0.67 bytes per pixel, so it went to 3 Mpx. Then straightening links made one real diagram 3.22 Mpx
+    and it was refused: guarding the PNG's size with a pixel count refuses ordinary large diagrams that
+    are mostly white card. The roles are now split: the engine caps 12 Mpx for time and memory; the
+    caller checks the encoded size. A test keeps all 22 real diagrams rendering at the default scale.
   - **Step-2 independent review (2026-09-28)**: 18 of 19 findings taken. Three misreadings (an id
     starting with `direction`, `&` inside an id, an entity code's `;`); links running too close to
     tell apart (shallow diagonals between layers, frame ports beside member columns, loop ends); a

@@ -22,12 +22,14 @@ type Options struct {
 const (
 	baseEm  = 14.0
 	cardPad = 1.2 // em, card edge to content
-	// MaxPixels bounds the image. The encoded PNG's size per pixel was
-	// measured at 0.10-0.12 bytes for the real session diagrams, 0.30 for
-	// a dense one and up to 0.67 for text-heavy ones (step-2 review); at
-	// that worst 3 Mpx stays under termimg's 2 MiB. It is a measured worst
-	// case, not a guarantee: the caller still checks the encoded size.
-	MaxPixels = 3 << 20
+	// MaxPixels bounds the time and memory one render may take (12 Mpx:
+	// 48 MB of RGBA; a 6 Mpx dense diagram encoded in 148 ms). It does not
+	// bound the PNG's size: bytes per pixel ran from 0.10 (the real
+	// diagrams, mostly white card) to 0.67 (text-heavy), so any pixel cap
+	// low enough for termimg's 2 MiB at the worst refused ordinary large
+	// diagrams — one real diagram at 3.2 Mpx. The caller checks the
+	// encoded size and shows the source when it is over.
+	MaxPixels = 12 << 20
 	// MaxScale bounds Options.Scale.
 	MaxScale = 8
 )
