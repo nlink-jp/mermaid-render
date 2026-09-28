@@ -330,6 +330,11 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 				note(Rect{math.Min(x0, x1), arrowY - 0.3, math.Max(x0, x1), arrowY + 0.3})
 			}
 			msg.numAt = msg.pts[0]
+			if e.BothEnds {
+				// A head at the start too: the number stands behind it.
+				dir := math.Copysign(1, msg.pts[1].X-msg.pts[0].X)
+				msg.numAt.X -= dir * (arrowLen + sqNumR + 0.15)
+			}
 			if msg.tbox != (Rect{}) {
 				note(msg.tbox)
 			}
@@ -622,6 +627,7 @@ func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
 			return err
 		}
 		if f.cond != "" {
+			c.labelBG(Rect{f.condBox.X0 - 0.15, f.condBox.Y0, f.condBox.X1 + 0.15, f.condBox.Y1})
 			if err := text(f.condBox, f.cond, false, 1, colText); err != nil {
 				return err
 			}
@@ -629,6 +635,7 @@ func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
 		for _, s := range f.sections {
 			c.polyline([]Pt{{f.box.X0, s.y}, {f.box.X1, s.y}}, lineW, true, colFrameSt)
 			if s.text != "" {
+				c.labelBG(Rect{s.tbox.X0 - 0.15, s.tbox.Y0, s.tbox.X1 + 0.15, s.tbox.Y1})
 				if err := text(s.tbox, s.text, false, 1, colText); err != nil {
 					return err
 				}

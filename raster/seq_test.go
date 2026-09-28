@@ -95,6 +95,10 @@ func checkSeq(t *testing.T, name string, d *mr.Sequence, sl *seqLayout) {
 				fail("message %d's text (%q) is longer than its arrow", k, e.Text)
 			}
 		}
+		// A number stands clear of a head at the start.
+		if m.both && m.number != "" && math.Abs(m.numAt.X-first.X) < arrowLen+sqNumR-eps {
+			fail("message %d's number covers its start head", k)
+		}
 		// A message to itself stays short of the next lifeline, text and
 		// loop.
 		if a == b && a+1 < len(sl.cols) {
@@ -224,6 +228,10 @@ func TestSequenceLayoutCases(t *testing.T) {
     participant C
     end
     A->>C: across`,
+		"numbered two-headed arrows": `sequenceDiagram
+    autonumber
+    A<<->>B: both ways
+    B<<-->>A: and back`,
 		"activations stacked": `sequenceDiagram
     A->>+B: one
     A->>+B: two
