@@ -76,6 +76,10 @@ mermaid-render/
   broken by "nearer the current position" is stable as a staircase (the tie
   takes the neighbour above). `alignRuns` then moves whole runs of one-to-one
   links; per-item "reachable" rules were tried and made more staircases.
+- **`pushRuns` moves runs whole and keeps only improvements**: a single
+  item moved aside would step its own run; the try is scored by `steps`
+  (links between neighbours that change column) and kept only when lower.
+  It is ER only; turning it on for flowcharts changes reviewed images.
 - **A link ending on a subgraph is tied to every member of the end layer**
   (`endItems`), so its neighbours are not a column to aim at: `upFrame` /
   `dnFrame` mark the dummy next to such an end, and targets, block shifts and
@@ -112,7 +116,8 @@ mermaid-render/
   are spelled out (`jsSpace`, `jsDot`). Do not "fix" a surprising result
   (`direction TD` as two entities) without checking mermaid does otherwise.
 - **Spacing is per layout** (`layouter.portGap`, `rankGap`, `endRoom`,
-  `faceSpread`, `labelRoom`, and `sizes` for caller-measured nodes): flowcharts keep the constants, ER
+  `faceSpread`, `labelRoom`, `pushSteps`, and `sizes` for caller-measured
+  nodes): flowcharts keep the constants, ER
   widens them for its markers. After touching the layout, render the 22 real
   flowcharts and compare bytes with the last reviewed set.
 - **Link tokens follow flowDb.destructEndLink**: a start mark counts only when

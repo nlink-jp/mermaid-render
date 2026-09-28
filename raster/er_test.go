@@ -75,13 +75,22 @@ func checkER(t *testing.T, name string, d *mr.ER, el *erLayout, m measurer) {
 			}
 		}
 	}
-	for _, e := range el.Edges {
+	for i, e := range el.Edges {
 		if e.Label == "" {
 			continue
 		}
-		for _, z := range zones {
+		for j, z := range zones {
 			if e.LabelBox.overlaps(z) {
 				fail("label %q lies over a marker", e.Label)
+			}
+			// Its own markers: 0.7 em clear (the operator's second ER
+			// check: labels against the lower marker read as too low).
+			if j/2 == i && e.Link.From != e.Link.To {
+				dx := math.Max(0, math.Max(z.X0-e.LabelBox.X1, e.LabelBox.X0-z.X1))
+				dy := math.Max(0, math.Max(z.Y0-e.LabelBox.Y1, e.LabelBox.Y0-z.Y1))
+				if d := math.Hypot(dx, dy); d < 0.7 {
+					fail("label %q is %.3f em from its link's marker", e.Label, d)
+				}
 			}
 		}
 	}
@@ -274,5 +283,6 @@ func TestRealERBends(t *testing.T) {
 	}
 }
 
-// erBendsBaseline: 46 after the first ER check (48 with a 60% face).
-const erBendsBaseline = 46
+// erBendsBaseline: 46 after the first ER check (48 with a 60% face), 40
+// after the second (pushRuns).
+const erBendsBaseline = 40

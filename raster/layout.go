@@ -175,6 +175,9 @@ type layouter struct {
 	// labelRoom is the least room between a link's label and a bend in
 	// the gap below it.
 	labelRoom float64
+	// pushSteps lets the coordinates push runs aside to take a step out
+	// of a link (pushRuns); ER only for now.
+	pushSteps bool
 	// sizes, when set, are the nodes' sizes: an ER entity is a table the
 	// caller measured, not a label in a shape.
 	sizes    [][2]float64

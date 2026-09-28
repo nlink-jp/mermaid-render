@@ -19,7 +19,10 @@ import (
 // ER spacing, in em.
 const (
 	erPortGap = 1.4 // two crow's feet side by side keep 0.6 em apart (1.2 looked crowded)
-	erRankGap = 1.6 // a straight link leaves room for its markers
+	// Between layers: the longest marker (1.32) and 0.9 em more, so a
+	// label between two entities clears both markers (1.6 put labels
+	// against the lower marker: the operator's second ER check).
+	erRankGap = 2.2
 	erEndRoom = 1.6 // a bent link runs straight this far into its end
 	// A table is wide: its links may use 80% of a face (a shape's 60%
 	// kept a link from standing under the box it goes to).
@@ -108,7 +111,7 @@ func layoutER(d *mr.ER, m measurer) (*erLayout, error) {
 		rels[lk] = r
 	}
 	lay, err := layoutGraph(f, m, &layouter{portGap: erPortGap, rankGap: erRankGap, endRoom: erEndRoom,
-		faceSpread: erFaceSpread, labelRoom: erLabelRoom, sizes: sizes})
+		faceSpread: erFaceSpread, labelRoom: erLabelRoom, pushSteps: true, sizes: sizes})
 	if err != nil {
 		return nil, err
 	}

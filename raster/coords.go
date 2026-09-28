@@ -472,6 +472,9 @@ func (l *layouter) solve(cuts []cut) error {
 		}
 	}
 	l.alignRuns(s, items, id, Lv, Rv)
+	if l.pushSteps {
+		l.pushRuns(s, items, id, Lv, Rv)
+	}
 	for i, it := range items {
 		it.x = s.x[i]
 	}
@@ -488,7 +491,9 @@ func (l *layouter) solve(cuts []cut) error {
 // neighbour's column by the layer beside it leaves a staircase below it.
 // Candidates are the run's own columns, nearest its median first; frames
 // widen for their members and are tightened after.
-func (l *layouter) alignRuns(s *solver, items []*item, id map[*item]int, Lv, Rv func(int) int) {
+// runsOf are the runs of items linked one to one (each the other's only
+// neighbour on that side), of two items or more, in item order.
+func runsOf(items []*item) [][]*item {
 	next := func(it *item) *item {
 		if len(it.dn) == 1 && len(it.dn[0].up) == 1 && it.dnFrame == 0 {
 			return it.dn[0]
@@ -498,7 +503,7 @@ func (l *layouter) alignRuns(s *solver, items []*item, id map[*item]int, Lv, Rv 
 	head := func(it *item) bool {
 		return !(len(it.up) == 1 && len(it.up[0].dn) == 1 && it.upFrame == 0)
 	}
-	moved := false
+	var runs [][]*item
 	for _, it := range items {
 		if !head(it) || next(it) == nil {
 			continue
@@ -507,6 +512,14 @@ func (l *layouter) alignRuns(s *solver, items []*item, id map[*item]int, Lv, Rv 
 		for v := it; v != nil; v = next(v) {
 			run = append(run, v)
 		}
+		runs = append(runs, run)
+	}
+	return runs
+}
+
+func (l *layouter) alignRuns(s *solver, items []*item, id map[*item]int, Lv, Rv func(int) int) {
+	moved := false
+	for _, run := range runsOf(items) {
 		xs := make([]float64, len(run))
 		for i, v := range run {
 			xs[i] = s.x[id[v]]
@@ -554,6 +567,138 @@ func (l *layouter) alignRuns(s *solver, items []*item, id map[*item]int, Lv, Rv 
 			}
 			moved = true
 			break
+		}
+	}
+	if !moved {
+		return
+	}
+	for ci := range l.clusters {
+		_, hi := s.interval(Lv(ci))
+		s.x[Lv(ci)] = hi
+		lo, _ := s.interval(Rv(ci))
+		s.x[Rv(ci)] = lo
+	}
+}
+
+// maxPushItems bounds pushRuns: each try propagates through every
+// constraint, and a large diagram keeps its steps (ugly, not wrong).
+const maxPushItems = 3000
+
+// steps counts the links between neighbouring items that change column.
+func steps(s *solver, items []*item, id map[*item]int) int {
+	n := 0
+	for _, it := range items {
+		for _, u := range it.up {
+			if math.Abs(s.x[id[u]]-s.x[id[it]]) > 1e-6 {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// pushRuns straightens a run alignRuns could not: it tries each of the
+// run's columns, pushing whatever stands in the way aside — a run in the
+// way moves whole, so it stays straight — and keeps a try only when the
+// diagram has fewer steps after it. Pushing apart only ever widens
+// distances, so every constraint stays met (the operator's second ER check:
+// a link stepping at its label because a box beside it sat one gap short).
+func (l *layouter) pushRuns(s *solver, items []*item, id map[*item]int, Lv, Rv func(int) int) {
+	if len(items) > maxPushItems {
+		return
+	}
+	runs := runsOf(items)
+	runOf := map[int][]int{} // variable -> the variables of its run
+	for _, run := range runs {
+		vs := make([]int, len(run))
+		for i, v := range run {
+			vs[i] = id[v]
+		}
+		for _, v := range vs {
+			runOf[v] = vs
+		}
+	}
+	nv := len(s.x)
+	try := func(run []int, c float64) bool {
+		fixed := map[int]bool{}
+		type change struct {
+			v  int
+			up bool
+		}
+		var queue []change
+		move := func(v int, to float64) bool {
+			if fixed[v] && math.Abs(s.x[v]-to) > 1e-9 {
+				return false
+			}
+			group := runOf[v]
+			if group == nil || v >= len(items) {
+				group = []int{v}
+			}
+			d := to - s.x[v]
+			for _, w := range group {
+				if fixed[w] && math.Abs(d) > 1e-9 {
+					return false
+				}
+				s.x[w] += d
+				queue = append(queue, change{w, d > 0})
+			}
+			return true
+		}
+		for _, v := range run {
+			s.x[v] = c
+			fixed[v] = true
+			queue = append(queue, change{v, true}, change{v, false})
+		}
+		for iter := 0; len(queue) > 0; iter++ {
+			if iter > 20*nv {
+				return false
+			}
+			ch := queue[0]
+			queue = queue[1:]
+			if ch.up {
+				for _, k := range s.out[ch.v] {
+					if need := s.x[ch.v] + k.d; s.x[k.v] < need-1e-9 && !move(k.v, need) {
+						return false
+					}
+				}
+			} else {
+				for _, k := range s.in[ch.v] {
+					if need := s.x[ch.v] - k.d; s.x[k.u] > need+1e-9 && !move(k.u, need) {
+						return false
+					}
+				}
+			}
+		}
+		return true
+	}
+	moved := false
+	for _, run := range runs {
+		vs := runOf[id[run[0]]]
+		lo, hi := math.Inf(1), math.Inf(-1)
+		for _, v := range vs {
+			lo, hi = math.Min(lo, s.x[v]), math.Max(hi, s.x[v])
+		}
+		if hi-lo < 1e-9 {
+			continue
+		}
+		base := steps(s, items, id)
+		keep := append([]float64(nil), s.x...)
+		best, bestX := base, keep
+		var cols []float64
+		for _, v := range vs {
+			cols = append(cols, s.x[v])
+		}
+		for _, c := range cols {
+			copy(s.x, keep)
+			if try(vs, c) {
+				if n := steps(s, items, id); n < best {
+					best, bestX = n, append([]float64(nil), s.x...)
+				}
+			}
+		}
+		copy(s.x, bestX)
+		if best < base {
+			moved = true
 		}
 	}
 	if !moved {

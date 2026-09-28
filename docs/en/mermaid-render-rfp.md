@@ -597,6 +597,16 @@ same way as pathguard.
     table, being wide, lets its links use 80% of a face (a shape's 60% kept an end from standing
     over the box it goes to). Bends over the 11: 48 to 46 (the worst link 6 to 4; its remaining
     four follow from where the boxes are). Both values are ER only; flowchart images are unchanged.
+  - **ER check, round 2 (2026-09-28)**: readings and markers all correct. Notes: labels too low, too
+    near a line's end (6 diagrams), and a bend at a label that one fewer would do. A label sat
+    midway between two entities, and the lower marker (crow's foot and circle, 1.32 em) is longer
+    than the upper (two bars, 0.75 em), so it looked pressed against the lower one: layers are now
+    2.2 em apart (was 1.6), and 0.7 em between a label and its own link's markers is a layout
+    property. The step at the label: the label was held by the next label and the bend point by the
+    next entity, and moving one item at a time could not line them up. For a run that stays stepped,
+    the runs in the way are now pushed aside whole, and a try is kept only when the steps along
+    links go down (pushing apart only widens gaps, so no constraint breaks). Bends over the 11:
+    46 to 40. ER only for now.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
