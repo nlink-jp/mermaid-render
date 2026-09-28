@@ -33,6 +33,14 @@ to [Semantic Versioning](https://semver.org/).
   outline; a slanted shape's slant is fixed from its size before growing, so
   its label never spills out; an outer self-link clears the inner labels;
   frame titles no longer hide arrowheads (heads are drawn again after them).
+- Fewer bends (the operator's check marked 16 of 22 real diagrams for
+  needless bends): coordinates move toward the median of an item's
+  neighbours, not their mean, so links line up with one of them; subgraphs
+  shift as whole blocks toward their outside links; each link's bend points
+  move onto its ports' columns where the constraints allow (repeated until
+  nothing moves, else carried forward as far as they go); steps under 0.2 em
+  snap straight. Over the 22 real diagrams: 254 bends to 114, 61 small steps
+  to 4 (TestRealBends keeps the baseline).
 - Limits: 300 nodes and subgraphs (at most 100 subgraphs), 1000 characters per
   label, Scale in (0, 8], 3 Mpx per image (was 6: text-heavy diagrams measured
   0.67 bytes per pixel); dummy items are counted before any is built; text

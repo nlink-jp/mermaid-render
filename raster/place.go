@@ -36,8 +36,6 @@ func (l *layouter) place() *Layout {
 		low  bool // the chain's low end
 		next float64
 	}
-	faces := map[[3]int][]*port{} // (kind 0 node / 1 cluster, index, side 0 high / 1 low)
-	var faceKeys [][3]int
 	faceOf := func(e end, side int) [3]int {
 		if e.node >= 0 {
 			return [3]int{0, e.node, side}
@@ -57,90 +55,108 @@ func (l *layouter) place() *Layout {
 		}
 		return ch.to, ch.from
 	}
-	for _, ch := range l.chains {
-		if ch.self {
-			continue
-		}
-		lowEnd, highEnd := ends(ch)
-		nextLow, nextHigh := crossOf(highEnd), crossOf(lowEnd)
-		if len(ch.items) > 0 {
-			nextLow, nextHigh = ch.items[0].x, ch.items[len(ch.items)-1].x
-		}
-		for _, p := range []struct {
-			e    end
-			side int
-			low  bool
-			next float64
-		}{{lowEnd, 0, true, nextLow}, {highEnd, 1, false, nextHigh}} {
-			k := faceOf(p.e, p.side)
-			if faces[k] == nil {
-				faceKeys = append(faceKeys, k)
+	assignPorts := func() map[*chain][2]float64 {
+		faces := map[[3]int][]*port{} // (kind 0 node / 1 cluster, index, side 0 high / 1 low)
+		var faceKeys [][3]int
+		portX := map[*chain][2]float64{} // [low end, high end]
+		for _, ch := range l.chains {
+			if ch.self {
+				continue
 			}
-			faces[k] = append(faces[k], &port{ch: ch, low: p.low, next: p.next})
-		}
-	}
-	portX := map[*chain][2]float64{} // [low end, high end]
-	// Faces leaving toward later layers first (side 0), then the faces
-	// links arrive on (side 1); nodes before frames within each. A frame's
-	// ports keep clear of the columns that links to its members pass its
-	// face in (else they run alongside). An arriving port also keeps clear
-	// of the columns links come down in: not needed for correctness — two
-	// links swapping near-equal columns get a detour in assignTracks — but
-	// it spares most detours.
-	sort.SliceStable(faceKeys, func(i, j int) bool {
-		if faceKeys[i][2] != faceKeys[j][2] {
-			return faceKeys[i][2] < faceKeys[j][2]
-		}
-		return faceKeys[i][0] < faceKeys[j][0]
-	})
-	for _, k := range faceKeys {
-		ps := faces[k]
-		sort.SliceStable(ps, func(i, j int) bool { return ps[i].next < ps[j].next })
-		var lo, hi float64
-		var occ []float64
-		layer := -1
-		if k[0] == 0 {
-			c0, width := l.nodeItem[k[1]].x, 2*baseHalf[k[1]]*portSpreadOf(l.shapeOf(k[1]))
-			lo, hi = c0-width/2, c0+width/2
-			layer = l.rank[k[1]]
-		} else {
-			c := l.clusters[k[1]]
-			lo, hi = c.L+framePad, c.R-framePad
-			occ = l.memberColumns(k[1], k[2], portX)
-			layer = c.r1
-			if k[2] == 1 {
-				layer = c.r0
+			lowEnd, highEnd := ends(ch)
+			nextLow, nextHigh := crossOf(highEnd), crossOf(lowEnd)
+			if len(ch.items) > 0 {
+				nextLow, nextHigh = ch.items[0].x, ch.items[len(ch.items)-1].x
+			}
+			for _, p := range []struct {
+				e    end
+				side int
+				low  bool
+				next float64
+			}{{lowEnd, 0, true, nextLow}, {highEnd, 1, false, nextHigh}} {
+				k := faceOf(p.e, p.side)
+				if faces[k] == nil {
+					faceKeys = append(faceKeys, k)
+				}
+				faces[k] = append(faces[k], &port{ch: ch, low: p.low, next: p.next})
 			}
 		}
-		if k[2] == 1 && layer > 0 {
-			// Not the columns of the links arriving on this very face: a
-			// port right below its own link is a straight drop, and two of
-			// them swapping columns is resolved by a detour (assignTracks).
-			mine := map[*chain]bool{}
-			for _, p := range ps {
-				mine[p.ch] = true
+		// Faces leaving toward later layers first (side 0), then the faces
+		// links arrive on (side 1); nodes before frames within each. A frame's
+		// ports keep clear of the columns that links to its members pass its
+		// face in (else they run alongside). An arriving port also keeps clear
+		// of the columns links come down in: not needed for correctness — two
+		// links swapping near-equal columns get a detour in assignTracks — but
+		// it spares most detours.
+		sort.SliceStable(faceKeys, func(i, j int) bool {
+			if faceKeys[i][2] != faceKeys[j][2] {
+				return faceKeys[i][2] < faceKeys[j][2]
 			}
-			occ = append(occ, l.columnsLeaving(layer-1, portX, mine)...)
-		}
-		want := make([]float64, len(ps))
-		for i, p := range ps {
-			want[i] = p.next
-		}
-		xs := alignPorts(lo, hi, want, occ)
-		if xs == nil {
-			xs = pickPorts(lo, hi, len(ps), occ)
-		}
-		for i, p := range ps {
-			x := xs[i]
-			v := portX[p.ch]
-			if p.low {
-				v[0] = x
+			return faceKeys[i][0] < faceKeys[j][0]
+		})
+		for _, k := range faceKeys {
+			ps := faces[k]
+			sort.SliceStable(ps, func(i, j int) bool { return ps[i].next < ps[j].next })
+			var lo, hi float64
+			var occ []float64
+			layer := -1
+			if k[0] == 0 {
+				c0, width := l.nodeItem[k[1]].x, 2*baseHalf[k[1]]*portSpreadOf(l.shapeOf(k[1]))
+				lo, hi = c0-width/2, c0+width/2
+				layer = l.rank[k[1]]
 			} else {
-				v[1] = x
+				c := l.clusters[k[1]]
+				lo, hi = c.L+framePad, c.R-framePad
+				occ = l.memberColumns(k[1], k[2], portX)
+				layer = c.r1
+				if k[2] == 1 {
+					layer = c.r0
+				}
 			}
-			portX[p.ch] = v
+			if k[2] == 1 && layer > 0 {
+				// Not the columns of the links arriving on this very face: a
+				// port right below its own link is a straight drop, and two of
+				// them swapping columns is resolved by a detour (assignTracks).
+				mine := map[*chain]bool{}
+				for _, p := range ps {
+					mine[p.ch] = true
+				}
+				occ = append(occ, l.columnsLeaving(layer-1, portX, mine)...)
+			}
+			want := make([]float64, len(ps))
+			for i, p := range ps {
+				want[i] = p.next
+			}
+			xs := alignPorts(lo, hi, want, occ)
+			if xs == nil {
+				xs = pickPorts(lo, hi, len(ps), occ)
+			}
+			// A snap may leave the port range only on a node without
+			// self-links: the range keeps ports clear of loop ends.
+			slo, shi := math.Inf(-1), math.Inf(1)
+			if k[0] == 1 || l.hasLoop(k[1]) {
+				slo, shi = lo, hi
+			}
+			snapPorts(xs, want, occ, slo, shi)
+			for i, p := range ps {
+				x := xs[i]
+				v := portX[p.ch]
+				if p.low {
+					v[0] = x
+				} else {
+					v[1] = x
+				}
+				portX[p.ch] = v
+			}
 		}
+		return portX
 	}
+	// Ports, then each link's bend points moved onto its port's column
+	// where the constraints let them, then ports again: a link whose two
+	// ends share a column runs straight.
+	portX := assignPorts()
+	l.straighten(portX)
+	portX = assignPorts()
 
 	// Each chain crosses the gap after every layer from its low end to the
 	// layer before its high end, from one column (top) to another
@@ -456,6 +472,103 @@ func (l *layouter) place() *Layout {
 	}
 	out.W, out.H = bb.W(), bb.H()
 	return out
+}
+
+// straighten moves each link's dummies onto one of its ports' columns when
+// every dummy can stand there without breaking a constraint, the rest held
+// still: the link then leaves or arrives straight instead of stepping aside
+// by a fraction of an em. The low end's column is tried first.
+func (l *layouter) straighten(portX map[*chain][2]float64) {
+	s, id := l.sol, l.solID
+	if s == nil {
+		return
+	}
+	// Repeat until nothing moves: a dummy held by its neighbour may be
+	// free once that neighbour has moved (a fan of links packed side by
+	// side frees from one end).
+	done := map[*chain]bool{}
+	for pass := 0; pass < len(l.chains)+1; pass++ {
+		moved := false
+		for _, ch := range l.chains {
+			if ch.self || len(ch.items) == 0 || done[ch] {
+				continue
+			}
+			px := portX[ch]
+			for _, c := range []float64{px[0], px[1]} {
+				ok := true
+				for _, it := range ch.items {
+					lo, hi := s.interval(id[it])
+					if c < lo-1e-9 || c > hi+1e-9 {
+						ok = false
+						break
+					}
+				}
+				if !ok {
+					continue
+				}
+				for _, it := range ch.items {
+					s.x[id[it]] = c
+					it.x = c
+				}
+				done[ch], moved = true, true
+				break
+			}
+		}
+		if !moved {
+			break
+		}
+	}
+	// A link that cannot run in one column still keeps a column as long as
+	// it can: each dummy takes the column of the station before it where
+	// the constraints allow, so the link steps aside only where it must.
+	for _, ch := range l.chains {
+		if ch.self || len(ch.items) == 0 || done[ch] {
+			continue
+		}
+		col := portX[ch][0]
+		for _, it := range ch.items {
+			lo, hi := s.interval(id[it])
+			if col >= lo-1e-9 && col <= hi+1e-9 {
+				s.x[id[it]] = col
+				it.x = col
+			}
+			col = it.x
+		}
+	}
+}
+
+func (l *layouter) hasLoop(n int) bool {
+	for _, ch := range l.chains {
+		if ch.self && ch.from.node == n {
+			return true
+		}
+	}
+	return false
+}
+
+// snapPorts closes steps too small to see as a step: a port within 0.2 em
+// of the column its link goes on in moves onto it, when that keeps portGap
+// from its neighbours on the face and clear of occupied columns.
+func snapPorts(xs, want, occ []float64, lo, hi float64) {
+	for i := range xs {
+		w := want[i]
+		if d := math.Abs(xs[i] - w); d == 0 || d >= 0.2 || w < lo || w > hi {
+			continue
+		}
+		if i > 0 && w-xs[i-1] < portGap || i+1 < len(xs) && xs[i+1]-w < portGap {
+			continue
+		}
+		clear := true
+		for _, o := range occ {
+			if math.Abs(w-o) < trackSep && math.Abs(xs[i]-o) >= trackSep {
+				clear = false
+				break
+			}
+		}
+		if clear {
+			xs[i] = w
+		}
+	}
 }
 
 // spread places n ports evenly across width around c0.

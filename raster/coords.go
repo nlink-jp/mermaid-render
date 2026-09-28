@@ -2,6 +2,7 @@ package raster
 
 import (
 	"math"
+	"sort"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -107,6 +108,57 @@ func (l *layouter) sideOf(it *item, ct cut) int {
 		return -1
 	}
 	return 1
+}
+
+// shiftBlock moves a subgraph — its items and frame edges together — by
+// the median offset of its links to items outside it, as far as the
+// constraints between the block and the rest allow.
+func (l *layouter) shiftBlock(s *solver, items []*item, id map[*item]int, ci, lv, rv int) {
+	in := map[int]bool{lv: true, rv: true}
+	for _, it := range items {
+		if it.cluster == ci {
+			in[id[it]] = true
+		}
+	}
+	var offs []float64
+	for _, it := range items {
+		if it.cluster != ci {
+			continue
+		}
+		for _, n := range append(append([]*item(nil), it.up...), it.dn...) {
+			if n.cluster != ci {
+				offs = append(offs, s.x[id[n]]-s.x[id[it]])
+			}
+		}
+	}
+	if len(offs) == 0 {
+		return
+	}
+	sort.Float64s(offs)
+	want := offs[len(offs)/2]
+	if len(offs)%2 == 0 {
+		want = (offs[len(offs)/2-1] + offs[len(offs)/2]) / 2
+	}
+	lo, hi := math.Inf(-1), math.Inf(1)
+	for v := range in {
+		for _, c := range s.in[v] {
+			if !in[c.u] {
+				lo = math.Max(lo, s.x[c.u]+c.d-s.x[v])
+			}
+		}
+		for _, c := range s.out[v] {
+			if !in[c.v] {
+				hi = math.Min(hi, s.x[c.v]-c.d-s.x[v])
+			}
+		}
+	}
+	d := math.Min(math.Max(want, lo), hi)
+	if d == 0 || lo > hi {
+		return
+	}
+	for v := range in {
+		s.x[v] += d
+	}
 }
 
 // linksInto reports whether it connects to an item of cluster ci.
@@ -273,11 +325,24 @@ func (l *layouter) solve(cuts []cut) error {
 		if len(nb) == 0 {
 			return 0, false
 		}
-		sum := 0.0
-		for _, n := range nb {
-			sum += s.x[id[n]]
+		// The median of the neighbours, not their mean: the mean lines up
+		// with none of them, so every link bends; the median lines up with
+		// at least one (with an even count, the middle value nearer the
+		// current position), and chains of those come out straight.
+		xs := make([]float64, len(nb))
+		for j, n := range nb {
+			xs[j] = s.x[id[n]]
 		}
-		return sum / float64(len(nb)), true
+		sort.Float64s(xs)
+		m := len(xs) / 2
+		if len(xs)%2 == 1 {
+			return xs[m], true
+		}
+		cur := s.x[i]
+		if math.Abs(xs[m-1]-cur) <= math.Abs(xs[m]-cur) {
+			return xs[m-1], true
+		}
+		return xs[m], true
 	}
 	for pass := 0; pass < 40; pass++ {
 		order := make([]int, 0, nv)
@@ -306,10 +371,20 @@ func (l *layouter) solve(cuts []cut) error {
 			}
 			s.x[v] = math.Min(math.Max(t, lo), hi)
 		}
+		// One variable at a time cannot move a subgraph: its members stop
+		// at the frame's edges and the edges hug the members. Every few
+		// passes, shift each subgraph whole toward where its outside links
+		// go.
+		if pass%4 == 3 {
+			for ci := range l.clusters {
+				l.shiftBlock(s, items, id, ci, Lv(ci), Rv(ci))
+			}
+		}
 	}
 	for i, it := range items {
 		it.x = s.x[i]
 	}
+	l.sol, l.solID = s, id
 	for ci, c := range l.clusters {
 		c.L, c.R = s.x[Lv(ci)], s.x[Rv(ci)]
 	}

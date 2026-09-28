@@ -67,6 +67,11 @@ mermaid-render/
   shape-by-shape rules kept missing cases (a rhombus's shared slopes, a
   stadium's rounded ends). Measure after every other growth, and sample the
   port range's ends exactly.
+- **Straightness comes from four steps** (coords.go, place.go): median
+  targets, block shifts for subgraphs (single-variable descent cannot move a
+  frame and its members together), straightening dummies onto port columns
+  (repeat until stable: a packed fan frees from one end), and snapping steps
+  under 0.2 em. `TestRealBends` holds the baseline.
 - **Ranks are two-level**: a subgraph is ranked inside, then placed as one
   block. Ranking members directly let a cycle through subgraphs make one
   frame straddle another (the mermaid docs' own example did).

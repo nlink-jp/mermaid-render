@@ -173,6 +173,9 @@ type layouter struct {
 	// faceThrough counts the links that cross a subgraph's face to or from
 	// its members: (subgraph, 0 high side / 1 low side).
 	faceThrough map[[2]int]int
+	// The coordinate solver, kept for place's straightening pass.
+	sol   *solver
+	solID map[*item]int
 }
 
 func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {
