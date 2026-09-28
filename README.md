@@ -50,7 +50,8 @@ are read with a port of that version's lexers, rule by rule, so it agrees with m
 (keywords such as `one` or `to` are never names, and `direction TD` is two
 entities). `raster` draws flowcharts, ER diagrams (entities as tables,
 cardinalities in crow's foot notation) and sequence diagrams on a white card with a layered layout; the caller encodes the PNG and chooses the
-terminal box. Limits keep a render bounded: 300 nodes and subgraphs (at most
+terminal box. Limits keep a render bounded: 50,000 characters of source (mermaid's own
+maxTextSize), 300 nodes and subgraphs (at most
 100 subgraphs), 500 links (mermaid's own limit, checked while parsing), 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
 per image (for time and memory). The PNG's size is the caller's to check — it

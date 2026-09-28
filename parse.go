@@ -7,6 +7,13 @@ import (
 
 // Parse reads one mermaid diagram. The only error it returns is *Error.
 func Parse(src string) (Diagram, error) {
+	// mermaid's maxTextSize (mermaidAPI.ts, 12.0.0): a longer source is
+	// not drawn, and here it bounds every parser's cost as well.
+	if n := utf16Len(src); n > MaxTextSize {
+		return nil, errf(UnsupportedConstruct, 0, "the source is %d characters (mermaid draws at most %d)", n, MaxTextSize)
+	}
+	// JavaScript's trimStart, which mermaid applies, removes a BOM too.
+	src = strings.TrimPrefix(src, "\uFEFF")
 	lines, title, err := prepare(src)
 	if err != nil {
 		return nil, err
@@ -42,6 +49,21 @@ var unsupportedTypes = map[string]bool{
 	"architecture-beta": true, "architecture": true, "kanban": true,
 	"radar-beta": true, "radar": true, "treemap-beta": true, "treemap": true,
 	"zenuml": true, "swimlane-beta": true,
+}
+
+// MaxTextSize is mermaid's maxTextSize default, in UTF-16 units as
+// JavaScript counts a string's length.
+const MaxTextSize = 50000
+
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		n++
+		if r > 0xFFFF {
+			n++
+		}
+	}
+	return n
 }
 
 // MaxLinks is mermaid's own default edge limit (flowDb maxEdges, 12.0.0):

@@ -114,6 +114,12 @@ mermaid-render/
 - **Ranks are two-level**: a subgraph is ranked inside, then placed as one
   block. Ranking members directly let a cycle through subgraphs make one
   frame straddle another (the mermaid docs' own example did).
+- **A regex tried at every token must not scan to the line's end.** The
+  ER `direction` and `~` rules did (106 s on a 40 KB line); they are now
+  per-line matchers (`fresh` factories, made anew per run) and a
+  differential test compares them with the original regexes. Lowering the
+  rest of the source per token made the sequence lexer quadratic too.
+  `MaxTextSize` (mermaid's 50,000) is the backstop, not the fix.
 - **Both jison lexers share `runLexer`** (erlex.go): rules may pop several
   states, match with a hand-written function (Go's regexp has no lookahead)
   and trim their text. The sequence lexer ends with a NEWLINE as jison's

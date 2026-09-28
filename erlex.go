@@ -2,6 +2,7 @@ package mermaidrender
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -45,6 +46,9 @@ type lexRule struct {
 	pop  int
 	push string
 	trim bool // the token's text is trimmed (yytext.trim())
+	// fresh, when set, makes the rule's matcher for one run: a matcher
+	// that caches what it learns about a line (see lineMatchers).
+	fresh func() func(rest string) int
 	// look is a hand-written lookahead (Go's regexp has none): the text
 	// after the match must satisfy it.
 	look func(rest string) bool
@@ -66,10 +70,10 @@ var erRules = map[string][]lexRule{
 		{re: lexRE(`accTitle\s*:\s*`), kind: "acc_title", push: "acc_title"},
 		{re: lexRE(`accDescr\s*:\s*`), kind: "acc_descr", push: "acc_descr"},
 		{re: lexRE(`accDescr\s*\{\s*`), push: "acc_descr_multiline"},
-		{re: lexRE(`(DOT)*direction\s+TB[^\n]*`), kind: "direction_tb", need: "direction"},
-		{re: lexRE(`(DOT)*direction\s+BT[^\n]*`), kind: "direction_bt", need: "direction"},
-		{re: lexRE(`(DOT)*direction\s+RL[^\n]*`), kind: "direction_rl", need: "direction"},
-		{re: lexRE(`(DOT)*direction\s+LR[^\n]*`), kind: "direction_lr", need: "direction"},
+		{fresh: directionMatcher("TB"), kind: "direction_tb", need: "direction"},
+		{fresh: directionMatcher("BT"), kind: "direction_bt", need: "direction"},
+		{fresh: directionMatcher("RL"), kind: "direction_rl", need: "direction"},
+		{fresh: directionMatcher("LR"), kind: "direction_lr", need: "direction"},
 		r(`[ \t\r]+`, ""),
 		r(`[\n]+`, "NEWLINE"),
 		r(`"[^"%\r\n\v\x08\\]+"`, "ENTITY_NAME"),
@@ -130,7 +134,7 @@ var erRules = map[string][]lexRule{
 	"block": {
 		r(`\s+`, ""),
 		r(`\b(PK|FK|UK)\b`, "ATTRIBUTE_KEY"),
-		{re: lexRE(`((NOTSPACE)*)[~](DOT)*[~]((NOTSPACE)*)`), kind: "ATTRIBUTE_WORD", need: "~"},
+		{fresh: tildeMatcher, kind: "ATTRIBUTE_WORD", need: "~"},
 		r(`[\*A-Za-z_\x{C0}-\x{10FFFF}][A-Za-z0-9\-_\[\]\(\)\.,\x{C0}-\x{10FFFF}\*]*`, "ATTRIBUTE_WORD"),
 		{re: lexRE("`"), push: "block_bq"},
 		r(`"[^"]*"`, "COMMENT"),
@@ -224,6 +228,18 @@ func runLexer(lines []srcLine, rules map[string][]lexRule, eofKind string) ([]er
 		}
 		return lowLine
 	}
+	// Matchers that cache per line are made anew for each run.
+	own := map[string][]lexRule{}
+	for st, rs := range rules {
+		cp := append([]lexRule(nil), rs...)
+		for i := range cp {
+			if cp[i].fresh != nil {
+				cp[i].match = cp[i].fresh()
+			}
+		}
+		own[st] = cp
+	}
+	rules = own
 	var out []erToken
 	state := []string{"INITIAL"}
 	pos := 0
@@ -294,4 +310,109 @@ func firstRunes(s string, n int) string {
 		n--
 	}
 	return s
+}
+
+// The ER lexer's two rules that run to a line's end are, as regular
+// expressions, quadratic on a long line: tried at every token, each scans
+// the rest of the line (a 40 KB line took 106 s). These matchers answer the
+// same question from facts gathered once per line. The lexer only moves
+// forward, so a line is first met at its earliest queried position;
+// positions are kept as distances to the source's end.
+
+// directionMatcher is (DOT)*direction\s+XX[^\n]*: it matches at a position
+// that has "direction", whitespace and XX (any case) later on its line, and
+// takes the rest of the line.
+func directionMatcher(dir string) func() func(string) int {
+	occ := regexp.MustCompile(`(?i)direction[` + jsSpace + `]+` + dir)
+	tail := regexp.MustCompile(`(?i)direction[` + jsSpace + `]*$`)
+	full := lexRE(`(DOT)*direction\s+` + dir + `[^\n]*`)
+	return func() func(string) int {
+		var base, lineEnd int
+		var starts, stops []int // byte offsets from the line's first queried position
+		endsWithWord, valid := false, false
+		return func(rest string) int {
+			d := len(rest)
+			if !valid || d <= lineEnd {
+				le := strings.IndexByte(rest, '\n')
+				if le < 0 {
+					le = len(rest)
+				}
+				base, lineEnd, valid = d, d-le, true
+				starts, stops = starts[:0], stops[:0]
+				for _, loc := range occ.FindAllStringIndex(rest[:le], -1) {
+					starts = append(starts, loc[0])
+				}
+				for i, r := range rest[:le] {
+					if r == '\r' || r == 0x2028 || r == 0x2029 {
+						stops = append(stops, i) // (DOT)* stops here
+					}
+				}
+				stops = append(stops, le)
+				endsWithWord = tail.MatchString(rest[:le])
+			}
+			i0 := base - d
+			// An occurrence that (DOT)* reaches: before the next stop.
+			if k := sort.SearchInts(starts, i0); k < len(starts) && starts[k] < stops[sort.SearchInts(stops, i0)] {
+				return d - lineEnd
+			}
+			if endsWithWord {
+				// "direction" ends the line: \s+ may cross the newline.
+				if loc := full.FindStringIndex(rest); loc != nil {
+					return loc[1]
+				}
+			}
+			return -1
+		}
+	}
+}
+
+// tildeMatcher is <block>([^\s]*)[~](DOT)*[~]([^\s]*) as JavaScript
+// backtracks it: from here a run of non-spaces holding a ~ (the last one
+// that still has another ~ after it on the line), the line's last ~, then
+// non-spaces.
+func tildeMatcher() func(string) int {
+	var base, lineEnd int
+	var tildes, spaces, stops []int // byte offsets from the line's first queried position
+	valid := false
+	return func(rest string) int {
+		d := len(rest)
+		if !valid || d <= lineEnd {
+			le := strings.IndexByte(rest, '\n')
+			if le < 0 {
+				le = len(rest)
+			}
+			base, lineEnd, valid = d, d-le, true
+			tildes, spaces, stops = tildes[:0], spaces[:0], stops[:0]
+			for i, r := range rest[:le] {
+				switch {
+				case r == '~':
+					tildes = append(tildes, i)
+				case strings.ContainsRune(jsSpaceChars, r):
+					spaces = append(spaces, i)
+					if r == '\r' || r == 0x2028 || r == 0x2029 {
+						stops = append(stops, i) // . stops here
+					}
+				}
+			}
+			spaces = append(spaces, le)
+			stops = append(stops, le)
+		}
+		i0 := base - d
+		after := func(xs []int, i int) int { return xs[sort.SearchInts(xs, i)] }
+		runEnd := after(spaces, i0)
+		stop := after(stops, i0)
+		// b: the last ~ before the dot stops.
+		bi := sort.SearchInts(tildes, stop) - 1
+		if bi < 0 || tildes[bi] <= i0 {
+			return -1
+		}
+		b := tildes[bi]
+		// a: the last ~ in the run that is before b.
+		lim := min(runEnd, b)
+		ai := sort.SearchInts(tildes, lim) - 1
+		if ai < 0 || tildes[ai] < i0 {
+			return -1
+		}
+		return after(spaces, b+1) - i0
+	}
 }

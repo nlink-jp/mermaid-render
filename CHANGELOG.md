@@ -115,6 +115,17 @@ to [Semantic Versioning](https://semver.org/).
   would take in a participant it does not hold). Tests now tie what is
   drawn to the source (markers, heads, dashed lines, through a drawing
   trace) and check arrow ends, bar ends and note sides exactly.
+- Step-5 review, parsers: a source over 50,000 characters is refused, as
+  mermaid's maxTextSize does (UTF-16 units); a leading BOM is dropped; blocks
+  nest at most 50 deep (deeper nesting overflowed the stack); the sequence
+  and ER lexers are no longer quadratic on long input (the ER rules that run
+  to a line's end answer from facts gathered once per line, checked against
+  the original regular expressions); activate no longer places a
+  participant and one never placed is an error, while link / links /
+  properties / details do place theirs; title after a full-width space no
+  longer yields broken UTF-8; wrap: is dropped only in lower case; a
+  declared name backtracks before a # comment as jison does; CSS system
+  colours open a box line.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings;
   `-font`, `-font-name`, `-bold`, `-bold-name` pick faces.
 - Layout property tests (placement, overlaps, link ends on outlines, no link

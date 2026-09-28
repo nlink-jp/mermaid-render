@@ -398,6 +398,103 @@ msg auth-service -> Web Client dotted filled "ok"
 participant B "B"
 msg A -> B solid filled "hi"
 `},
+		{"jison: spaces around the arrow and colon", `sequenceDiagram
+    Alice ->> Bob : hi`, `participant Alice "Alice"
+participant Bob "Bob"
+msg Alice -> Bob solid filled "hi"
+`},
+		{"jison: a name starting with digits is a name", `sequenceDiagram
+    3DS Server->>ACS: auth`, `participant 3DS Server "3DS Server"
+participant ACS "ACS"
+msg 3DS Server -> ACS solid filled "auth"
+`},
+		{"jison: keywords only as whole words", `sequenceDiagram
+    Endpoint->>Looper: a
+    Notes->>Participants: b
+    Optimizer->>Alternative: c`, `participant Endpoint "Endpoint"
+participant Looper "Looper"
+participant Notes "Notes"
+participant Participants "Participants"
+participant Optimizer "Optimizer"
+participant Alternative "Alternative"
+msg Endpoint -> Looper solid filled "a"
+msg Notes -> Participants solid filled "b"
+msg Optimizer -> Alternative solid filled "c"
+`},
+		{"jison: a comment after end, autonumber as the last line", `sequenceDiagram
+    loop x
+    A->>B: y
+    end %% done
+    autonumber 10 5`, `participant A "A"
+participant B "B"
+block-start loop "x"
+msg A -> B solid filled "y"
+block-end loop
+`},
+		{"legacy title, and a title after a full-width space", `sequenceDiagram
+    title: Legacy
+    title　売上
+    A->>B: x`, `title "売上"
+participant A "A"
+participant B "B"
+msg A -> B solid filled "x"
+`},
+		{"renderer: autonumber N resets the step; rounding to hundredths", `sequenceDiagram
+    autonumber 10 5
+    A->>B: a
+    autonumber 3
+    A->>B: b
+    A->>B: c
+    autonumber 1 0.1
+    A->>B: d
+    A->>B: e
+    A->>B: f`, `participant A "A"
+participant B "B"
+msg A -> B solid filled #10 "a"
+msg A -> B solid filled #3 "b"
+msg A -> B solid filled #4 "c"
+msg A -> B solid filled #1 "d"
+msg A -> B solid filled #1.1 "e"
+msg A -> B solid filled #1.2 "f"
+`},
+		{"sequenceDb: wrap: is dropped only in lower case", `sequenceDiagram
+    A->>B: Wrap: the result
+    A->>B: wrap: kept`, `participant A "A"
+participant B "B"
+msg A -> B solid filled "Wrap: the result"
+msg A -> B solid filled "kept"
+`},
+		{"jison: activate does not place a participant", `sequenceDiagram
+    activate B
+    A->>B: hi
+    deactivate B`, `participant A "A"
+participant B "B"
+activate B
+msg A -> B solid filled "hi"
+deactivate B
+`},
+		{"jison: menus place their participant", `sequenceDiagram
+    properties Z: {"a": "b"}
+    A->>B: x`, `participant Z "Z"
+participant A "A"
+participant B "B"
+msg A -> B solid filled "x"
+`},
+		{"jison: a comment after a declared name", `sequenceDiagram
+    participant Alice # main: user
+    Alice->>Bob: x`, `participant Alice "Alice"
+participant Bob "Bob"
+msg Alice -> Bob solid filled "x"
+`},
+		{"sequenceDb: a system colour opens a box line", `sequenceDiagram
+    box Window Services
+    participant A
+    end`, `participant A "A" box "Services"
+`},
+		{"a byte order mark", "\uFEFFsequenceDiagram\n    A->>B: x", `participant A "A"
+participant B "B"
+msg A -> B solid filled "x"
+`},
 	}
 	for _, c := range cases {
 		s := mustSeq(t, c.src)
@@ -466,6 +563,12 @@ func TestSequenceRefusals(t *testing.T) {
     participant A
     participant C
     end`, UnsupportedConstruct, 3},
+		{"note left of two participants", `sequenceDiagram
+    Note left of A,B: x`, SyntaxError, 2},
+		{"activating a participant nothing places", `sequenceDiagram
+    A->>B: x
+    activate C`, SyntaxError, 3},
+		{"blocks nested too deep", "sequenceDiagram\n" + strings.Repeat("opt\n", MaxNesting+1), UnsupportedConstruct, MaxNesting + 2},
 		{"HTML in a message", `sequenceDiagram
     A->>B: <b>bold</b>`, UnsupportedConstruct, 2},
 	}

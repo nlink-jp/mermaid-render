@@ -33,7 +33,9 @@ func matchSeqActor(s string) int {
 		return -1
 	}
 	for i < len(s) {
-		low := strings.ToLower(s[i:])
+		// The arrows are at most 4 bytes: lower only that much (lowering
+		// the rest of the source here made lexing quadratic).
+		low := strings.ToLower(s[i:min(i+4, len(s))])
 		stop := false
 		for _, a := range seqArrowStarts {
 			if strings.HasPrefix(low, a) {
@@ -67,10 +69,53 @@ func followedBySpaceOrNewline(rest string) bool {
 	return rest != "" && (rest[0] == ' ' || rest[0] == '\n')
 }
 
-// idLook: (?=\s*[\n;#]|$).
-var reIDEnd = lexRE(`\s*[\n;#]`)
+// matchIDActor is <ID>[^<>:\n,;@]+(?=\s*[\n;#]|$) with JavaScript's
+// backtracking: the longest run whose lookahead holds, not the longest run
+// then the lookahead once ("participant Alice # main: user" is Alice, then
+// a comment). ok(k) — whitespace then \n, ; or #, or the end — is found for
+// every k in one pass back from the run's end.
+func matchIDActor(s string) int {
+	isSpace := func(r rune) bool { return strings.ContainsRune(jsSpaceChars, r) }
+	end := 0
+	for end < len(s) && !strings.ContainsRune("<>:\n,;@", rune(s[end])) {
+		end++
+	}
+	if end == 0 {
+		return -1
+	}
+	// ok at the run's end: skip whitespace forward.
+	j := end
+	for j < len(s) {
+		r, n := utf8.DecodeRuneInString(s[j:])
+		if !isSpace(r) || r == '\n' {
+			break
+		}
+		j += n
+	}
+	ok := j == len(s) || strings.ContainsRune("\n;#", rune(s[j]))
+	if ok {
+		return end
+	}
+	// Back through the run: a space keeps ok as it is after it; any other
+	// character makes ok true only if it is #.
+	for k := end; k > 0; {
+		r, n := utf8.DecodeLastRuneInString(s[:k])
+		k -= n
+		if k == 0 {
+			break
+		}
+		if !isSpace(r) {
+			ok = r == '#'
+		}
+		if ok {
+			return k
+		}
+	}
+	return -1
+}
 
-func idEnd(rest string) bool { return rest == "" || reIDEnd.MatchString(rest) }
+// jsSpaceChars are the characters of JavaScript's \s.
+const jsSpaceChars = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 
 // asLook: (?=\s+as\s).
 var reAsLook = lexRE(`\s+as\s`)
@@ -140,9 +185,11 @@ var seqRules = map[string][]lexRule{
 		r(`[`+jsSpaceNoNL+`]+`, ""),
 		r(`#[^\n]*`, ""),
 		{re: lexRE(`@\{`), kind: "CONFIG_START", push: "CONFIG"},
-		{re: lexRE(`[^<\->:\n,;@` + jsSpace + `]+`), kind: "ACTOR", trim: true, look: func(s string) bool { return strings.HasPrefix(s, "@{") }},
+		// [^\<->\->…] in the jison source: \<-> is the range < to >, so =
+		// is excluded too.
+		{re: lexRE(`[^<=>\-:\n,;@` + jsSpace + `]+`), kind: "ACTOR", trim: true, look: func(s string) bool { return strings.HasPrefix(s, "@{") }},
 		{re: lexRE(`[^<>:\n,;@` + jsSpace + `]+`), kind: "ACTOR", trim: true, push: "ALIAS", look: asFollows},
-		{re: lexRE(`[^<>:\n,;@]+`), kind: "ACTOR", trim: true, pop: 1, look: idEnd},
+		{match: matchIDActor, kind: "ACTOR", trim: true, pop: 1},
 		{re: lexRE(`[^<>:\n,;@]*<[^\n]*`), kind: "INVALID", pop: 1},
 		{re: lexRE(`[^\n]+`), kind: "INVALID", trim: true, pop: 1},
 	},

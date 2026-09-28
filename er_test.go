@@ -338,6 +338,42 @@ entity TD "TD"
 		{"jison: a line mentioning direction TB is a direction statement", `erDiagram
     A ||--o{ B : "direction TB"`, `dir TB
 `},
+		{"jison: keywords only as whole words", `erDiagram
+    Toaster ||--o{ Endless : x
+    Oneness ||--o{ Manyfold : y
+    Classic ||--o{ Styles : z`, `dir TB
+entity Toaster "Toaster"
+entity Endless "Endless"
+entity Oneness "Oneness"
+entity Manyfold "Manyfold"
+entity Classic "Classic"
+entity Styles "Styles"
+rel Toaster -> Endless exactly-one/zero-or-more identifying "x"
+rel Oneness -> Manyfold exactly-one/zero-or-more identifying "y"
+rel Classic -> Styles exactly-one/zero-or-more identifying "z"
+`},
+		{"jison: a key only as a whole word", `erDiagram
+    A {
+        int fk_user FK
+        int pkg
+    }`, `dir TB
+entity A "A"
+  attr int fk_user FK
+  attr int pkg
+`},
+		{"jison: the 1 rules and number names", `erDiagram
+    A 1--1 B : x
+    1 ||--o{ 42 : y`, `dir TB
+entity A "A"
+entity B "B"
+entity 1 "1"
+entity 42 "42"
+rel A -> B exactly-one/exactly-one identifying "x"
+rel 1 -> 42 exactly-one/zero-or-more identifying "y"
+`},
+		{"jison: \\s is JavaScript's (a full-width space); accTitle ignored", "erDiagram\n    accTitle: Orders\n    direction\u3000LR\n    A", `dir LR
+entity A "A"
+`},
 	}
 	for _, c := range cases {
 		d := mustER(t, c.src)
@@ -410,5 +446,32 @@ func TestERRelationshipCap(t *testing.T) {
 	var pe *Error
 	if !errors.As(err, &pe) || pe.Kind != UnsupportedConstruct {
 		t.Fatalf("%d relationships: %v, want an unsupported-construct error", MaxLinks+1, err)
+	}
+}
+
+func TestERAttributeCap(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("erDiagram\nA {\n")
+	for i := 0; i <= MaxAttributes; i++ {
+		fmt.Fprintf(&b, "int a%d\n", i)
+	}
+	b.WriteString("}\n")
+	_, err := Parse(b.String())
+	var pe *Error
+	if !errors.As(err, &pe) || pe.Kind != UnsupportedConstruct {
+		t.Fatalf("%d attributes: %v, want an unsupported-construct error", MaxAttributes+1, err)
+	}
+}
+
+func TestMaxTextSize(t *testing.T) {
+	src := "flowchart TD\n" + strings.Repeat("%% padding\n", MaxTextSize/11+1)
+	_, err := Parse(src)
+	var pe *Error
+	if !errors.As(err, &pe) || pe.Kind != UnsupportedConstruct {
+		t.Fatalf("%d characters: %v, want an unsupported-construct error", len(src), err)
+	}
+	// Counted as JavaScript counts: an astral character is two.
+	if n := utf16Len("a😀"); n != 3 {
+		t.Errorf("utf16Len = %d, want 3", n)
 	}
 }

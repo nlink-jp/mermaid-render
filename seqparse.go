@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // The sequenceDiagram grammar of sequenceDiagram.jison (mermaid 12.0.0) and
@@ -27,6 +28,11 @@ type seqParser struct {
 	parts  map[string]*Participant
 	box    *Box // the box being read
 	active map[*Participant]int
+	// pending are participants an activation named before any statement
+	// placed them: activation does not place a participant
+	// (sequenceDiagram.jison: 'activate' actor yields no addParticipant).
+	pending map[string]*Participant
+	depth   int // open blocks
 	// autonumber: mermaid numbers every arrow, shown or not.
 	number     float64
 	step       float64
@@ -39,7 +45,8 @@ func parseSequence(lines []srcLine, title frontTitle) (Diagram, error) {
 		return nil, err
 	}
 	p := &seqParser{toks: toks, d: &Sequence{title: title.text, titleLine: title.line},
-		parts: map[string]*Participant{}, active: map[*Participant]int{}, number: 1, step: 1}
+		parts: map[string]*Participant{}, active: map[*Participant]int{}, pending: map[string]*Participant{},
+		number: 1, step: 1}
 	for p.peek().kind == "NEWLINE" {
 		p.i++
 	}
@@ -51,6 +58,17 @@ func parseSequence(lines []srcLine, title frontTitle) (Diagram, error) {
 	}
 	if t := p.peek(); t.kind != "EOF" {
 		return nil, p.unexpected(t)
+	}
+	var first *Participant
+	for _, pt := range p.pending {
+		if first == nil || pt.Line < first.Line || pt.Line == first.Line && pt.ID < first.ID {
+			first = pt
+		}
+	}
+	if first != nil {
+		// mermaid fails to draw an activation of a participant that
+		// nothing places.
+		return nil, errf(SyntaxError, first.Line, "activating %q, which is never a participant", first.ID)
 	}
 	// A box draws around neighbouring columns. A participant mentioned
 	// before its box was declared keeps its earlier place, and a box around
@@ -149,9 +167,12 @@ func (p *seqParser) statement() error {
 		if _, err := p.expect("NEWLINE"); err != nil {
 			return err
 		}
-		pt, err := p.mention(a, t.line)
-		if err != nil {
-			return err
+		pt := p.parts[a]
+		if pt == nil {
+			if pt = p.pending[a]; pt == nil {
+				pt = &Participant{ID: a, Line: t.line}
+				p.pending[a] = pt
+			}
 		}
 		if t.kind == "activate" {
 			p.activate(pt, t.line)
@@ -161,23 +182,31 @@ func (p *seqParser) statement() error {
 	case "note":
 		return p.note()
 	case "links", "link", "properties", "details":
-		// Actor menus: interaction only.
+		// Actor menus: interaction only, but they place their participant
+		// (the grammar yields [$2, …]).
 		p.i++
-		if _, err := p.actor(); err != nil {
+		a, err := p.actor()
+		if err != nil {
 			return err
 		}
 		if _, err := p.expect("TXT"); err != nil {
 			return err
 		}
-		_, err := p.expect("NEWLINE")
+		if _, err := p.expect("NEWLINE"); err != nil {
+			return err
+		}
+		_, err = p.mention(a, t.line)
 		return err
 	case "title", "legacy_title":
 		p.i++
-		n := len("title ")
+		// "title" or "title:", then one whitespace character (a rune: it
+		// may be U+3000 or U+00A0), then the text.
+		rest := t.text[len("title"):]
 		if t.kind == "legacy_title" {
-			n = len("title: ")
+			rest = rest[1:]
 		}
-		text, err := p.text(t.text[n:], t.line)
+		_, n := utf8.DecodeRuneInString(rest)
+		text, err := p.text(rest[n:], t.line)
 		if err != nil {
 			return err
 		}
@@ -214,8 +243,16 @@ func (p *seqParser) statement() error {
 }
 
 // block reads kind restOfLine document (section restOfLine document)* end.
+// MaxNesting bounds how deep blocks nest: the parser recurses per level.
+const MaxNesting = 50
+
 func (p *seqParser) block(kind BlockKind) error {
 	t := p.next()
+	if p.depth >= MaxNesting {
+		return errf(UnsupportedConstruct, t.line, "blocks nested more than %d deep", MaxNesting)
+	}
+	p.depth++
+	defer func() { p.depth-- }()
 	title, err := p.expect("restOfLine")
 	if err != nil {
 		return err
@@ -288,6 +325,24 @@ func (p *seqParser) participantStatement() error {
 // participant; a later one with a description replaces its label and kind,
 // one without leaves it as it is. A participant stays in its first box.
 func (p *seqParser) addParticipant(id string, desc *string, actor bool, line int) error {
+	if pt := p.pending[id]; pt != nil {
+		// Named by an activation first: placed now, where it is placed.
+		delete(p.pending, id)
+		label, err := p.text(id, line)
+		if err != nil {
+			return err
+		}
+		if desc != nil {
+			label = *desc
+		}
+		pt.Label, pt.Actor, pt.Box, pt.Line = label, actor, p.box, line
+		p.parts[id] = pt
+		p.d.Participants = append(p.d.Participants, pt)
+		if p.box != nil {
+			p.box.Participants = append(p.box.Participants, pt)
+		}
+		return nil
+	}
 	old := p.parts[id]
 	if old != nil {
 		if p.box != nil && old.Box != nil && old.Box != p.box {
@@ -530,7 +585,8 @@ func (p *seqParser) note() error {
 	return nil
 }
 
-var reWrap = regexp.MustCompile(`(?i)^:?(?:no)?wrap:`)
+// reWrap is sequenceDb.extractWrap's prefix, case-sensitive as there.
+var reWrap = regexp.MustCompile(`^:?(?:no)?wrap:`)
 
 // message is sequenceDb.parseMessage: trimmed, a wrap: or nowrap: prefix
 // dropped (wrapping is presentation), then the label text.
@@ -596,7 +652,13 @@ var cssColorNames = func() map[string]bool {
 	peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown
 	salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow
 	springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow
-	yellowgreen transparent currentcolor inherit initial unset revert`) {
+	yellowgreen transparent currentcolor inherit initial unset revert
+	accentcolor accentcolortext activetext buttonborder buttonface buttontext canvas canvastext
+	field fieldtext graytext highlight highlighttext linktext mark marktext selecteditem
+	selecteditemtext visitedtext activeborder activecaption appworkspace background
+	buttonhighlight buttonshadow captiontext inactiveborder inactivecaption inactivecaptiontext
+	infobackground infotext menu menutext scrollbar threeddarkshadow threedface threedhighlight
+	threedlightshadow threedshadow window windowframe windowtext`) {
 		m[n] = true
 	}
 	return m
