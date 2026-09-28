@@ -72,6 +72,11 @@ mermaid-render/
   frame and its members together), straightening dummies onto port columns
   (repeat until stable: a packed fan frees from one end), and snapping steps
   under 0.2 em. `TestRealBends` holds the baseline.
+- **Centring a node must not move its frame by itself** (`centerNodes`): the
+  frame is loosened for the move and tightened after, and tightening can land
+  it elsewhere when it was not tight. If the node did not move, restore the
+  frame: ports are only recomputed when something moved, and a frame that
+  moved alone leaves its ports outside it (seed 33636).
 - **Ranks are two-level**: a subgraph is ranked inside, then placed as one
   block. Ranking members directly let a cycle through subgraphs make one
   frame straddle another (the mermaid docs' own example did).

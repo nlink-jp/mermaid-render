@@ -88,21 +88,21 @@ const (
 
 // Spacing, in em.
 const (
-	padX       = 0.9  // text to node side
-	padY       = 0.55 // text to node top and bottom
-	sepItem    = 1.6  // between items in a layer
-	sepDummy   = 0.7  // next to a bare dummy
-	rankGap    = 0.9  // between consecutive layers
-	framePad   = 0.9  // frame to its content
-	frameSep   = 1.2  // frame to anything outside it
-	titleGap   = 0.4  // title to the frame's first content
-	labelPad   = 0.3  // around a link label
-	loopReach  = 1.6  // how far a self-link loops out
-	portSpread = 0.6  // fraction of a face that link ports use
-	portGap    = 0.8  // least distance between two ports: wider than a head
-	trackSep   = 0.45 // between the horizontal runs of two links in a gap
-	trackIn    = 0.45 // a gap's start to its first track
-	trackOut   = 0.9  // its last track to its end: room for an arrowhead
+	padX       = 0.9     // text to node side
+	padY       = 0.55    // text to node top and bottom
+	sepItem    = 1.6     // between items in a layer
+	sepDummy   = 0.7     // next to a bare dummy
+	rankGap    = 0.9     // between consecutive layers
+	framePad   = 0.9     // frame to its content
+	frameSep   = 1.2     // frame to anything outside it
+	titleGap   = 0.4     // title to the frame's first content
+	labelPad   = 0.3     // around a link label
+	loopReach  = 1.6     // how far a self-link loops out
+	portSpread = 0.6     // fraction of a face that link ports use
+	portGap    = 0.8     // least distance between two ports: wider than a head
+	trackSep   = portGap // between the runs of two links in a gap: 0.45 em read as one thick line (operator's check)
+	trackIn    = 0.45    // a gap's start to its first track
+	trackOut   = 0.9     // its last track to its end: room for an arrowhead
 )
 
 type itemKind int
@@ -174,8 +174,10 @@ type layouter struct {
 	// its members: (subgraph, 0 high side / 1 low side).
 	faceThrough map[[2]int]int
 	// The coordinate solver, kept for place's straightening pass.
-	sol   *solver
-	solID map[*item]int
+	sol      *solver
+	solID    map[*item]int
+	solItems int     // the frame edges' variables follow the items
+	solList  []*item // the item behind each variable
 }
 
 func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {

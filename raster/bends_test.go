@@ -15,6 +15,10 @@ import (
 // "needless bends": 254 bends and 61 small steps then. This is a baseline
 // against regressions, not a gate on output: lower the numbers when a
 // change improves them, and never raise them without saying why.
+//
+// Raised once, 114/4 -> 116/5, on purpose: the second check asked for boxes
+// centred on their links and links meeting a rhombus at its vertex; lining
+// nodes up with their trunk costs two bends elsewhere.
 func TestRealBends(t *testing.T) {
 	fn, err := DefaultFont()
 	if err != nil {
@@ -64,10 +68,10 @@ func TestRealBends(t *testing.T) {
 		per[filepath.Base(file)] = [2]int{bt, sm}
 	}
 	t.Logf("bends %d, small steps %d", total, small)
-	if total > 114 || small > 4 {
+	if total > 116 || small > 5 {
 		for k, v := range per {
 			t.Logf("  %s bends=%d small=%d", k, v[0], v[1])
 		}
-		t.Errorf("bends %d (baseline 114), small steps %d (baseline 4)", total, small)
+		t.Errorf("bends %d (baseline 116), small steps %d (baseline 5)", total, small)
 	}
 }

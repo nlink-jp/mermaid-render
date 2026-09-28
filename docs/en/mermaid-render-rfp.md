@@ -221,11 +221,13 @@ above.
      up a layer as a dummy node.
   4. Crossing reduction: the barycentre method, swept down and up repeatedly. Ties are broken by
      order of appearance in the source, so the result is deterministic.
-  5. Coordinates: packed from the left within a layer, with dummy-node chains kept straight.
+  5. Coordinates: packed from the left within a layer, with dummy-node chains kept straight. A
+     node that one link fans out from (or into) lines up with that link's column. A node with one
+     link on a face sits centred on that link's column (a rhombus takes the link at its vertex).
   6. Links run straight down through a layer and change column between layers with a
      down-across-down right-angle path. Each across run gets its own height (a track) in the gap,
-     so links only ever meet at right angles. When two links swap into each other's columns, one
-     detours through a free column. Ports sit, where they can, right above or below the column the
+     so links only ever meet at right angles; tracks are 0.8 em apart. When two links swap into
+     each other's columns, one detours through a free column. Ports sit, where they can, right above or below the column the
      link goes on in.
   7. Links sharing a node get their own ports, at least 0.8 em apart per face; a node or frame grows
      when a face is short (self-link ends included, checked by measuring on the real outline). A link
@@ -525,6 +527,16 @@ same way as pathguard.
     and labels inside shapes unchecked). Links between layers became orthogonal with a track per link.
     Limits: 300 nodes and subgraphs (at most 100 subgraphs), 500 links (mermaid's own), 1000
     characters per label, link length 10 (as mermaid), Scale 8, 3 Mpx.
+  - **Human check (2026-09-28)**: the operator marked the 22 real diagrams on a review page. Round
+    1 marked 16 for needless bends: coordinates moved toward the median of an item's neighbours
+    instead of the mean, subgraphs shift as blocks, bend points move onto their ports' columns, and
+    steps under 0.2 em snap straight: bends 254 to 114, small steps 61 to 4. Round 2 marked four
+    kinds: a box off the centre of its link, a rhombus not taking its link at the vertex, fanning
+    links that look merged, and a route bending three times where two would do. A node a single link
+    fans out from lines up with that link, a node with one link on a face sits centred on it, and
+    tracks are 0.8 em apart (was 0.45, now the port spacing). Lining nodes up costs bends elsewhere,
+    so the baseline rose to 116 / 5, on purpose and with the reason in the test. The link spacing
+    check rose from 0.3 em to 0.6 em.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

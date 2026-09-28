@@ -325,6 +325,16 @@ func (l *layouter) solve(cuts []cut) error {
 		if len(nb) == 0 {
 			return 0, false
 		}
+		// A node with one link on one side and a fan on the other lines up
+		// with the one (its trunk); the fan spreads from it.
+		if it.kind == kNode {
+			if len(it.up) == 1 && len(it.dn) > 1 {
+				return s.x[id[it.up[0]]], true
+			}
+			if len(it.dn) == 1 && len(it.up) > 1 {
+				return s.x[id[it.dn[0]]], true
+			}
+		}
 		// The median of the neighbours, not their mean: the mean lines up
 		// with none of them, so every link bends; the median lines up with
 		// at least one (with an even count, the middle value nearer the
@@ -384,7 +394,7 @@ func (l *layouter) solve(cuts []cut) error {
 	for i, it := range items {
 		it.x = s.x[i]
 	}
-	l.sol, l.solID = s, id
+	l.sol, l.solID, l.solItems, l.solList = s, id, len(items), items
 	for ci, c := range l.clusters {
 		c.L, c.R = s.x[Lv(ci)], s.x[Rv(ci)]
 	}

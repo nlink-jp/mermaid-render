@@ -41,6 +41,11 @@ to [Semantic Versioning](https://semver.org/).
   nothing moves, else carried forward as far as they go); steps under 0.2 em
   snap straight. Over the 22 real diagrams: 254 bends to 114, 61 small steps
   to 4 (TestRealBends keeps the baseline).
+- The operator's second check: a node one link fans out from (or into) lines
+  up with that link; a node with one link on a face sits centred on it (a
+  rhombus takes it at the vertex); tracks in a gap are 0.8 em apart (was
+  0.45), so fanning links no longer look merged. The bend baseline rose to
+  116 / 5 on purpose. Link spacing is now checked at 0.6 em.
 - Limits: 300 nodes and subgraphs (at most 100 subgraphs), 1000 characters per
   label, Scale in (0, 8], 12 Mpx per image for time and memory (the PNG's
   size is the caller's to check: 0.10-0.67 bytes per pixel, so a pixel cap

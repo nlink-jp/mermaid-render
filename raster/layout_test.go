@@ -245,7 +245,8 @@ func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout
 		}
 	}
 	// Links stay apart: two segments of different links either cross at a
-	// clear angle or keep 0.3 em between them; no link runs through
+	// clear angle or keep 0.6 em between them (0.45 em looked like one
+	// thick line in the operator's check); no link runs through
 	// another link's label.
 	type seg struct {
 		a, b Pt
@@ -269,7 +270,7 @@ func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout
 				}
 				continue
 			}
-			if d := segDist(a.a, a.b, b.a, b.b); d < 0.3 {
+			if d := segDist(a.a, a.b, b.a, b.b); d < 0.6 {
 				fail("links %d and %d run %.2f em apart", a.link, b.link, d)
 			}
 		}
@@ -600,8 +601,10 @@ func TestLayoutRegressions(t *testing.T) {
 	// track inside a frame stretched for its title; 404, 456, 686 a frame
 	// face too narrow for its ports and through-columns; 691 loop ends on a
 	// stadium's rounded end; 785 a port range end missed by the sampling.
+	// Review round 2: 33636 a frame moved by centring with no node moved,
+	// its ports left behind.
 	for _, seed := range []int64{10454, 11589, 10330, 11191, 1226, 14882, 12, 1138,
-		342, 11, 195, 299, 10439, 404, 456, 686, 691, 785} {
+		342, 11, 195, 299, 10439, 404, 456, 686, 691, 785, 33636} {
 		src := randomFlowchart(seed, dirs[seed%4])
 		f, lay := layoutOf(t, src, fakeMeasure)
 		checkLayout(t, fmt.Sprintf("seed %d", seed), f, lay, fakeMeasure)

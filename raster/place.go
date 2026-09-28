@@ -157,6 +157,14 @@ func (l *layouter) place() *Layout {
 	portX := assignPorts()
 	l.straighten(portX)
 	portX = assignPorts()
+	// Then nodes move onto the column of a face that has one link, so the
+	// link meets the node's middle (a rhombus's vertex) and a box sits
+	// centred on its line; ports and dummies follow.
+	if l.centerNodes() {
+		portX = assignPorts()
+		l.straighten(portX)
+		portX = assignPorts()
+	}
 
 	// Each chain crosses the gap after every layer from its low end to the
 	// layer before its high end, from one column (top) to another
@@ -518,6 +526,27 @@ func (l *layouter) straighten(portX map[*chain][2]float64) {
 			break
 		}
 	}
+	// A link held off its column by one other link's dummy may take it when
+	// that other link shifts aside as a whole: its dummies must all stand
+	// in the new column and its ends' faces reach it.
+	owner := map[*item]*chain{}
+	for _, ch := range l.chains {
+		for _, it := range ch.items {
+			owner[it] = ch
+		}
+	}
+	for _, ch := range l.chains {
+		if ch.self || len(ch.items) == 0 || done[ch] {
+			continue
+		}
+		px := portX[ch]
+		for _, c := range []float64{px[0], px[1]} {
+			if l.tryWithShift(ch, c, owner, done) {
+				done[ch] = true
+				break
+			}
+		}
+	}
 	// A link that cannot run in one column still keeps a column as long as
 	// it can: each dummy takes the column of the station before it where
 	// the constraints allow, so the link steps aside only where it must.
@@ -546,6 +575,109 @@ func (l *layouter) hasLoop(n int) bool {
 	return false
 }
 
+// tryWithShift puts ch's dummies in column c, moving the one other link
+// whose dummy blocks them aside by as much as the gap needs. It commits
+// only when every dummy of both links then satisfies its constraints and
+// the other link's new column lies on both of its ends' faces.
+func (l *layouter) tryWithShift(ch *chain, c float64, owner map[*item]*chain, done map[*chain]bool) bool {
+	s, id := l.sol, l.solID
+	save := map[int]float64{}
+	set := func(it *item, x float64) {
+		if _, ok := save[id[it]]; !ok {
+			save[id[it]] = s.x[id[it]]
+		}
+		s.x[id[it]], it.x = x, x
+	}
+	undo := func() {
+		for v, x := range save {
+			s.x[v] = x
+		}
+		for _, it := range ch.items {
+			it.x = s.x[id[it]]
+		}
+	}
+	var other *chain
+	delta := 0.0
+	for _, it := range ch.items {
+		lo, hi := s.interval(id[it])
+		if c >= lo-1e-9 && c <= hi+1e-9 {
+			continue
+		}
+		// Find the single dummy of another link that bounds it.
+		var blk *item
+		var need float64
+		for _, k := range s.in[id[it]] {
+			if k.u < l.solItems && s.x[k.u]+k.d > c+1e-9 {
+				if b := l.itemAt(k.u); b != nil && owner[b] != nil && owner[b] != ch {
+					blk, need = b, c-k.d-s.x[k.u]
+				}
+			}
+		}
+		for _, k := range s.out[id[it]] {
+			if k.v < l.solItems && s.x[k.v]-k.d < c-1e-9 {
+				if b := l.itemAt(k.v); b != nil && owner[b] != nil && owner[b] != ch {
+					blk, need = b, c+k.d-s.x[k.v]
+				}
+			}
+		}
+		if blk == nil || (other != nil && owner[blk] != other) {
+			return false
+		}
+		other = owner[blk]
+		if math.Abs(need) > math.Abs(delta) {
+			delta = need
+		}
+	}
+	if other == nil || other.self {
+		return false
+	}
+	col := other.items[0].x + delta
+	for _, it := range other.items {
+		if math.Abs(it.x-other.items[0].x) > 1e-9 {
+			return false // only a link already in one column is shifted
+		}
+	}
+	for _, e := range []end{other.from, other.to} {
+		if e.node < 0 {
+			return false
+		}
+		half := l.nw[e.node] / 2
+		if l.horiz {
+			half = l.nh[e.node] / 2
+		}
+		half *= portSpreadOf(l.shapeOf(e.node))
+		if math.Abs(col-l.nodeItem[e.node].x) > half {
+			return false
+		}
+	}
+	for _, it := range ch.items {
+		set(it, c)
+	}
+	for _, it := range other.items {
+		set(it, col)
+	}
+	for _, it := range append(append([]*item(nil), ch.items...), other.items...) {
+		lo, hi := s.interval(id[it])
+		if s.x[id[it]] < lo-1e-9 || s.x[id[it]] > hi+1e-9 {
+			undo()
+			for _, it := range other.items {
+				it.x = s.x[id[it]]
+			}
+			return false
+		}
+	}
+	done[other] = true
+	return true
+}
+
+// itemAt is the item behind solver variable v (nil for a frame edge).
+func (l *layouter) itemAt(v int) *item {
+	if v < len(l.solList) {
+		return l.solList[v]
+	}
+	return nil
+}
+
 // snapPorts closes steps too small to see as a step: a port within 0.2 em
 // of the column its link goes on in moves onto it, when that keeps portGap
 // from its neighbours on the face and clear of occupied columns.
@@ -569,6 +701,77 @@ func snapPorts(xs, want, occ []float64, lo, hi float64) {
 			xs[i] = w
 		}
 	}
+}
+
+// centerNodes moves each node whose face has exactly one link onto that
+// link's column next to it (the face toward earlier layers tried first),
+// where the constraints allow; a frame around it widens as far as its own
+// constraints allow. It reports whether anything moved.
+func (l *layouter) centerNodes() bool {
+	s, id := l.sol, l.solID
+	if s == nil {
+		return false
+	}
+	Lv := func(c int) int { return l.solItems + 2*c }
+	Rv := func(c int) int { return l.solItems + 2*c + 1 }
+	moved := false
+	for pass := 0; pass < 4; pass++ {
+		any := false
+		for i, it := range l.nodeItem {
+			if i >= len(l.nodes) {
+				continue
+			}
+			var cands []float64
+			if len(it.up) == 1 {
+				cands = append(cands, it.up[0].x)
+			}
+			if len(it.dn) == 1 {
+				cands = append(cands, it.dn[0].x)
+			}
+			if len(cands) == 0 {
+				continue
+			}
+			ci := it.cluster
+			var saveL, saveR float64
+			if ci >= 0 {
+				// Loosen the frame for the move, tighten it after.
+				saveL, saveR = s.x[Lv(ci)], s.x[Rv(ci)]
+				lo, _ := s.interval(Lv(ci))
+				_, hi := s.interval(Rv(ci))
+				s.x[Lv(ci)], s.x[Rv(ci)] = lo, hi
+			}
+			shifted := false
+			for _, c := range cands {
+				if math.Abs(c-it.x) < 1e-9 {
+					break
+				}
+				lo, hi := s.interval(id[it])
+				if c >= lo-1e-9 && c <= hi+1e-9 {
+					s.x[id[it]], it.x = c, c
+					shifted = true
+					break
+				}
+			}
+			any = any || shifted
+			if ci >= 0 && !shifted {
+				// Nothing moved: the frame stays where it was. Tightening
+				// it anyway could move it (it need not have been tight),
+				// and the ports on its faces would not follow.
+				s.x[Lv(ci)], s.x[Rv(ci)] = saveL, saveR
+			} else if ci >= 0 {
+				_, hi := s.interval(Lv(ci))
+				s.x[Lv(ci)] = hi
+				lo, _ := s.interval(Rv(ci))
+				s.x[Rv(ci)] = lo
+				l.clusters[ci].L, l.clusters[ci].R = s.x[Lv(ci)], s.x[Rv(ci)]
+			}
+		}
+		if !any {
+			break
+		}
+		moved = true
+	}
+	return moved
 }
 
 // spread places n ports evenly across width around c0.
@@ -940,7 +1143,27 @@ func portSpreadOf(s mr.Shape) float64 {
 	return portSpread
 }
 
+// dedupe drops repeated points and points in the middle of a straight run:
+// a path is its corners. (A run split at a band edge read, to a spacing
+// check, as a segment ending beside a link it actually crosses.)
 func dedupe(pts []Pt) []Pt {
+	pts = dedupeRepeats(pts)
+	if len(pts) < 3 {
+		return pts
+	}
+	out := []Pt{pts[0]}
+	for i := 1; i+1 < len(pts); i++ {
+		a, b, c := out[len(out)-1], pts[i], pts[i+1]
+		if math.Abs((b.X-a.X)*(c.Y-b.Y)-(b.Y-a.Y)*(c.X-b.X)) < 1e-9 &&
+			(b.X-a.X)*(c.X-b.X)+(b.Y-a.Y)*(c.Y-b.Y) >= 0 {
+			continue // b lies on a straight run from a to c
+		}
+		out = append(out, b)
+	}
+	return append(out, pts[len(pts)-1])
+}
+
+func dedupeRepeats(pts []Pt) []Pt {
 	out := pts[:0]
 	for i, p := range pts {
 		if i > 0 && math.Abs(p.X-out[len(out)-1].X) < 1e-9 && math.Abs(p.Y-out[len(out)-1].Y) < 1e-9 {
