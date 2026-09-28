@@ -308,10 +308,10 @@ func (l *layouter) solve(cuts []cut) error {
 				continue
 			}
 			through := l.faceThrough[[2]int{ci, side}]
-			minW = math.Max(minW, float64(k)*portGap/portSpread)
+			minW = math.Max(minW, float64(k)*l.portGap/portSpread)
 			// Each link through the face occupies its column there and the
 			// column it comes down in from the layer beyond.
-			minW = math.Max(minW, 2*framePad+float64(k+1)*portGap+float64(2*through)*2*trackSep)
+			minW = math.Max(minW, 2*framePad+float64(k+1)*l.portGap+float64(2*through)*2*trackSep)
 		}
 		if !l.horiz {
 			minW = math.Max(minW, c.titleW+2*framePad)

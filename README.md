@@ -44,8 +44,8 @@ Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 membership) follow that version's own parser; `erDiagram` is read with a port
 of that version's lexer, rule by rule, so it agrees with mermaid on edge cases
 (keywords such as `one` or `to` are never names, and `direction TD` is two
-entities). `raster` draws flowcharts (ER drawing is in progress) on a white
-card with a layered layout; the caller encodes the PNG and chooses the
+entities). `raster` draws flowcharts and ER diagrams (entities as tables,
+cardinalities in crow's foot notation) on a white card with a layered layout; the caller encodes the PNG and chooses the
 terminal box. Limits keep a render bounded: 300 nodes and subgraphs (at most
 100 subgraphs), 500 links (mermaid's own limit, checked while parsing), 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx

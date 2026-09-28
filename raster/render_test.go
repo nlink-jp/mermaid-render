@@ -145,7 +145,7 @@ func TestResourceLimits(t *testing.T) {
 	}
 }
 
-// Every real flowchart renders at the default scale: a limit that refuses
+// Every real diagram that parses (22 flowcharts, 11 ER) renders at the default scale: a limit that refuses
 // one of them has lost what the engine is for (a pixel cap once did).
 func TestRealBlocksRender(t *testing.T) {
 	fn := systemFont(t)
@@ -157,15 +157,12 @@ func TestRealBlocksRender(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if _, ok := d.(*mr.Flowchart); !ok {
-			continue // until ER drawing lands (step 3b)
-		}
 		if _, err := Render(d, Options{Font: fn}); err != nil {
 			t.Errorf("%s: %v", filepath.Base(f), err)
 		}
 		n++
 	}
-	if n != 22 {
-		t.Errorf("rendered %d real flowcharts, want 22", n)
+	if n != 33 {
+		t.Errorf("rendered %d real diagrams, want 33", n)
 	}
 }

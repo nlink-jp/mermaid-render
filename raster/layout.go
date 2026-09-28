@@ -99,7 +99,7 @@ const (
 	labelPad   = 0.3     // around a link label
 	loopReach  = 1.6     // how far a self-link loops out
 	portSpread = 0.6     // fraction of a face that link ports use
-	portGap    = 0.8     // least distance between two ports: wider than a head
+	portGap    = 0.8     // flowchart: least distance between two ports, wider than a head (layouter.portGap)
 	trackSep   = portGap // between the runs of two links in a gap: 0.45 em read as one thick line (operator's check)
 	trackIn    = 0.45    // a gap's start to its first track
 	trackOut   = 0.9     // its last track to its end: room for an arrowhead
@@ -158,11 +158,20 @@ type chain struct {
 }
 
 type layouter struct {
-	f        *mr.Flowchart
-	m        measurer
-	horiz    bool // LR or RL: the rank axis is horizontal
-	nodes    []*mr.Node
-	nw, nh   []float64 // visual size of each node (and pseudo-node)
+	f      *mr.Flowchart
+	m      measurer
+	horiz  bool // LR or RL: the rank axis is horizontal
+	nodes  []*mr.Node
+	nw, nh []float64 // visual size of each node (and pseudo-node)
+	// portGap is the least distance between two link ends on a face:
+	// portGap for a flowchart, wider for ER's crow's feet.
+	portGap float64
+	// rankGap is the least gap between layers, endRoom the room before a
+	// link's end in a gap (an arrowhead's, or a cardinality marker's).
+	rankGap, endRoom float64
+	// sizes, when set, are the nodes' sizes: an ER entity is a table the
+	// caller measured, not a label in a shape.
+	sizes    [][2]float64
 	slant0   []float64 // half the visual height before any growth
 	rank     []int
 	clusters []*cluster
@@ -185,6 +194,11 @@ type layouter struct {
 }
 
 func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {
+	return layoutGraph(f, m, &layouter{portGap: portGap, rankGap: rankGap, endRoom: trackOut})
+}
+
+// layoutGraph lays out f with the spacing (and node sizes) set in l.
+func layoutGraph(f *mr.Flowchart, m measurer, l *layouter) (*Layout, error) {
 	// Empty subgraphs become nodes of their own, so they count as nodes.
 	if len(f.Nodes)+len(f.Subgraphs) > MaxNodes || len(f.Subgraphs) > MaxSubgraphs || len(f.Links) > MaxLinks {
 		return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf(
@@ -212,7 +226,7 @@ func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {
 			return nil, err
 		}
 	}
-	l := &layouter{f: f, m: m, horiz: f.Direction == mr.LR || f.Direction == mr.RL}
+	l.f, l.m, l.horiz = f, m, f.Direction == mr.LR || f.Direction == mr.RL
 	if err := l.measure(); err != nil {
 		return nil, err
 	}
@@ -274,11 +288,16 @@ func (l *layouter) measure() error {
 	for i, n := range l.nodes {
 		idx[n.ID] = i
 		l.lineOf[n.ID] = n.Line
-		tw, th, err := l.m(n.Label, false)
-		if err != nil {
-			return glyphErr(err, n.Line)
+		var w, h float64
+		if l.sizes != nil {
+			w, h = l.sizes[i][0], l.sizes[i][1]
+		} else {
+			tw, th, err := l.m(n.Label, false)
+			if err != nil {
+				return glyphErr(err, n.Line)
+			}
+			w, h = nodeSize(n.Shape, tw, th)
 		}
-		w, h := nodeSize(n.Shape, tw, th)
 		l.nw, l.nh = append(l.nw, w), append(l.nh, h)
 		l.slant0 = append(l.slant0, h/2)
 	}
@@ -385,7 +404,7 @@ func (l *layouter) attachmentsClear(i int, off float64) bool {
 	}
 	hit := func(from, to Pt) (Pt, bool) { return firstHit(poly, from, to) }
 	var loopEnds []Pt
-	for o := loopBase; o <= off+1e-9; o += portGap {
+	for o := l.portGap / 2; o <= off+1e-9; o += l.portGap {
 		for _, y := range []float64{-o, o} {
 			if p, ok := hit(Pt{cross, y}, Pt{0, y}); ok {
 				loopEnds = append(loopEnds, p)
@@ -408,7 +427,7 @@ func (l *layouter) attachmentsClear(i int, off float64) bool {
 				continue
 			}
 			for _, q := range loopEnds {
-				if math.Hypot(p.X-q.X, p.Y-q.Y) < portGap {
+				if math.Hypot(p.X-q.X, p.Y-q.Y) < l.portGap {
 					return false
 				}
 			}
@@ -416,10 +435,6 @@ func (l *layouter) attachmentsClear(i int, off float64) bool {
 	}
 	return true
 }
-
-// loopBase is how far from the face's middle the innermost self-link's
-// ends sit: portGap apart from each other.
-const loopBase = portGap / 2
 
 // members of an end: the node, or the subgraph's members.
 func (l *layouter) members(e end) []int {
@@ -663,9 +678,9 @@ func (l *layouter) makeItems() error {
 			continue
 		}
 		n := ch.from.node
-		off := loopBase
+		off := l.portGap / 2 // the innermost loop's ends
 		if lastOff[n] > 0 {
-			off = math.Max(lastOff[n]+portGap, labelHalf[n]+0.3)
+			off = math.Max(lastOff[n]+l.portGap, labelHalf[n]+0.3)
 		}
 		ch.loopOff, lastOff[n] = off, off
 		if ch.lw > 0 {
@@ -702,8 +717,8 @@ func (l *layouter) makeItems() error {
 		switch l.shapeOf(i) {
 		case mr.Rhombus, mr.Circle, mr.DoubleCircle:
 			if l.facePorts[[3]int{0, i, 0}]+l.facePorts[[3]int{0, i, 1}] > 0 {
-				if d := math.Hypot(l.nw[i], l.nh[i]); 0.15*d < portGap {
-					f := portGap / (0.15 * d)
+				if d := math.Hypot(l.nw[i], l.nh[i]); 0.15*d < l.portGap {
+					f := l.portGap / (0.15 * d)
 					l.nw[i], l.nh[i] = l.nw[i]*f, l.nh[i]*f
 				}
 			}
@@ -714,7 +729,7 @@ func (l *layouter) makeItems() error {
 		if k < 2 {
 			continue
 		}
-		need := float64(k) * portGap / portSpreadOf(l.shapeOf(i))
+		need := float64(k) * l.portGap / portSpreadOf(l.shapeOf(i))
 		if l.horiz {
 			l.nh[i] = math.Max(l.nh[i], need)
 		} else {

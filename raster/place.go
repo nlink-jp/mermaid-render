@@ -127,9 +127,9 @@ func (l *layouter) place() *Layout {
 			for i, p := range ps {
 				want[i] = p.next
 			}
-			xs := alignPorts(lo, hi, want, occ)
+			xs := alignPorts(lo, hi, want, occ, l.portGap)
 			if xs == nil {
-				xs = pickPorts(lo, hi, len(ps), occ)
+				xs = pickPorts(lo, hi, len(ps), occ, l.portGap)
 			}
 			// A snap may leave the port range only on a node without
 			// self-links: the range keeps ports clear of loop ends.
@@ -137,7 +137,7 @@ func (l *layouter) place() *Layout {
 			if k[0] == 1 || l.hasLoop(k[1]) {
 				slo, shi = lo, hi
 			}
-			snapPorts(xs, want, occ, slo, shi)
+			snapPorts(xs, want, occ, slo, shi, l.portGap)
 			for i, p := range ps {
 				x := xs[i]
 				v := portX[p.ch]
@@ -268,15 +268,15 @@ func (l *layouter) place() *Layout {
 		}
 		in := trackIn
 		if headTop[k] {
-			in = trackOut
+			in = l.endRoom
 		}
 		trackTop[k] = below + margin + in
-		need := rankGap
+		need := l.rankGap
 		if below > 0 || above > 0 {
 			need = math.Max(need, below+above+frameSep)
 		}
 		if tracks[k] > 0 {
-			need = math.Max(need, below+above+2*margin+in+float64(tracks[k]-1)*trackSep+trackOut)
+			need = math.Max(need, below+above+2*margin+in+float64(tracks[k]-1)*trackSep+l.endRoom)
 		}
 		gapAfter[k] = need
 		v += band[k] + need
@@ -738,7 +738,7 @@ func (l *layouter) itemAt(v int) *item {
 // snapPorts closes steps too small to see as a step: a port within 0.2 em
 // of the column its link goes on in moves onto it, when that keeps portGap
 // from its neighbours on the face and clear of occupied columns.
-func snapPorts(xs, want, occ []float64, lo, hi float64) {
+func snapPorts(xs, want, occ []float64, lo, hi, portGap float64) {
 	for i := range xs {
 		w := want[i]
 		if d := math.Abs(xs[i] - w); d == 0 || d >= 0.2 || w < lo || w > hi {
@@ -972,7 +972,7 @@ func (l *layouter) columnsLeaving(k int, portX map[*chain][2]float64, skip map[*
 // in, so the link runs straight instead of stepping aside: the wanted
 // columns, clamped to the face, pushed portGap apart in order, and moved
 // off occupied columns. nil when that cannot be done; pickPorts decides.
-func alignPorts(lo, hi float64, want, occ []float64) []float64 {
+func alignPorts(lo, hi float64, want, occ []float64, portGap float64) []float64 {
 	n := len(want)
 	if n == 0 || hi-lo < float64(n-1)*portGap-1e-9 {
 		return nil
@@ -1028,7 +1028,7 @@ func alignPorts(lo, hi float64, want, occ []float64) []float64 {
 // pickPorts places n ports between lo and hi, portGap apart where the room
 // allows, keeping trackSep from the occupied columns; when that is not
 // possible it spreads them evenly.
-func pickPorts(lo, hi float64, n int, occ []float64) []float64 {
+func pickPorts(lo, hi float64, n int, occ []float64, portGap float64) []float64 {
 	c0, width := (lo+hi)/2, hi-lo
 	even := spread(c0, width, n)
 	if len(occ) == 0 {

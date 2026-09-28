@@ -80,6 +80,11 @@ to [Semantic Versioning](https://semver.org/).
   formatting in names and labels, the undocumented `u` cardinality and ER
   subgraphs are unsupported constructs; style, classDef, class and `:::`
   are ignored. At most 500 relationships and 200 attributes per entity.
+- `raster` draws ER diagrams: entities as tables (name header; type, name,
+  keys, comment columns as mermaid's erBox), relationships solid or dashed
+  with crow's foot markers at both ends, labels, all four directions. The
+  flowchart layout is reused with spacing for the markers (1.6 em straight
+  into each end and between layers, 1.4 em between ends on a face).
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings.
 - Layout property tests (placement, overlaps, link ends on outlines, no link
   through a node, distinct link ends, determinism) on synthetic cases in four

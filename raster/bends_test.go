@@ -38,7 +38,7 @@ func TestRealBends(t *testing.T) {
 		}
 		f, ok := d.(*mr.Flowchart)
 		if !ok {
-			continue // ER is drawn by its own layout (step 3b)
+			continue // ER blocks: er_test.go
 		}
 		lay, err := layoutFlowchart(f, fn.measureEm)
 		if err != nil {
@@ -103,7 +103,7 @@ func TestRealSiblingCrossings(t *testing.T) {
 		}
 		f, ok := d.(*mr.Flowchart)
 		if !ok {
-			continue // ER is drawn by its own layout (step 3b)
+			continue // ER blocks: er_test.go
 		}
 		lay, err := layoutFlowchart(f, fn.measureEm)
 		if err != nil {

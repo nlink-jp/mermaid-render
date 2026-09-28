@@ -38,6 +38,8 @@ type canvas struct {
 	img        *image.RGBA
 	em         float64 // pixels per em
 	offX, offY float64 // em
+	// rels marks an ER diagram's links: they end in cardinality markers.
+	rels map[*mr.Link]*mr.Relationship
 }
 
 func (c *canvas) px(p Pt) (float32, float32) {
@@ -184,6 +186,12 @@ func (c *canvas) edge(e EdgePath) {
 	if len(pts) < 2 {
 		return
 	}
+	if c.rels[e.Link] != nil {
+		// An ER relationship: the line runs to the entity; markers sit on it.
+		c.polyline(pts, lineW, e.Link.Stroke == mr.Dotted, colEdge)
+		c.heads(e)
+		return
+	}
 	w := lineW
 	if e.Link.Stroke == mr.Thick {
 		w = thickW
@@ -223,6 +231,11 @@ func (c *canvas) heads(e EdgePath) {
 		return
 	}
 	n := len(pts)
+	if r := c.rels[e.Link]; r != nil {
+		c.marker(r.ToCard, pts[n-1], pts[n-2])
+		c.marker(r.FromCard, pts[0], pts[1])
+		return
+	}
 	c.head(e.Link.End, pts[n-1], pts[n-2])
 	c.head(e.Link.Start, pts[0], pts[1])
 }

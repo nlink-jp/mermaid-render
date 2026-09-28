@@ -34,6 +34,7 @@ mermaid-render/
 ├── erparse.go        # the erDiagram grammar; generics, markdown refusal
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
 ├── raster/
+│   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, MissingGlyphError
 │   ├── layout.go     # layered layout: chains, two-level ranks, items, ordering
 │   ├── coords.go     # cross-axis coordinates: difference constraints + descent
@@ -110,6 +111,10 @@ mermaid-render/
   Go-side lookaheads for the four `(?=...)` rules. JavaScript's `\s` and `.`
   are spelled out (`jsSpace`, `jsDot`). Do not "fix" a surprising result
   (`direction TD` as two entities) without checking mermaid does otherwise.
+- **Spacing is per layout** (`layouter.portGap`, `rankGap`, `endRoom`, and
+  `sizes` for caller-measured nodes): flowcharts keep the constants, ER
+  widens them for its markers. After touching the layout, render the 22 real
+  flowcharts and compare bytes with the last reviewed set.
 - **Link tokens follow flowDb.destructEndLink**: a start mark counts only when
   the end mark is the same kind; `A---oB` has length 2.
 - **Font names**: `sfnt.Name` returns the first name record whatever its

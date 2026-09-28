@@ -579,6 +579,17 @@ same way as pathguard.
     mermaid's own placeholders (`ﬂ°…¶ß`), so they fail inside attribute words exactly as in
     mermaid. The 11 real blocks were checked against an independently written reader before
     their goldens were frozen.
+  - **Step 3b: laying out and drawing ER (2026-09-28)**: the flowchart layout is reused, with each
+    entity passed in as a table's size (a bold name header, then a row per attribute: type, name,
+    keys, comment; the last two columns only when some attribute has them, as mermaid's erBox).
+    Relationships are lines with a cardinality marker at both ends (next to the entity the
+    maximum, a bar or a crow's foot; further out the minimum, a bar or a circle). A marker reaches
+    1.32 em along its line, so a link runs straight 1.6 em into each end, layers are 1.6 em apart,
+    and ends on one face keep 1.4 em apart (1.2 looked cramped with three side by side). These
+    spacings were constants for flowcharts and became per-layout values; flowchart images were
+    checked byte for byte to be unchanged. Layout properties add: straight past each marker,
+    crow's feet side by side do not touch (from the marker's width), no label over a marker, and
+    every table fits its box; 20,000 random ER diagrams keep them.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

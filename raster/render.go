@@ -60,19 +60,41 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 	if math.IsNaN(scale) || scale <= 0 || scale > MaxScale {
 		return nil, fmt.Errorf("raster: Scale %v is outside (0, %d]", opts.Scale, MaxScale)
 	}
-	f, ok := d.(*mr.Flowchart)
-	if !ok {
+	var (
+		lay       *Layout
+		er        *erLayout
+		nodeLines []int
+		title     string
+		titleLine int
+	)
+	switch d := d.(type) {
+	case *mr.Flowchart:
+		var err error
+		if lay, err = layoutFlowchart(d, fn.measureEm); err != nil {
+			return nil, err
+		}
+		for _, n := range d.Nodes {
+			nodeLines = append(nodeLines, n.Line)
+		}
+		title, titleLine = d.Title(), d.TitleLine()
+	case *mr.ER:
+		var err error
+		if er, err = layoutER(d, fn.measureEm); err != nil {
+			return nil, err
+		}
+		lay = er.Layout
+		for _, e := range d.Entities {
+			nodeLines = append(nodeLines, e.Line)
+		}
+		title, titleLine = d.Title(), d.TitleLine()
+	default:
 		return nil, &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("%T", d)}
 	}
-	lay, err := layoutFlowchart(f, fn.measureEm)
-	if err != nil {
-		return nil, err
-	}
-	title := f.Title()
 	var tw, th float64
+	var err error
 	if title != "" {
 		if tw, th, err = fn.measureEm(title, true); err != nil {
-			return nil, glyphErr(err, f.TitleLine())
+			return nil, glyphErr(err, titleLine)
 		}
 		th += 0.8
 	}
@@ -89,10 +111,13 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 	c.outlineShape(roundRect(Rect{0.06, 0.06, wEm - 0.06, hEm - 0.06}, 0.5), nil, colCard, 0.06, false)
 	if title != "" {
 		if err := fn.drawText(img, wEm/2*em, (cardPad+th/2-0.2)*em, title, true, em, colText); err != nil {
-			return nil, glyphErr(err, f.TitleLine())
+			return nil, glyphErr(err, titleLine)
 		}
 	}
 	c.offX, c.offY = cardPad+(wEm-2*cardPad-lay.W)/2, cardPad+th
+	if er != nil {
+		c.rels = er.rels
+	}
 	text := func(p Pt, s string, bold bool) error {
 		return fn.drawText(img, (p.X+c.offX)*em, (p.Y+c.offY)*em, s, bold, em, colText)
 	}
@@ -117,9 +142,15 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 		c.heads(e)
 	}
 	for i, n := range lay.Nodes {
+		if er != nil {
+			if err := c.entity(n, er.tables[i], fn); err != nil {
+				return nil, glyphErr(err, nodeLines[i])
+			}
+			continue
+		}
 		c.node(n)
 		if err := text(labelCenter(n), n.Label, false); err != nil {
-			return nil, glyphErr(err, f.Nodes[i].Line)
+			return nil, glyphErr(err, nodeLines[i])
 		}
 	}
 	for _, e := range lay.Edges {

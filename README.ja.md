@@ -42,7 +42,8 @@ img, err = raster.RenderSource(src, raster.Options{Font: font})
 （ID に使える文字、線の記号の読み方、subgraph の所属）は、同じ版の mermaid 自身の
 パーサに従う。`erDiagram` は同じ版の字句解析を規則ごとに移植して読むので、細部まで mermaid と
 一致する（`one` や `to` のような語は名前にならない、`direction TD` は 2 つの実体になる）。
-`raster` は flowchart を段に分けて配置し、白地のカードに描く（ER の描画は作業中）。PNG への変換と
+`raster` は flowchart と ER 図（実体は表、多重度はカラスの足の記法）を段に分けて配置し、
+白地のカードに描く。PNG への変換と
 端末での枠の大きさは呼び出し側が決める。描画が止まらないよう、次を上限とする: ノードと
 subgraph を合わせて 300（subgraph は 100 まで）、線 500（mermaid 自身の上限で、構文を読む
 段階で判定）、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万
