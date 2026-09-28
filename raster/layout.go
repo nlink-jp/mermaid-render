@@ -126,6 +126,10 @@ type item struct {
 	x       float64
 	up, dn  []*item
 	key     float64
+	// A dummy next to a link's subgraph end: that subgraph's index + 1
+	// on the side toward earlier (up) or later (dn) layers, else 0. The
+	// link aims at the frame, not at the members it is tied to.
+	upFrame, dnFrame int
 }
 
 type cluster struct {
@@ -858,6 +862,12 @@ func (l *layouter) makeItems() error {
 			lowEnd, highEnd = ch.to, ch.from
 		}
 		prev := l.endItems(lowEnd, ch.lo)
+		if lowEnd.node < 0 && len(ch.items) > 0 {
+			ch.items[0].upFrame = lowEnd.cluster + 1
+		}
+		if highEnd.node < 0 && len(ch.items) > 0 {
+			ch.items[len(ch.items)-1].dnFrame = highEnd.cluster + 1
+		}
 		for _, it := range ch.items {
 			for _, p := range prev {
 				link(p, it)

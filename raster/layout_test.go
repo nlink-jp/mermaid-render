@@ -624,3 +624,78 @@ func TestClipAtFallsBackToTheCentre(t *testing.T) {
 		t.Fatal("the case no longer needs the fallback; pick another")
 	}
 }
+
+// A chain of single links through subgraphs of different widths lies on one
+// column (the operator's second check: boxes off their line). Before, the
+// frame edge hugging the widest member pinned it, and ties between two
+// neighbours settled into a staircase.
+func TestChainThroughFramesIsStraight(t *testing.T) {
+	src := `flowchart TD
+    subgraph Ingestion
+        A[Input Query]
+    end
+    subgraph Processing
+        B[Passive Lookup] --> C[Threat Correlation Engine Step]
+    end
+    subgraph Result
+        D[Generate Report]
+    end
+    A --> B
+    C --> D`
+	for _, dir := range []string{"TD", "LR"} {
+		f, lay := layoutOf(t, strings.Replace(src, "TD", dir, 1), fakeMeasure)
+		checkLayout(t, dir, f, lay, fakeMeasure)
+		horiz := dir == "LR"
+		col := func(r Rect) float64 {
+			if horiz {
+				return r.Center().Y
+			}
+			return r.Center().X
+		}
+		x0 := col(lay.Nodes[0].Box)
+		for _, n := range lay.Nodes[1:] {
+			if math.Abs(col(n.Box)-x0) > 1e-6 {
+				t.Errorf("%s: %s at %.3f, not on the chain's column %.3f", dir, n.ID, col(n.Box), x0)
+			}
+		}
+	}
+}
+
+// Subgraphs linked frame to frame line up on their middles, and the links
+// run through them (the operator's second check: centre the groups).
+func TestFrameToFrameLinksAreCentred(t *testing.T) {
+	src := `flowchart TD
+    subgraph Input
+        IN[Target Artifact]
+    end
+    subgraph Recon
+        DNS[DoH and rDNS]
+        WHOIS[RDAP and Registry]
+    end
+    subgraph Output
+        REPORT[Attribution Report]
+    end
+    IN --> Recon
+    Recon --> Output`
+	f, lay := layoutOf(t, src, fakeMeasure)
+	checkLayout(t, "frames", f, lay, fakeMeasure)
+	mid := map[string]float64{}
+	for _, fr := range lay.Frames {
+		mid[fr.ID] = fr.Box.Center().X
+	}
+	if d := math.Abs(mid["Recon"] - mid["Output"]); d > 0.5 {
+		t.Errorf("Recon's middle %.3f and Output's %.3f are %.3f apart", mid["Recon"], mid["Output"], d)
+	}
+	for _, e := range lay.Edges {
+		if e.Link.To.ID != "Recon" && e.Link.From.ID != "Recon" {
+			continue
+		}
+		end := e.Points[len(e.Points)-1]
+		if e.Link.From.ID == "Recon" {
+			end = e.Points[0]
+		}
+		if d := math.Abs(end.X - mid["Recon"]); d > 0.5 {
+			t.Errorf("%s->%s meets Recon %.3f from its middle", e.Link.From.ID, e.Link.To.ID, d)
+		}
+	}
+}

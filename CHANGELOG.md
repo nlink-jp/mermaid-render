@@ -49,6 +49,11 @@ to [Semantic Versioning](https://semver.org/).
   are ordered so no across run passes another link's vertical where a rule
   allows it: links sharing an end node no longer cross (8 to 0 over the 22
   real diagrams, TestRealSiblingCrossings).
+- Groups and chains centred: a link ending on a subgraph aims at the frame's
+  middle (subgraphs linked frame to frame line up); a member moves its
+  frame's edges with it; a tie between one link in and one out takes the one
+  in; runs of one-to-one links move onto one column together. Bends over the
+  22 real diagrams: 116 / 5 to 106 / 2.
 - Limits: 300 nodes and subgraphs (at most 100 subgraphs), 1000 characters per
   label, Scale in (0, 8], 12 Mpx per image for time and memory (the PNG's
   size is the caller's to check: 0.10-0.67 bytes per pixel, so a pixel cap

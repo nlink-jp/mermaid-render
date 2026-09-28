@@ -18,7 +18,10 @@ import (
 //
 // Raised once, 114/4 -> 116/5, on purpose: the second check asked for boxes
 // centred on their links and links meeting a rhombus at its vertex; lining
-// nodes up with their trunk costs two bends elsewhere.
+// nodes up with their trunk costs two bends elsewhere. Then 110/2: members
+// carry their frame's edges, and a tie between one link in and one out
+// takes the one in (no staircases). Then 106/2: runs of one-to-one links
+// move onto one column together where every item of the run reaches it.
 func TestRealBends(t *testing.T) {
 	fn, err := DefaultFont()
 	if err != nil {
@@ -68,11 +71,11 @@ func TestRealBends(t *testing.T) {
 		per[filepath.Base(file)] = [2]int{bt, sm}
 	}
 	t.Logf("bends %d, small steps %d", total, small)
-	if total > 116 || small > 5 {
+	if total > 106 || small > 2 {
 		for k, v := range per {
 			t.Logf("  %s bends=%d small=%d", k, v[0], v[1])
 		}
-		t.Errorf("bends %d (baseline 116), small steps %d (baseline 5)", total, small)
+		t.Errorf("bends %d (baseline 106), small steps %d (baseline 2)", total, small)
 	}
 }
 

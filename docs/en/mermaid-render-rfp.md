@@ -223,7 +223,10 @@ above.
      order of appearance in the source, so the result is deterministic.
   5. Coordinates: packed from the left within a layer, with dummy-node chains kept straight. A
      node that one link fans out from (or into) lines up with that link's column. A node with one
-     link on a face sits centred on that link's column (a rhombus takes the link at its vertex).
+     link on a face sits centred on that link's column (a rhombus takes the link at its vertex). A
+     run of items linked one to one moves onto one column that every item of it can reach. A link
+     ending on a subgraph aims at the frame's middle, so subgraphs linked frame to frame line up
+     on their middles.
   6. Links run straight down through a layer and change column between layers with a
      down-across-down right-angle path. Each across run gets its own height (a track) in the gap,
      so links only ever meet at right angles; tracks are 0.8 em apart. When two links swap into
@@ -541,6 +544,12 @@ same way as pathguard.
     check rose from 0.3 em to 0.6 em. The three marked "could bend without overlapping" came from a
     track order that ignored crossings; tracks now prefer the order in which no across run passes
     another link's vertical (crossings between links sharing an end node 8 to 0, kept by a test).
+    The notes asking to centre groups (8 diagrams in round 2) had three causes: a link ending on a
+    subgraph aimed at its members instead of the frame's middle; the frame edge hugging the widest
+    member pinned it; and a tie between two neighbours went to the one nearer the current position,
+    freezing staircases. Links now aim at the frame's middle, members carry the frame's edges, the
+    tie goes to the neighbour above, and a last pass moves runs of one-to-one links onto one column.
+    The bend baseline fell to 106 / 2.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

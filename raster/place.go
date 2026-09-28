@@ -722,10 +722,11 @@ func (l *layouter) centerNodes() bool {
 				continue
 			}
 			var cands []float64
-			if len(it.up) == 1 {
+			// A link ending on this node's frame is the frame's to centre.
+			if len(it.up) == 1 && it.up[0].dnFrame == 0 {
 				cands = append(cands, it.up[0].x)
 			}
-			if len(it.dn) == 1 {
+			if len(it.dn) == 1 && it.dn[0].upFrame == 0 {
 				cands = append(cands, it.dn[0].x)
 			}
 			if len(cands) == 0 {

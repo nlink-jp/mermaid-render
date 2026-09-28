@@ -44,6 +44,30 @@ func (s *solver) interval(i int) (lo, hi float64) {
 	return
 }
 
+// intervalWith is where x[i] may move when the frame edges lv and rv
+// move with it: their bounds on i give way to the edges' own limits (an edge
+// moving outward only loosens its other members).
+func (s *solver) intervalWith(i, lv, rv int) (lo, hi float64) {
+	lo, hi = math.Inf(-1), math.Inf(1)
+	for _, c := range s.in[i] {
+		if c.u == lv {
+			elo, _ := s.interval(lv)
+			lo = math.Max(lo, elo+c.d)
+			continue
+		}
+		lo = math.Max(lo, s.x[c.u]+c.d)
+	}
+	for _, c := range s.out[i] {
+		if c.v == rv {
+			_, ehi := s.interval(rv)
+			hi = math.Min(hi, ehi-c.d)
+			continue
+		}
+		hi = math.Min(hi, s.x[c.v]-c.d)
+	}
+	return
+}
+
 // cut keeps the items of one layer next to a subgraph out of its frame,
 // which reaches into the gap on that side (its padding, and its title on
 // the top): items left of at go left of the frame, the rest right.
@@ -121,12 +145,22 @@ func (l *layouter) shiftBlock(s *solver, items []*item, id map[*item]int, ci, lv
 		}
 	}
 	var offs []float64
+	mid := (s.x[lv] + s.x[rv]) / 2
 	for _, it := range items {
+		// A link ending on this frame: from the frame's middle.
+		if it.cluster != ci && (it.upFrame == ci+1 || it.dnFrame == ci+1) {
+			offs = append(offs, s.x[id[it]]-mid)
+		}
 		if it.cluster != ci {
 			continue
 		}
-		for _, n := range append(append([]*item(nil), it.up...), it.dn...) {
-			if n.cluster != ci {
+		for _, n := range it.up {
+			if n.cluster != ci && n.dnFrame == 0 {
+				offs = append(offs, s.x[id[n]]-s.x[id[it]])
+			}
+		}
+		for _, n := range it.dn {
+			if n.cluster != ci && n.upFrame == 0 {
 				offs = append(offs, s.x[id[n]]-s.x[id[it]])
 			}
 		}
@@ -317,31 +351,57 @@ func (l *layouter) solve(cuts []cut) error {
 			return 0, false
 		}
 		it := items[i]
-		nb := append(append([]*item(nil), it.up...), it.dn...)
 		if it.kind == kHolder {
 			c := it.cluster
 			return (s.x[Lv(c)] + s.x[Rv(c)]) / 2, true
 		}
-		if len(nb) == 0 {
+		// A link ending on a subgraph counts as the frame's middle; the
+		// members it is tied to are not pulled one by one (the frame
+		// moves as a block toward it).
+		centre := func(f int) float64 { return (s.x[Lv(f-1)] + s.x[Rv(f-1)]) / 2 }
+		var xs []float64
+		up, dn := 0, 0
+		if it.upFrame > 0 {
+			xs = append(xs, centre(it.upFrame))
+		} else {
+			for _, n := range it.up {
+				if n.dnFrame == 0 {
+					xs = append(xs, s.x[id[n]])
+					up++
+				}
+			}
+		}
+		if it.dnFrame > 0 {
+			xs = append(xs, centre(it.dnFrame))
+		} else {
+			for _, n := range it.dn {
+				if n.upFrame == 0 {
+					xs = append(xs, s.x[id[n]])
+					dn++
+				}
+			}
+		}
+		if len(xs) == 0 {
 			return 0, false
 		}
 		// A node with one link on one side and a fan on the other lines up
 		// with the one (its trunk); the fan spreads from it.
 		if it.kind == kNode {
-			if len(it.up) == 1 && len(it.dn) > 1 {
-				return s.x[id[it.up[0]]], true
+			if up == 1 && dn > 1 {
+				return xs[0], true
 			}
-			if len(it.dn) == 1 && len(it.up) > 1 {
-				return s.x[id[it.dn[0]]], true
+			if dn == 1 && up > 1 {
+				return xs[up], true
 			}
 		}
 		// The median of the neighbours, not their mean: the mean lines up
 		// with none of them, so every link bends; the median lines up with
 		// at least one (with an even count, the middle value nearer the
 		// current position), and chains of those come out straight.
-		xs := make([]float64, len(nb))
-		for j, n := range nb {
-			xs[j] = s.x[id[n]]
+		// One link in and one out: the one in, so a chain of such items
+		// settles on one column instead of a staircase of ties.
+		if len(xs) == 2 && (up == 1 || it.upFrame > 0) {
+			return xs[0], true
 		}
 		sort.Float64s(xs)
 		m := len(xs) / 2
@@ -379,6 +439,26 @@ func (l *layouter) solve(cuts []cut) error {
 			} else {
 				continue
 			}
+			// A member moves its frame's edges with it: an edge that hugs
+			// the widest member would otherwise pin it, and the other
+			// members with it, short of their neighbours.
+			if v < len(items) && items[v].cluster >= 0 {
+				lv, rv := Lv(items[v].cluster), Rv(items[v].cluster)
+				lo, hi = s.intervalWith(v, lv, rv)
+				x := math.Min(math.Max(t, lo), hi)
+				s.x[v] = x
+				for _, c := range s.in[v] {
+					if c.u == lv {
+						s.x[lv] = math.Min(s.x[lv], x-c.d)
+					}
+				}
+				for _, c := range s.out[v] {
+					if c.v == rv {
+						s.x[rv] = math.Max(s.x[rv], x+c.d)
+					}
+				}
+				continue
+			}
 			s.x[v] = math.Min(math.Max(t, lo), hi)
 		}
 		// One variable at a time cannot move a subgraph: its members stop
@@ -391,6 +471,7 @@ func (l *layouter) solve(cuts []cut) error {
 			}
 		}
 	}
+	l.alignRuns(s, items, id, Lv, Rv)
 	for i, it := range items {
 		it.x = s.x[i]
 	}
@@ -399,4 +480,89 @@ func (l *layouter) solve(cuts []cut) error {
 		c.L, c.R = s.x[Lv(ci)], s.x[Rv(ci)]
 	}
 	return nil
+}
+
+// alignRuns puts each run of items linked one to one (each the other's only
+// neighbour on that side) on one column where every item of the run can
+// reach it: the descent moves one item at a time, and an item held off its
+// neighbour's column by the layer beside it leaves a staircase below it.
+// Candidates are the run's own columns, nearest its median first; frames
+// widen for their members and are tightened after.
+func (l *layouter) alignRuns(s *solver, items []*item, id map[*item]int, Lv, Rv func(int) int) {
+	next := func(it *item) *item {
+		if len(it.dn) == 1 && len(it.dn[0].up) == 1 && it.dnFrame == 0 {
+			return it.dn[0]
+		}
+		return nil
+	}
+	head := func(it *item) bool {
+		return !(len(it.up) == 1 && len(it.up[0].dn) == 1 && it.upFrame == 0)
+	}
+	moved := false
+	for _, it := range items {
+		if !head(it) || next(it) == nil {
+			continue
+		}
+		var run []*item
+		for v := it; v != nil; v = next(v) {
+			run = append(run, v)
+		}
+		xs := make([]float64, len(run))
+		for i, v := range run {
+			xs[i] = s.x[id[v]]
+		}
+		sorted := append([]float64(nil), xs...)
+		sort.Float64s(sorted)
+		if sorted[len(sorted)-1]-sorted[0] < 1e-9 {
+			continue
+		}
+		med := sorted[len(sorted)/2]
+		sort.SliceStable(sorted, func(a, b int) bool { return math.Abs(sorted[a]-med) < math.Abs(sorted[b]-med) })
+		reach := func(v *item, c float64) bool {
+			lo, hi := s.interval(id[v])
+			if v.cluster >= 0 {
+				lo, hi = s.intervalWith(id[v], Lv(v.cluster), Rv(v.cluster))
+			}
+			return c >= lo-1e-9 && c <= hi+1e-9
+		}
+		for _, c := range sorted {
+			ok := true
+			for _, v := range run {
+				if !reach(v, c) {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+			for _, v := range run {
+				i := id[v]
+				s.x[i] = c
+				if ci := v.cluster; ci >= 0 {
+					for _, k := range s.in[i] {
+						if k.u == Lv(ci) {
+							s.x[k.u] = math.Min(s.x[k.u], c-k.d)
+						}
+					}
+					for _, k := range s.out[i] {
+						if k.v == Rv(ci) {
+							s.x[k.v] = math.Max(s.x[k.v], c+k.d)
+						}
+					}
+				}
+			}
+			moved = true
+			break
+		}
+	}
+	if !moved {
+		return
+	}
+	for ci := range l.clusters {
+		_, hi := s.interval(Lv(ci))
+		s.x[Lv(ci)] = hi
+		lo, _ := s.interval(Rv(ci))
+		s.x[Rv(ci)] = lo
+	}
 }

@@ -66,6 +66,16 @@ mermaid-render/
   none passes another's vertical (a run over another's drop column turns
   below it, over its rise column above it); a preference that would close a
   cycle is dropped, and gaps over 60 parts skip it (quadratic).
+- **Staircases come from local moves** (coords.go): single-variable descent
+  cannot move a member past the frame edge hugging the widest member
+  (`intervalWith` lets members carry the edges), and a two-neighbour tie
+  broken by "nearer the current position" is stable as a staircase (the tie
+  takes the neighbour above). `alignRuns` then moves whole runs of one-to-one
+  links; per-item "reachable" rules were tried and made more staircases.
+- **A link ending on a subgraph is tied to every member of the end layer**
+  (`endItems`), so its neighbours are not a column to aim at: `upFrame` /
+  `dnFrame` mark the dummy next to such an end, and targets, block shifts and
+  `centerNodes` use the frame's middle instead.
 - **Attachment spacing is measured, not ruled by shape** (`attachmentsClear`):
   shape-by-shape rules kept missing cases (a rhombus's shared slopes, a
   stadium's rounded ends). Measure after every other growth, and sample the
