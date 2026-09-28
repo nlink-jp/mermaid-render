@@ -24,6 +24,19 @@ to [Semantic Versioning](https://semver.org/).
   directions. Text is drawn glyph by glyph: a character no face has is an
   error, characters without glyphs are skipped. `DefaultFont` loads Hiragino
   Sans W3 / W6. Limits: 300 nodes, 600 links, 6 Mpx.
+- Links between layers are orthogonal: down, across on a track of their own
+  in the gap, down (step-2 review: shallow diagonals ran as close as 0.07 em
+  and could not be told apart). Two links swapping near-equal columns detour
+  through a free column. Ports align with the column their link goes on in.
+- Nodes and frames grow until link ends, self-link ends and the columns
+  links cross a frame's face in keep 0.8 em apart, measured on the real
+  outline; a slanted shape's slant is fixed from its size before growing, so
+  its label never spills out; an outer self-link clears the inner labels;
+  frame titles no longer hide arrowheads (heads are drawn again after them).
+- Layout properties now also check: link ends 0.8 em apart (was 0.2), links
+  crossing only at a clear angle or keeping 0.3 em apart, no link through
+  another link's label, every node label inside its shape. A 60,000-seed
+  sweep passes.
 - `tools/mmdpng` renders a mermaid file to PNG and prints the timings.
 - Layout property tests (placement, overlaps, link ends on outlines, no link
   through a node, distinct link ends, determinism) on synthetic cases in four

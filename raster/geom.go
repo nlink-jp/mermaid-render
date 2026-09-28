@@ -8,15 +8,11 @@ import (
 
 // outline is the polygon a shape is drawn as, in em. Curved shapes are
 // approximated finely enough that a link ending on the outline touches the
-// drawn curve.
-func outline(s mr.Shape, r Rect) []Pt {
+// drawn curve. k is the slant of the slanted shapes (NodeBox.Slant).
+func outline(s mr.Shape, r Rect, k float64) []Pt {
 	x0, y0, x1, y1 := r.X0, r.Y0, r.X1, r.Y1
 	w, h := r.W(), r.H()
 	cx, cy := r.Center().X, r.Center().Y
-	// The slant of the slanted shapes: half the height, but no more than a
-	// share of the width, so a node grown tall to hold many links keeps
-	// its shape.
-	k := math.Min(h/2, w*0.3)
 	switch s {
 	case mr.Rhombus:
 		return []Pt{{cx, y0}, {x1, cy}, {cx, y1}, {x0, cy}}
@@ -70,8 +66,8 @@ func roundRect(r Rect, rad float64) []Pt {
 // clipAt moves along the segment from outside toward inside and returns
 // the first point on the shape's outline. If the segment misses the outline
 // (it should not), the box's edge is used.
-func clipAt(s mr.Shape, r Rect, outside, inside Pt) Pt {
-	poly := outline(s, r)
+func clipAt(s mr.Shape, r Rect, k float64, outside, inside Pt) Pt {
+	poly := outline(s, r, k)
 	if p, ok := firstHit(poly, outside, inside); ok {
 		return p
 	}
@@ -79,7 +75,7 @@ func clipAt(s mr.Shape, r Rect, outside, inside Pt) Pt {
 	if p, ok := firstHit(poly, outside, r.Center()); ok {
 		return p
 	}
-	if p, ok := firstHit(outline(mr.Rect, r), outside, inside); ok {
+	if p, ok := firstHit(outline(mr.Rect, r, 0), outside, inside); ok {
 		return p
 	}
 	return inside

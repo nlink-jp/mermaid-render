@@ -56,6 +56,17 @@ mermaid-render/
   that exposed a defect in `TestLayoutRegressions`.
 - **A link crossing a foreign subgraph frame is counted, not failed**, in the
   random sweep (see the RFP's Discussion Log); fixed cases still assert none.
+- **Links are orthogonal between layers** (`assignTracks` in place.go):
+  every across run has its own track; the rule "a link leaving near another's
+  arrival column turns above it" orders tracks, and a cycle of that rule (two
+  links swapping near-equal columns) is broken by a detour through a free
+  column. A detour's two halves are ordered directly — the column rule
+  assumes vertical runs reaching the gap's ends, which a detour's middle
+  column does not.
+- **Attachment spacing is measured, not ruled by shape** (`attachmentsClear`):
+  shape-by-shape rules kept missing cases (a rhombus's shared slopes, a
+  stadium's rounded ends). Measure after every other growth, and sample the
+  port range's ends exactly.
 - **Ranks are two-level**: a subgraph is ranked inside, then placed as one
   block. Ranking members directly let a cycle through subgraphs make one
   frame straddle another (the mermaid docs' own example did).

@@ -131,7 +131,7 @@ func (c *canvas) node(n NodeBox) {
 		c.cylinder(r)
 		return
 	}
-	c.outlineShape(outline(n.Shape, r), colNode, colStroke, lineW, false)
+	c.outlineShape(outline(n.Shape, r, n.Slant), colNode, colStroke, lineW, false)
 	switch n.Shape {
 	case mr.Subroutine:
 		c.segment(Pt{r.X0 + 0.4, r.Y0}, Pt{r.X0 + 0.4, r.Y1}, lineW, colStroke)
@@ -173,7 +173,7 @@ func labelCenter(n NodeBox) Pt {
 	case mr.Cylinder:
 		p.Y += 0.2
 	case mr.Asymmetric:
-		p.X += math.Min(n.Box.H()/2, n.Box.W()*0.3) / 2 // half the notch (see outline)
+		p.X += n.Slant / 2 // half the notch
 	}
 	return p
 }
@@ -211,8 +211,20 @@ func (c *canvas) edge(e EdgePath) {
 	pts[n-1] = trim(e.Link.End, endTip, endPrev)
 	pts[0] = trim(e.Link.Start, startTip, startNext)
 	c.polyline(pts, w, dotted, colEdge)
-	c.head(e.Link.End, endTip, endPrev)
-	c.head(e.Link.Start, startTip, startNext)
+	c.heads(e)
+}
+
+// heads draws a link's heads alone. Render draws them again after the
+// frame titles, whose backgrounds would otherwise hide a head arriving
+// under a title.
+func (c *canvas) heads(e EdgePath) {
+	pts := e.Points
+	if len(pts) < 2 {
+		return
+	}
+	n := len(pts)
+	c.head(e.Link.End, pts[n-1], pts[n-2])
+	c.head(e.Link.Start, pts[0], pts[1])
 }
 
 func (c *canvas) head(h mr.Head, tip, from Pt) {

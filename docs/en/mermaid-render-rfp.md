@@ -222,9 +222,15 @@ above.
   4. Crossing reduction: the barycentre method, swept down and up repeatedly. Ties are broken by
      order of appearance in the source, so the result is deterministic.
   5. Coordinates: packed from the left within a layer, with dummy-node chains kept straight.
-  6. Links are drawn as polylines through their dummy nodes.
-  7. Multiple links between the same pair are offset and drawn separately. A link from a node to
-     itself is drawn as a loop beside the node.
+  6. Links run straight down through a layer and change column between layers with a
+     down-across-down right-angle path. Each across run gets its own height (a track) in the gap,
+     so links only ever meet at right angles. When two links swap into each other's columns, one
+     detours through a free column. Ports sit, where they can, right above or below the column the
+     link goes on in.
+  7. Links sharing a node get their own ports, at least 0.8 em apart per face; a node or frame grows
+     when a face is short (self-link ends included, checked by measuring on the real outline). A link
+     from a node to itself is drawn as a loop beside the node; an outer loop leaves beyond the inner
+     loops' labels.
   8. Subgraphs: member nodes are kept adjacent within each layer, and an enclosing frame and
      title are drawn. A link whose endpoint is a subgraph stops at the frame's edge.
   9. Direction: layout is done in TD, and LR / RL / BT are obtained by transforming coordinates.

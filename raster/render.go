@@ -104,6 +104,9 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 			}
 		}
 	}
+	for _, e := range lay.Edges {
+		c.heads(e)
+	}
 	for i, n := range lay.Nodes {
 		c.node(n)
 		if err := text(labelCenter(n), n.Label, false); err != nil {

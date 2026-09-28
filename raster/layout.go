@@ -42,6 +42,10 @@ type NodeBox struct {
 	Label string
 	Shape mr.Shape
 	Box   Rect
+	// Slant is how far the slanted shapes' sides lean in: half the height
+	// the node had before it grew to hold links, and at most 0.3 of its
+	// width, so growing never eats into the room its text was given.
+	Slant float64
 }
 
 // FrameBox is a placed subgraph frame and its title.
@@ -93,6 +97,9 @@ const (
 	loopReach  = 1.6  // how far a self-link loops out
 	portSpread = 0.6  // fraction of a face that link ports use
 	portGap    = 0.8  // least distance between two ports: wider than a head
+	trackSep   = 0.45 // between the horizontal runs of two links in a gap
+	trackIn    = 0.45 // a gap's start to its first track
+	trackOut   = 0.9  // its last track to its end: room for an arrowhead
 )
 
 type itemKind int
@@ -140,6 +147,7 @@ type chain struct {
 	label    *item
 	lw, lh   float64 // label size
 	self     bool
+	loopOff  float64 // a self-link: its ends' distance from the face's middle
 }
 
 type layouter struct {
@@ -148,6 +156,7 @@ type layouter struct {
 	horiz    bool // LR or RL: the rank axis is horizontal
 	nodes    []*mr.Node
 	nw, nh   []float64 // visual size of each node (and pseudo-node)
+	slant0   []float64 // half the visual height before any growth
 	rank     []int
 	clusters []*cluster
 	inClus   []int // node -> cluster or -1
@@ -158,6 +167,9 @@ type layouter struct {
 	// facePorts counts the links on each face: (0 node / 1 subgraph,
 	// index, 0 high side / 1 low side).
 	facePorts map[[3]int]int
+	// faceThrough counts the links that cross a subgraph's face to or from
+	// its members: (subgraph, 0 high side / 1 low side).
+	faceThrough map[[2]int]int
 }
 
 func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {
@@ -233,6 +245,7 @@ func (l *layouter) measure() error {
 		}
 		w, h := nodeSize(n.Shape, tw, th)
 		l.nw, l.nh = append(l.nw, w), append(l.nh, h)
+		l.slant0 = append(l.slant0, h/2)
 	}
 	l.inClus = make([]int, len(l.nodes))
 	for i := range l.inClus {
@@ -257,6 +270,7 @@ func (l *layouter) measure() error {
 			// of an empty frame.
 			c.holder = len(l.nw)
 			l.nw, l.nh = append(l.nw, 3), append(l.nh, 1)
+			l.slant0 = append(l.slant0, 0.5)
 			l.inClus = append(l.inClus, ci)
 			c.members = []int{c.holder}
 		}
@@ -307,9 +321,70 @@ func (l *layouter) buildChains() error {
 	return nil
 }
 
-// loopOffset is how far from the face's middle the ends of the i-th
-// self-link sit.
-func loopOffset(i int) float64 { return 0.3 + float64(i)*portGap }
+// attachmentsClear reports whether, on node i's outline, the ends of its
+// self-links (the outermost at off from the middle, the others inside)
+// keep portGap from wherever a port may land on its two rank faces (their
+// whole port range, ends included). It works in the abstract frame: the
+// rank faces are top and bottom, the loops leave the right side.
+func (l *layouter) attachmentsClear(i int, off float64) bool {
+	cross, rs := l.nw[i], l.nh[i]
+	if l.horiz {
+		cross, rs = l.nh[i], l.nw[i]
+	}
+	// The outline in the abstract frame: the visual outline transformed.
+	r := Rect{-cross / 2, -rs / 2, cross / 2, rs / 2}
+	vis := r
+	if l.horiz {
+		vis = Rect{-rs / 2, -cross / 2, rs / 2, cross / 2}
+	}
+	poly := outline(l.shapeOf(i), vis, math.Min(l.slant0[i], 0.3*vis.W()))
+	if l.horiz {
+		for j, p := range poly {
+			poly[j] = Pt{p.Y, p.X}
+		}
+	}
+	if l.f.Direction == mr.BT || l.f.Direction == mr.RL {
+		for j, p := range poly {
+			poly[j] = Pt{p.X, -p.Y}
+		}
+	}
+	hit := func(from, to Pt) (Pt, bool) { return firstHit(poly, from, to) }
+	var loopEnds []Pt
+	for o := loopBase; o <= off+1e-9; o += portGap {
+		for _, y := range []float64{-o, o} {
+			if p, ok := hit(Pt{cross, y}, Pt{0, y}); ok {
+				loopEnds = append(loopEnds, p)
+			}
+		}
+	}
+	for _, y := range []float64{-off, off} {
+		if p, ok := hit(Pt{cross, y}, Pt{0, y}); ok {
+			loopEnds = append(loopEnds, p)
+		}
+	}
+	half := cross / 2 * portSpreadOf(l.shapeOf(i))
+	steps := int(math.Ceil(2*half/0.1)) + 1
+	for _, face := range []float64{-rs, rs} {
+		for j := range steps {
+			// Both ends of the range exactly: aligned ports sit on them.
+			x := -half + 2*half*float64(j)/float64(max(steps-1, 1))
+			p, ok := hit(Pt{x, face}, Pt{x, 0})
+			if !ok {
+				continue
+			}
+			for _, q := range loopEnds {
+				if math.Hypot(p.X-q.X, p.Y-q.Y) < portGap {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+// loopBase is how far from the face's middle the innermost self-link's
+// ends sit: portGap apart from each other.
+const loopBase = portGap / 2
 
 // members of an end: the node, or the subgraph's members.
 func (l *layouter) members(e end) []int {
@@ -527,26 +602,60 @@ func (l *layouter) makeItems() error {
 			l.facePorts[k]++
 		}
 	}
-	// Self-links loop out of one side face, each nested outside the last,
-	// their ends portGap apart along the face.
-	loops := make([]int, len(l.nw))
+	// Self-links loop out of one side face, each nested outside the last:
+	// their ends at least portGap from the inner loop's, and beyond every
+	// inner loop's label, which sits level with the face's middle.
+	lastOff := make([]float64, len(l.nw))
+	labelHalf := make([]float64, len(l.nw))
 	for _, ch := range l.chains {
-		if ch.self {
-			loops[ch.from.node]++
-		}
-	}
-	for i, n := range loops {
-		if n == 0 {
+		if !ch.self {
 			continue
 		}
-		// On a face that slopes away (rhombus, circle, hexagon) the ends must
-		// stay as central as the ports of the other faces do, or the two
-		// meet on the shared slope.
-		need := 2 * (loopOffset(n-1) + 0.3) * portSpread / portSpreadOf(l.shapeOf(i))
+		n := ch.from.node
+		off := loopBase
+		if lastOff[n] > 0 {
+			off = math.Max(lastOff[n]+portGap, labelHalf[n]+0.3)
+		}
+		ch.loopOff, lastOff[n] = off, off
+		if ch.lw > 0 {
+			rs := ch.lh
+			if l.horiz {
+				rs = ch.lw
+			}
+			labelHalf[n] = math.Max(labelHalf[n], rs/2)
+		}
+	}
+	for i, off := range lastOff {
+		if off == 0 {
+			continue
+		}
+		// The ends must land on the part of the side face a straight run
+		// reaches: within 0.3 em of a flat face's ends; within the middle
+		// 0.4 of a slanted shape's side; within the middle 0.3 of a shape
+		// whose every edge is shared between faces.
+		need := 2 * (off + 0.3)
+		switch l.shapeOf(i) {
+		case mr.Rhombus, mr.Circle, mr.DoubleCircle:
+			need = 2 * off / 0.3
+		case mr.Hexagon, mr.Parallelogram, mr.ParallelogramAlt, mr.Trapezoid, mr.TrapezoidAlt, mr.Asymmetric:
+			need = 2 * off / 0.4
+		}
 		if l.horiz {
 			l.nw[i] = math.Max(l.nw[i], need)
 		} else {
 			l.nh[i] = math.Max(l.nh[i], need)
+		}
+		// On those shared edges a loop's end and a port of the face beside
+		// it are 0.15 of the diagonal apart at the least: grow until that
+		// is portGap.
+		switch l.shapeOf(i) {
+		case mr.Rhombus, mr.Circle, mr.DoubleCircle:
+			if l.facePorts[[3]int{0, i, 0}]+l.facePorts[[3]int{0, i, 1}] > 0 {
+				if d := math.Hypot(l.nw[i], l.nh[i]); 0.15*d < portGap {
+					f := portGap / (0.15 * d)
+					l.nw[i], l.nh[i] = l.nw[i]*f, l.nh[i]*f
+				}
+			}
 		}
 	}
 	for i := range l.nw {
@@ -561,6 +670,21 @@ func (l *layouter) makeItems() error {
 			l.nw[i] = math.Max(l.nw[i], need)
 		}
 	}
+	// Last, after every other growth: measure, on the node's real outline,
+	// the points links and loops
+	// attach at; grow the node until points of different faces are
+	// portGap apart. Shape-by-shape rules missed the shared slopes of a
+	// rhombus and the rounded ends of a stadium; measuring covers any shape.
+	for i, off := range lastOff {
+		if off == 0 {
+			continue
+		}
+		for try := 0; try < 30 && !l.attachmentsClear(i, off); try++ {
+			l.nw[i] *= 1.12
+			l.nh[i] *= 1.12
+		}
+	}
+
 	l.nodeItem = make([]*item, len(l.nw))
 	for i := range l.nw {
 		cross, rs := l.nw[i], l.nh[i]
@@ -645,6 +769,39 @@ func (l *layouter) makeItems() error {
 			}
 			if !has {
 				add(&item{kind: kHolder, cluster: ci, layer: k})
+			}
+		}
+	}
+	// Links crossing a frame's face to reach a member: each takes a column
+	// on that face that the frame's own ports must keep clear of.
+	l.faceThrough = map[[2]int]int{}
+	clusterOf := func(e end) int {
+		if e.cluster >= 0 {
+			return -2 // the frame itself: its port is counted in facePorts
+		}
+		return l.inClus[e.node]
+	}
+	for _, ch := range l.chains {
+		if ch.self {
+			continue
+		}
+		lowEnd, highEnd := ch.from, ch.to
+		if !ch.fromLow {
+			lowEnd, highEnd = ch.to, ch.from
+		}
+		cl := []int{clusterOf(lowEnd)}
+		for _, it := range ch.items {
+			cl = append(cl, it.cluster)
+		}
+		cl = append(cl, clusterOf(highEnd))
+		for i := 0; i+1 < len(cl); i++ {
+			layer := ch.lo + i
+			a, b := cl[i], cl[i+1]
+			if b >= 0 && a != b && layer+1 == l.clusters[b].r0 {
+				l.faceThrough[[2]int{b, 1}]++
+			}
+			if a >= 0 && a != b && layer == l.clusters[a].r1 {
+				l.faceThrough[[2]int{a, 0}]++
 			}
 		}
 	}

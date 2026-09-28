@@ -214,11 +214,18 @@ func (l *layouter) solve(cuts []cut) error {
 	}
 	for ci, c := range l.clusters {
 		minW := 2 * framePad
-		if k := l.facePorts[[3]int{1, ci, 0}]; k > 1 {
+		// A face holding ports must also leave room around the columns
+		// links to its members cross it in.
+		for side := range 2 {
+			k := l.facePorts[[3]int{1, ci, side}]
+			if k == 0 {
+				continue
+			}
+			through := l.faceThrough[[2]int{ci, side}]
 			minW = math.Max(minW, float64(k)*portGap/portSpread)
-		}
-		if k := l.facePorts[[3]int{1, ci, 1}]; k > 1 {
-			minW = math.Max(minW, float64(k)*portGap/portSpread)
+			// Each link through the face occupies its column there and the
+			// column it comes down in from the layer beyond.
+			minW = math.Max(minW, 2*framePad+float64(k+1)*portGap+float64(2*through)*2*trackSep)
 		}
 		if !l.horiz {
 			minW = math.Max(minW, c.titleW+2*framePad)

@@ -87,11 +87,11 @@ func onRectBorder(r Rect, p Pt) bool {
 // picture (the ends are still read from the heads; mermaid draws such
 // crossings too), but it is avoided where the order allows. The fixed cases
 // assert none happen; the random sweep counts them (frameCrossings non-nil).
-func checkLayout(t *testing.T, name string, f *mr.Flowchart, lay *Layout) {
-	checkLayoutCounting(t, name, f, lay, nil)
+func checkLayout(t *testing.T, name string, f *mr.Flowchart, lay *Layout, m measurer) {
+	checkLayoutCounting(t, name, f, lay, m, nil)
 }
 
-func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout, frameCrossings *int) {
+func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout, m measurer, frameCrossings *int) {
 	t.Helper()
 	fail := func(format string, a ...any) { t.Errorf("%s: %s", name, fmt.Sprintf(format, a...)) }
 	if len(lay.Nodes) != len(f.Nodes) || len(lay.Edges) != len(f.Links) || len(lay.Frames) != len(f.Subgraphs) {
@@ -114,6 +114,21 @@ func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout
 		for _, b := range lay.Nodes[i+1:] {
 			if a.Box.overlaps(b.Box) {
 				fail("nodes %s and %s overlap", a.ID, b.ID)
+			}
+		}
+	}
+	// A node's label fits inside its shape.
+	for _, n := range lay.Nodes {
+		tw, th, err := m(n.Label, false)
+		if err != nil {
+			continue
+		}
+		c := labelCenter(n)
+		poly := outline(n.Shape, n.Box, n.Slant)
+		for _, p := range []Pt{{c.X - tw/2, c.Y - th/2}, {c.X + tw/2, c.Y - th/2}, {c.X + tw/2, c.Y + th/2}, {c.X - tw/2, c.Y + th/2}} {
+			if !inPolygon(poly, p) && !onOutline(poly, p) {
+				fail("label %q sticks out of node %s at %v", n.Label, n.ID, p)
+				break
 			}
 		}
 	}
@@ -181,7 +196,7 @@ func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout
 				return onRectBorder(frame[ep.ID].Box, p)
 			}
 			n := box[ep.ID]
-			return onOutline(outline(n.Shape, n.Box), p)
+			return onOutline(outline(n.Shape, n.Box, n.Slant), p)
 		}
 		first, last := e.Points[0], e.Points[len(e.Points)-1]
 		if !endOK(lk.From, first) {
@@ -229,17 +244,83 @@ func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout
 			}
 		}
 	}
-	// Links meeting at a node arrive at distinct points (else their heads
-	// merge into one). A self-link's two ends are one link's.
+	// Links stay apart: two segments of different links either cross at a
+	// clear angle or keep 0.3 em between them; no link runs through
+	// another link's label.
+	type seg struct {
+		a, b Pt
+		link int
+	}
+	var segs []seg
+	for li, e := range lay.Edges {
+		for i := 0; i+1 < len(e.Points); i++ {
+			segs = append(segs, seg{e.Points[i], e.Points[i+1], li})
+		}
+	}
+	for i := range segs {
+		for j := i + 1; j < len(segs); j++ {
+			a, b := segs[i], segs[j]
+			if a.link == b.link {
+				continue
+			}
+			if _, ok := segT(a.a, a.b, b.a, b.b); ok {
+				if angleBetween(a, b) < 20 {
+					fail("links %d and %d cross at %.1f degrees", a.link, b.link, angleBetween(a, b))
+				}
+				continue
+			}
+			if d := segDist(a.a, a.b, b.a, b.b); d < 0.3 {
+				fail("links %d and %d run %.2f em apart", a.link, b.link, d)
+			}
+		}
+	}
+	for li, e := range lay.Edges {
+		if e.Label == "" {
+			continue
+		}
+		for _, sg := range segs {
+			if sg.link != li && segmentHitsRect(sg.a, sg.b, e.LabelBox, 1e-3) {
+				fail("link %d runs through the label %q", sg.link, e.Label)
+			}
+		}
+	}
+	// Links meeting at a node arrive at least portGap apart, wider than a
+	// head, so no two heads merge; a self-link's two ends count too.
 	for id, pts := range arrivals {
 		for i := range pts {
 			for j := i + 1; j < len(pts); j++ {
-				if math.Hypot(pts[i].X-pts[j].X, pts[i].Y-pts[j].Y) < 0.2 {
+				if math.Hypot(pts[i].X-pts[j].X, pts[i].Y-pts[j].Y) < portGap-0.05 {
 					fail("two link ends meet at the same point of %s: %v", id, pts[i])
 				}
 			}
 		}
 	}
+}
+
+func inPolygon(poly []Pt, p Pt) bool {
+	in := false
+	for i, j := 0, len(poly)-1; i < len(poly); j, i = i, i+1 {
+		a, b := poly[i], poly[j]
+		if (a.Y > p.Y) != (b.Y > p.Y) && p.X < (b.X-a.X)*(p.Y-a.Y)/(b.Y-a.Y)+a.X {
+			in = !in
+		}
+	}
+	return in
+}
+
+func segDist(a, b, c, d Pt) float64 {
+	return math.Min(math.Min(distToSeg(a, c, d), distToSeg(b, c, d)), math.Min(distToSeg(c, a, b), distToSeg(d, a, b)))
+}
+
+// angleBetween is the acute angle between two segments, in degrees.
+func angleBetween(a, b struct {
+	a, b Pt
+	link int
+}) float64 {
+	ang := func(p, q Pt) float64 { return math.Atan2(q.Y-p.Y, q.X-p.X) }
+	d := math.Abs(ang(a.a, a.b)-ang(b.a, b.b)) * 180 / math.Pi
+	d = math.Mod(d, 180)
+	return math.Min(d, 180-d)
 }
 
 func nodeSubgraph(f *mr.Flowchart, id string) string {
@@ -333,7 +414,7 @@ func TestLayoutProperties(t *testing.T) {
 		for _, dir := range []string{"TD", "BT", "LR", "RL"} {
 			src := strings.Replace(src, strings.Fields(src)[1], dir, 1)
 			f, lay := layoutOf(t, src, fakeMeasure)
-			checkLayout(t, name+" "+dir, f, lay)
+			checkLayout(t, name+" "+dir, f, lay, fakeMeasure)
 		}
 	}
 }
@@ -358,7 +439,7 @@ func TestLayoutRealBlocks(t *testing.T) {
 			t.Errorf("%s: %v", file, err)
 			continue
 		}
-		checkLayout(t, filepath.Base(file), f, lay)
+		checkLayout(t, filepath.Base(file), f, lay, fn.measureEm)
 		n++
 	}
 	if n != 22 {
@@ -493,7 +574,7 @@ func TestLayoutRandom(t *testing.T) {
 			t.Fatalf("seed %d: %v\n%s", seed, err, src)
 		}
 		before := t.Failed()
-		checkLayoutCounting(t, fmt.Sprintf("seed %d", seed), f, lay, &crossed)
+		checkLayoutCounting(t, fmt.Sprintf("seed %d", seed), f, lay, fakeMeasure, &crossed)
 		if t.Failed() && !before {
 			t.Logf("source of seed %d:\n%s", seed, src)
 		}
@@ -514,10 +595,16 @@ func TestLayoutRandom(t *testing.T) {
 // whose link had to cross a frame.
 func TestLayoutRegressions(t *testing.T) {
 	dirs := []string{"TD", "BT", "LR", "RL"}
-	for _, seed := range []int64{10454, 11589, 10330, 11191, 1226, 14882, 12, 1138} {
+	// Step-2 review round: 342 a frame port beside a member's column; 11,
+	// 195, 299 two links swapping near-equal columns (the detour); 10439 a
+	// track inside a frame stretched for its title; 404, 456, 686 a frame
+	// face too narrow for its ports and through-columns; 691 loop ends on a
+	// stadium's rounded end; 785 a port range end missed by the sampling.
+	for _, seed := range []int64{10454, 11589, 10330, 11191, 1226, 14882, 12, 1138,
+		342, 11, 195, 299, 10439, 404, 456, 686, 691, 785} {
 		src := randomFlowchart(seed, dirs[seed%4])
 		f, lay := layoutOf(t, src, fakeMeasure)
-		checkLayout(t, fmt.Sprintf("seed %d", seed), f, lay)
+		checkLayout(t, fmt.Sprintf("seed %d", seed), f, lay, fakeMeasure)
 	}
 }
 
@@ -526,11 +613,11 @@ func TestLayoutRegressions(t *testing.T) {
 func TestClipAtFallsBackToTheCentre(t *testing.T) {
 	r := Rect{0, 0, 6, 2}
 	outside, inside := Pt{5.9, 5}, Pt{5.9, 1} // below the slanted right end
-	p := clipAt(mr.Parallelogram, r, outside, inside)
-	if !onOutline(outline(mr.Parallelogram, r), p) {
+	p := clipAt(mr.Parallelogram, r, 1, outside, inside)
+	if !onOutline(outline(mr.Parallelogram, r, 1), p) {
 		t.Errorf("clipAt = %v, not on the outline", p)
 	}
-	if _, ok := firstHit(outline(mr.Parallelogram, r), outside, inside); ok {
+	if _, ok := firstHit(outline(mr.Parallelogram, r, 1), outside, inside); ok {
 		t.Fatal("the case no longer needs the fallback; pick another")
 	}
 }
