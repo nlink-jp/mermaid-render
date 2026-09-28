@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
-	"os"
 	"strings"
 	"sync"
 	"unicode"
@@ -55,9 +54,9 @@ func DefaultFont() (*Font, error) {
 }
 
 func loadFace(path string, index int) (*face, error) {
-	b, err := os.ReadFile(path)
+	b, err := readFont(path)
 	if err != nil {
-		return nil, fmt.Errorf("font %s: %w", path, err)
+		return nil, err
 	}
 	c, err := opentype.ParseCollection(b)
 	if err != nil {

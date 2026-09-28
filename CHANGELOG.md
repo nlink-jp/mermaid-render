@@ -13,6 +13,7 @@ to [Semantic Versioning](https://semver.org/).
   that breaks one is a `LayoutFault` error, so the caller shows the source
   rather than a wrong picture (gem-agent ADR-0092 §5). Tens of milliseconds
   at the limits.
+- Font files are read only if regular and at most `MaxFontBytes` (256 MiB).
 - `Parse` for `flowchart` / `graph` (mermaid 12.0.0): directions, the 14
   classic shapes, quoted text, entity codes and `<br>`, solid / thick / dotted
   links with their heads and lengths (flowDb.destructEndLink's rules), link

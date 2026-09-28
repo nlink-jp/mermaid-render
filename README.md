@@ -88,7 +88,8 @@ name, since a collection's faces can fail one by one. Characters the chosen
 faces lack are drawn with Hiragino Sans, one by one; a character no face has
 (an emoji, say) is an error, never a gap; a glyph that leaves no ink (Apple
 Color Emoji's bitmaps, which x/image cannot draw) counts as missing, except
-for spaces. Variation selectors, ZWJ, ZWNJ and ZWSP are skipped, and so is any
+for spaces. A font file is read only if it is a regular file of at most
+`MaxFontBytes` (256 MiB; the largest system font is 183 MiB). Variation selectors, ZWJ, ZWNJ and ZWSP are skipped, and so is any
 format or default-ignorable character (LRM, word joiner) no face draws. One
 Font may serve renders on several goroutines; they take turns. `mmdpng -font path -font-name name` tries a face.
 

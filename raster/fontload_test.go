@@ -341,3 +341,32 @@ func TestFontSharedAcrossGoroutines(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// A font path is read only if it is a regular file within MaxFontBytes:
+// a device or a directory would otherwise be read until memory ran out.
+func TestFontReadsAreBounded(t *testing.T) {
+	dir := t.TempDir()
+	big := filepath.Join(dir, "big.ttf")
+	f, err := os.Create(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sparse: the size is what is refused, before a byte is read.
+	if err := f.Truncate(MaxFontBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	for path, want := range map[string]string{
+		"/dev/zero": "not a regular file",
+		dir:         "not a regular file",
+		big:         "limit",
+	} {
+		_, err := LoadFont(FontSpec{Path: path})
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want an error naming %q", path, err, want)
+		}
+		if _, err := LoadFont(FontSpec{Path: hiraginoW3, BoldPath: path}); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("bold %s: %v, want an error naming %q", path, err, want)
+		}
+	}
+}

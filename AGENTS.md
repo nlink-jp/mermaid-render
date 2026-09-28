@@ -140,6 +140,10 @@ mermaid-render/
 - **A mutant that does not compile proves nothing**: when checking a
   property by breaking the code, make sure the broken copy builds (an
   unused variable once passed for "not caught").
+- **A mutant that kills the test binary is caught**, not "not caught": a
+  mutation script that looks only for `_test.go:` lines misreads a test
+  killed for memory (an unbounded font read of /dev/zero) as surviving.
+  Read the exit status too.
 - **The render-time check must stay cheap**: pairs of segments are swept by
   x, and `segmentHitsRect` rejects by bounding box first; comparing every
   pair took half a second at the limits (`TestVerifyCost`, which catches

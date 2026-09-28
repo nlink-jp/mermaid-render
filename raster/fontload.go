@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"unicode/utf16"
@@ -61,9 +62,9 @@ func LoadFont(spec FontSpec) (*Font, error) {
 // Errors name the face, not only the file: in a collection one face may be
 // readable and the next not.
 func openFace(path, name string) (*face, error) {
-	b, err := os.ReadFile(path)
+	b, err := readFont(path)
 	if err != nil {
-		return nil, fmt.Errorf("font %s: %w", path, err)
+		return nil, err
 	}
 	offsets, err := faceOffsets(b)
 	if err != nil {
@@ -255,3 +256,38 @@ func macRoman(b []byte) string {
 
 var macRomanHigh = []rune("ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø" +
 	"¿¡¬√ƒ≈∆«»…\u00A0ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›\uFB01\uFB02‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ\uF8FFÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ")
+
+// MaxFontBytes bounds a font file: the largest font this system ships
+// (Apple Color Emoji, 183 MiB) with room to spare. A path is the
+// caller's to choose, and without a bound a device or a growing file
+// would be read until memory ran out.
+const MaxFontBytes = 256 << 20
+
+// readFont reads a regular file of at most MaxFontBytes.
+func readFont(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("font %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("font %s: %w", path, err)
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("font %s: not a regular file", path)
+	}
+	if st.Size() > MaxFontBytes {
+		return nil, fmt.Errorf("font %s: %d bytes (limit %d)", path, st.Size(), MaxFontBytes)
+	}
+	// The size was read before the bytes; a file that grew since stops at
+	// the bound all the same.
+	b, err := io.ReadAll(io.LimitReader(f, MaxFontBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("font %s: %w", path, err)
+	}
+	if len(b) > MaxFontBytes {
+		return nil, fmt.Errorf("font %s: over %d bytes", path, MaxFontBytes)
+	}
+	return b, nil
+}
