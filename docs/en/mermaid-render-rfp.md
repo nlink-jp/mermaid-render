@@ -484,6 +484,30 @@ same way as pathguard.
     (ratio 1.86) would come out about 17% squashed vertically. Step 0 did not check this (the
     samples were diagrams, not photos, and set A was only judged unreadable), so it is recorded as
     something for gem-agent / lagent to confirm.
+- **What step 2 (layout and drawing) found (2026-09-28)**:
+  - Layout property tests (everything placed, no overlaps, link ends on outlines, no link through a
+    node other than its ends, link ends meeting a node at least 0.8 em apart) ran on 11 synthetic
+    cases in four directions, the 22 real flowcharts and seeded random flowcharts. 20,000 random
+    seeds found defects 400 did not. Each class was traced to its cause and fixed, and the seeds that
+    exposed them were pinned as regression cases.
+    - Ranking subgraph members directly let a cycle through subgraphs make one frame straddle
+      another (the documentation's own subgraph example did). → Ranks are two-level: inside each
+      subgraph, then subgraphs as blocks.
+    - When no reordering sweep ran, subgraphs had no left-to-right order and frames overlapped.
+    - Links gathering on one face ended as close as 0.15 em, arrowheads indistinguishable; the same
+      for self-link ends. → Nodes grow when a face is short; slanted shapes keep ends in the middle
+      0.4 of a face.
+    - A self-link's label was not counted in its layer's size and overlapped a label next door.
+    - A link crossed a frame's title area in the layer just above or below it (one real diagram).
+  - **A link crossing an unrelated subgraph's frame is classed as ugly, not wrong (a developer's
+    judgement, pending the operator's confirmation).** The heads still say which nodes a link joins,
+    and mermaid itself draws such crossings. Ordering weighs them heavily so avoidable ones are
+    avoided; the synthetic and real cases must have none; in the 20,000-seed sweep 16 segments
+    remain and are counted.
+  - **Limits measured**: rendering takes 1-9 ms on the real diagrams, PNG encoding 4-49 ms. A dense
+    diagram of 150 nodes, 300 links and six subgraphs is 3725×1634 at scale 1 (233 ms, PNG 1,856 KB,
+    0.30 bytes per pixel). → An image is capped at 6 Mpx so that any PNG stays under termimg's 2 MiB.
+    300 nodes and 600 links hit the dummy-item cap (20,000) and are refused at once.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

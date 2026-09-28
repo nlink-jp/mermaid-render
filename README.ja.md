@@ -29,11 +29,18 @@ if errors.As(err, &e) {
 	// 1 始まりの行番号。どの種類でも「ソースを表示する」を意味する。
 }
 f := d.(*mermaidrender.Flowchart) // Nodes, Links, Subgraphs, Direction
+
+font, err := raster.DefaultFont() // 一度読んで使い回す
+img, err := raster.Render(d, raster.Options{Font: font}) // *image.RGBA。Scale 0 は 2
+img, err = raster.RenderSource(src, raster.Options{Font: font})
 ```
 
 構文の読み取りは mermaid 12.0.0 のドキュメントに従う。ドキュメントが決めていない細部
 （ID に使える文字、線の記号の読み方、subgraph の所属）は、同じ版の mermaid 自身の
-パーサに従う。画像にする側（`raster`）はまだ書いていない。
+パーサに従う。`raster` は flowchart を段に分けて配置し、白地のカードに描く。PNG への変換と
+端末での枠の大きさは呼び出し側が決める。描画が止まらないよう、ノード 300・線 600・1 枚
+600 万画素を上限とする（密な図でも PNG が 2MiB 未満に収まる）。超えたときは、どのフォントにも
+無い文字と同じく `UnsupportedConstruct` のエラーになる。
 
 ## 依存
 

@@ -30,7 +30,14 @@ mermaid-render/
 ├── flowparse.go      # the flowchart parser (flow.jison / flowDb.ts rules noted inline)
 ├── label.go          # label text: quotes, entity codes, <br>, HTML refused
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
-├── raster/           # Render, RenderSource, LoadFont, DefaultFont (phase 1)
+├── raster/
+│   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, MissingGlyphError
+│   ├── layout.go     # layered layout: chains, two-level ranks, items, ordering
+│   ├── coords.go     # cross-axis coordinates: difference constraints + descent
+│   ├── place.go      # rank positions, frames, ports, routing, direction transform
+│   ├── geom.go       # shape outlines, clipping, segment tests
+│   ├── draw.go       # rasterizing shapes, links, heads, frames
+│   └── render.go     # Options, Render, RenderSource, MaxPixels
 ├── tools/mmdpng/     # development CLI: mermaid file -> PNG
 ├── Makefile
 └── docs/{en,ja}/     # RFP
@@ -42,6 +49,16 @@ mermaid-render/
   frozen. `go test -run TestRealBlocks -update` rewrites them; read every
   changed file against its `.mmd` before committing, or the golden only
   proves the code agrees with itself.
+- **Layout properties are the correctness gate** (they replace the text-art
+  faithfulness checks of gem-agent ADR-0042). `checkLayout` in
+  `raster/layout_test.go` is the list; run `go test ./raster/ -random 20000`
+  after any layout change — 20000 seeds found defects 400 did not. Pin a seed
+  that exposed a defect in `TestLayoutRegressions`.
+- **A link crossing a foreign subgraph frame is counted, not failed**, in the
+  random sweep (see the RFP's Discussion Log); fixed cases still assert none.
+- **Ranks are two-level**: a subgraph is ranked inside, then placed as one
+  block. Ranking members directly let a cycle through subgraphs make one
+  frame straddle another (the mermaid docs' own example did).
 - **Link tokens follow flowDb.destructEndLink**: a start mark counts only when
   the end mark is the same kind; `A---oB` has length 2.
 - **Font names**: `sfnt.Name` returns the first name record whatever its

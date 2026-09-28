@@ -30,12 +30,19 @@ if errors.As(err, &e) {
 	// is 1-based in src. Every kind means: show the source instead.
 }
 f := d.(*mermaidrender.Flowchart) // Nodes, Links, Subgraphs, Direction
+
+font, err := raster.DefaultFont() // load once, reuse
+img, err := raster.Render(d, raster.Options{Font: font}) // *image.RGBA; Scale 0 = 2
+img, err = raster.RenderSource(src, raster.Options{Font: font})
 ```
 
 Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 (which characters an id may hold, how link symbols are read, subgraph
-membership) follow that version's own parser. The image side (`raster`) is
-not written yet.
+membership) follow that version's own parser. `raster` draws flowcharts on a
+white card with a layered layout; the caller encodes the PNG and chooses the
+terminal box. Limits keep a render bounded: 300 nodes, 600 links, 6 Mpx per
+image (a dense diagram's PNG then stays under 2 MiB); beyond them the result
+is an `UnsupportedConstruct` error, like a label character no font can draw.
 
 ## Dependencies
 
