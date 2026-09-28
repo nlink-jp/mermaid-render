@@ -561,6 +561,8 @@ same way as pathguard.
     one link of a fan alone was not met at its middle because nothing moved the link when the box
     could not move (a last pass moves its bend points there; changing the tie rule instead raised
     bends from 106 to 134 and was dropped).
+    Round 4 (2026-09-28): all 22 marked ○ on all four items, no notes. This closes the flowchart
+    check.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
