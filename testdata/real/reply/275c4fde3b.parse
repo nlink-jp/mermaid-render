@@ -1,0 +1,15 @@
+dir LR
+node DNS rect "DoH & Passive DNS" in Passive_Sources
+node RDAP rect "WHOIS / RDAP" in Passive_Sources
+node BGP rect "BGP / ASN Routeview" in Passive_Sources
+node CT rect "Cert Transparency Logs" in Passive_Sources
+node Aggregator rect "Indicator Aggregator" in Analysis_Engine
+node Scorer rect "Confidence Scoring" in Analysis_Engine
+node Markdown rect "Markdown Summary" in Output_Layer
+node STIX rect "STIX 2.1 Bundle" in Output_Layer
+link sg:Passive_Sources -> Aggregator solid none/arrow len=1
+link Aggregator -> Scorer solid none/arrow len=1
+link Scorer -> sg:Output_Layer solid none/arrow len=1
+subgraph Passive_Sources "Passive Investigation Layer" [DNS RDAP BGP CT]
+subgraph Analysis_Engine "Correlation Engine" [Aggregator Scorer]
+subgraph Output_Layer "Reporting Layer" [Markdown STIX]

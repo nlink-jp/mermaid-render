@@ -1,0 +1,11 @@
+dir TB
+node IN rect "Target Artifact"
+node P1 rect "Passive Recon: DNS and WHOIS"
+node P2 rect "Passive Recon: ASN and BGP"
+node AN rect "Correlation and Threat Intel"
+node OUT rect "Attribution Report"
+link IN -> P1 solid none/arrow len=1
+link IN -> P2 solid none/arrow len=1
+link P1 -> AN solid none/arrow len=1
+link P2 -> AN solid none/arrow len=1
+link AN -> OUT solid none/arrow len=1

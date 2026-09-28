@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant User as User
+    participant Client as Web App
+    participant API as API Server
+    participant DB as Database
+
+    User->>Client: Click Login
+    Client->>API: POST /api/login
+    API->>DB: Query User Record
+    DB-->>API: Return User Data
+    API-->>Client: 200 OK (JWT Token)
+    Client-->>User: Show Dashboard

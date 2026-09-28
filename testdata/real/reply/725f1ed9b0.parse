@@ -1,0 +1,20 @@
+dir TB
+node Start stadium "開始"
+node Input parallelogram "ユーザー入力"
+node Process rect "リクエスト検証" in Core
+node Auth rhombus "認証チェック" in Core
+node DB cylinder "データベース照会" in Core
+node Err rect "エラー生成" in Core
+node Calc rect "データ加工" in Core
+node Response parallelogram "レスポンス返却"
+node Finish stadium "終了"
+link Start -> Input solid none/arrow len=1
+link Input -> Process solid none/arrow len=1
+link Process -> Auth solid none/arrow len=1
+link Auth -> DB solid none/arrow len=1 "成功"
+link Auth -> Err solid none/arrow len=1 "失敗"
+link DB -> Calc solid none/arrow len=1
+link Calc -> Response solid none/arrow len=1
+link Err -> Response solid none/arrow len=1
+link Response -> Finish solid none/arrow len=1
+subgraph Core "バックエンド処理" [Process Auth DB Err Calc]

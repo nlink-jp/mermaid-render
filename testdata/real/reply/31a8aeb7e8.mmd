@@ -1,0 +1,18 @@
+stateDiagram-v2
+    [*] --> Triage
+    Triage --> PassiveInvestigation: Valid Indicator
+    Triage --> Closed: False Positive / Out of Scope
+    
+    state PassiveInvestigation {
+        [*] --> DataCollection
+        DataCollection --> Pivoting
+        Pivoting --> Correlation
+        Correlation --> [*]
+    }
+    
+    PassiveInvestigation --> ReportDrafting: Evidence Collected
+    ReportDrafting --> Review
+    Review --> Published: Approved
+    Review --> PassiveInvestigation: Need More Evidence
+    Published --> [*]
+    Closed --> [*]

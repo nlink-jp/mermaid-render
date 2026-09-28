@@ -1,0 +1,13 @@
+sequenceDiagram
+    autonumber
+    actor Analyst
+    participant Agent as AI Agent
+    participant MCP as MCP Tools
+    participant TI as Threat Intel DB
+
+    Analyst->>Agent: Request IP attribution
+    Agent->>MCP: Call lookup_ip & check_ip
+    MCP->>TI: Query Passive Cache & Reputation
+    TI-->>MCP: Return ASN, Abuse Score, Geo
+    MCP-->>Agent: Formatted JSON Result
+    Agent->>Analyst: Present Report & Attribution Verdict

@@ -1,0 +1,14 @@
+flowchart TD
+    subgraph Client [Client Side]
+        A[User Request] --> B[Browser Cache]
+    end
+
+    subgraph Server [Backend System]
+        B -->|Cache Miss| C[API Gateway]
+        C --> D[Auth Service]
+        D -->|Authorized| E[App Service]
+        E --> F[Database]
+    end
+
+    B -->|Cache Hit| G[Render View]
+    E -->|Response Data| G

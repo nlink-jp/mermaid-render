@@ -1,0 +1,16 @@
+dir TB
+node Start stadium "開始"
+node Fetch rect "データ取得"
+node Check rhombus "データ判定"
+node Process rect "データ処理"
+node Error rect "エラー処理"
+node Output rect "結果出力"
+node Done stadium "完了"
+node End stadium "異常終了"
+link Start -> Fetch solid none/arrow len=1
+link Fetch -> Check solid none/arrow len=1
+link Check -> Process solid none/arrow len=1 "OK"
+link Check -> Error solid none/arrow len=1 "異常あり"
+link Process -> Output solid none/arrow len=1
+link Output -> Done solid none/arrow len=1
+link Error -> End solid none/arrow len=1

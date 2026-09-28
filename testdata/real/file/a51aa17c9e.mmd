@@ -1,0 +1,14 @@
+gitGraph
+    commit id: "Initial commit"
+    commit id: "Set up project"
+    branch develop
+    checkout develop
+    commit id: "Add router"
+    branch feature/auth
+    checkout feature/auth
+    commit id: "Implement login"
+    commit id: "Add JWT verify"
+    checkout develop
+    merge feature/auth id: "Merge auth"
+    checkout main
+    merge develop id: "Release v1.0.0" tag: "v1.0.0"

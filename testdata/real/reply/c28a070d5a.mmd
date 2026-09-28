@@ -1,0 +1,14 @@
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant Agent as AI Agent
+    participant MCP as MCP Tools
+    participant API as External Service
+
+    User->>Agent: Request IP attribution
+    Agent->>MCP: Query ASN & Reputation
+    MCP->>API: Fetch Whois / OTX / AbuseIPDB
+    API-->>MCP: Return threat indicators
+    MCP-->>Agent: Formatted intelligence data
+    Agent->>Agent: Correlate & Assess confidence
+    Agent-->>User: Present investigation report

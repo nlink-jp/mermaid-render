@@ -1,0 +1,33 @@
+dir TB
+node Start stadium "調査開始: 対象の入力"
+node CheckType rhombus "入力タイプの判定"
+node DomainFlow rect "ドメイン帰属調査 SOP" in ドメイン調査
+node IPFlow rect "IPアドレス帰属調査 SOP" in IP調査
+node D1 rect "WHOIS / RDAP 照会" in ドメイン調査
+node D2 rect "DoH / DNS レコード解決" in ドメイン調査
+node D3 rect "サブドメイン / CNAME 探索" in ドメイン調査
+node I1 rect "ASN / GeoIP / WHOIS" in IP調査
+node I2 rect "Tor / iCloud Relay / VPN判定" in IP調査
+node I3 rect "rDNS / 逆引き照会" in IP調査
+node ThreatIntel rect "脅威インテリジェンス照合 / urlscan"
+node Correlate rect "ピボット & 相関分析"
+node Report stadium "レポート作成 & 確度評価"
+link Start -> CheckType solid none/arrow len=1
+link CheckType -> DomainFlow solid none/arrow len=1 "ドメイン名 / FQDN"
+link CheckType -> IPFlow solid none/arrow len=1 "IPv4 / IPv6"
+link DomainFlow -> D1 solid none/arrow len=1
+link DomainFlow -> D2 solid none/arrow len=1
+link DomainFlow -> D3 solid none/arrow len=1
+link IPFlow -> I1 solid none/arrow len=1
+link IPFlow -> I2 solid none/arrow len=1
+link IPFlow -> I3 solid none/arrow len=1
+link D1 -> ThreatIntel solid none/arrow len=1
+link D2 -> ThreatIntel solid none/arrow len=1
+link D3 -> ThreatIntel solid none/arrow len=1
+link I1 -> ThreatIntel solid none/arrow len=1
+link I2 -> ThreatIntel solid none/arrow len=1
+link I3 -> ThreatIntel solid none/arrow len=1
+link ThreatIntel -> Correlate solid none/arrow len=1
+link Correlate -> Report solid none/arrow len=1
+subgraph ドメイン調査 "ドメイン調査" [DomainFlow D1 D2 D3]
+subgraph IP調査 "IP調査" [IPFlow I1 I2 I3]

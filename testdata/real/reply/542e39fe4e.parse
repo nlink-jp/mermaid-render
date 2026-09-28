@@ -1,0 +1,29 @@
+dir TB
+node Start stadium "調査開始 / Indicator Input"
+node CheckType rhombus "種別判定"
+node StepDomain rect "ドメイン帰属調査 SOP" in DomainFlow
+node StepIP rect "IPアドレス帰属調査 SOP" in IPFlow
+node D1 rect "WHOIS / RDAP 照会" in DomainFlow
+node D2 rect "DoH DNSレコード解決" in DomainFlow
+node D3 rect "サブドメイン・CNAME探索" in DomainFlow
+node I1 rect "ASN / GeoIP 特定" in IPFlow
+node I2 rect "Tor / iCloud Relay 判定" in IPFlow
+node I3 rect "Abuse レピュテーション照会" in IPFlow
+node Correlate rect "相関分析 & ピボット"
+node Report rect "インシデント・帰属レポート出力"
+node End stadium "完了"
+link Start -> CheckType solid none/arrow len=1
+link CheckType -> StepDomain solid none/arrow len=1 "Domain / FQDN"
+link CheckType -> StepIP solid none/arrow len=1 "IP Address"
+link StepDomain -> D1 solid none/arrow len=1
+link D1 -> D2 solid none/arrow len=1
+link D2 -> D3 solid none/arrow len=1
+link StepIP -> I1 solid none/arrow len=1
+link I1 -> I2 solid none/arrow len=1
+link I2 -> I3 solid none/arrow len=1
+link sg:DomainFlow -> Correlate solid none/arrow len=1
+link sg:IPFlow -> Correlate solid none/arrow len=1
+link Correlate -> Report solid none/arrow len=1
+link Report -> End solid none/arrow len=1
+subgraph DomainFlow "ドメイン調査" [StepDomain D1 D2 D3]
+subgraph IPFlow "IP調査" [StepIP I1 I2 I3]

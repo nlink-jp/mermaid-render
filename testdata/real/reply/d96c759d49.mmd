@@ -1,0 +1,20 @@
+flowchart TD
+    Start([Investigation Target]) --> CheckType{Target Type?}
+    
+    subgraph Domain_Flow[Domain Attribution]
+        CheckType -->|Domain / FQDN| D1[WHOIS / RDAP Lookup]
+        D1 --> D2[DNS / DoH Resolution]
+        D2 --> D3[Subdomain / CNAME Search]
+        D3 --> D4[CT Logs & Web History]
+    end
+
+    subgraph IP_Flow[IP Attribution]
+        CheckType -->|IP / CIDR| I1[ASN & GeoIP Lookup]
+        I1 --> I2[Tor / Relay Check]
+        I2 --> I3[Reverse DNS / PTR]
+        I3 --> I4[Abuse & Reputation Check]
+    end
+
+    D4 --> ThreatIntel[Threat Intelligence & Correlation]
+    I4 --> ThreatIntel
+    ThreatIntel --> Report[Generate Report]

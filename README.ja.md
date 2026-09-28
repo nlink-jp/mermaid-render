@@ -19,6 +19,22 @@ kitty の画像方式に対応した端末で、トランスクリプトの merm
 定める（基準は mermaid の公式ドキュメント）。`stateDiagram` と入れ子の subgraph は
 第 2 段階。それ以外の種類は「図の種類が未対応」として返す。
 
+## API
+
+```go
+d, err := mermaidrender.Parse(src) // src: フェンスの中身
+var e *mermaidrender.Error
+if errors.As(err, &e) {
+	// e.Kind: SyntaxError・UnsupportedType・UnsupportedConstruct。e.Line は src の
+	// 1 始まりの行番号。どの種類でも「ソースを表示する」を意味する。
+}
+f := d.(*mermaidrender.Flowchart) // Nodes, Links, Subgraphs, Direction
+```
+
+構文の読み取りは mermaid 12.0.0 のドキュメントに従う。ドキュメントが決めていない細部
+（ID に使える文字、線の記号の読み方、subgraph の所属）は、同じ版の mermaid 自身の
+パーサに従う。画像にする側（`raster`）はまだ書いていない。
+
 ## 依存
 
 `golang.org/x/image`（フォントの読み込み・文字の描画・図形の塗り）。Go チームが保守

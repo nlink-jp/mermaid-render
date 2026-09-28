@@ -1,0 +1,34 @@
+erDiagram
+    INCIDENT ||--o{ INDICATOR : contains
+    INCIDENT ||--o{ ACTOR : attributed_to
+    INDICATOR ||--o{ ASN : belongs_to
+    INDICATOR ||--o{ DNS_RECORD : resolves_to
+    INDICATOR ||--o{ SCAN_RESULT : observed_in
+
+    INCIDENT {
+        string incident_id PK
+        string title
+        string severity
+        string status
+        date detected_at
+    }
+
+    INDICATOR {
+        string indicator_id PK
+        string type
+        string value
+        float confidence
+    }
+
+    ACTOR {
+        string actor_id PK
+        string name
+        string country
+        string motivation
+    }
+
+    ASN {
+        int asn_number PK
+        string org_name
+        string country_code
+    }

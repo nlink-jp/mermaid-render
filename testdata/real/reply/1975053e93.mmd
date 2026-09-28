@@ -1,0 +1,15 @@
+flowchart TD
+    A[調査対象の入力] --> B{入力タイプの判定}
+    B -- ドメイン名 --> C[WHOIS / RDAP 照会]
+    B -- IPアドレス --> D[ASN / GeoIP 照会]
+    
+    C --> E[DoH DNSレコード解決]
+    D --> F[Tor / iCloud Relay 判定]
+    
+    E --> G[Passive DNS / CTログ照会]
+    F --> H[AbuseIPDB / レピュテーション確認]
+    
+    G --> I[脅威インテリジェンス照合]
+    H --> I
+    
+    I --> J[調査レポート作成]

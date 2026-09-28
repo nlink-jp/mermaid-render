@@ -1,0 +1,15 @@
+dir TB
+node Start rect "Investigation Target"
+node CheckType rhombus "Target Type?"
+node DnsLookup rect "DNS Lookup"
+node DomainWhois rect "Domain WHOIS / RDAP"
+node Report rect "Report"
+node IpGeo rect "IP Geolocation & ASN"
+node IpWhois rect "IP WHOIS / Reverse DNS"
+link Start -> CheckType solid none/arrow len=1
+link CheckType -> DnsLookup solid none/arrow len=1 "Domain / FQDN"
+link DnsLookup -> DomainWhois solid none/arrow len=1
+link DomainWhois -> Report solid none/arrow len=1
+link CheckType -> IpGeo solid none/arrow len=1 "IP / CIDR"
+link IpGeo -> IpWhois solid none/arrow len=1
+link IpWhois -> Report solid none/arrow len=1

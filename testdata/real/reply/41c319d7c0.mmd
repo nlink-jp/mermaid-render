@@ -1,0 +1,11 @@
+erDiagram
+    INDICATOR {
+        string value PK
+        string type
+        datetime first_seen
+    }
+    ATTRIBUTION {
+        string id PK
+        string confidence
+    }
+    INDICATOR ||--o{ ATTRIBUTION : identifies

@@ -1,0 +1,20 @@
+dir LR
+node IN rect "Target Artifact" in Input_Layer
+node DNS rect "DoH and rDNS" in Passive_Recon
+node WHOIS rect "RDAP and Registry" in Passive_Recon
+node ASN rect "BGP and ASN DB" in Passive_Recon
+node OTX rect "Pulse Intel" in Analysis_Layer
+node ABUSE rect "Reputation Check" in Analysis_Layer
+node REPORT rect "Attribution Report" in Output_Layer
+link IN -> DNS solid none/arrow len=1
+link IN -> WHOIS solid none/arrow len=1
+link IN -> ASN solid none/arrow len=1
+link DNS -> OTX solid none/arrow len=1
+link WHOIS -> OTX solid none/arrow len=1
+link ASN -> ABUSE solid none/arrow len=1
+link OTX -> REPORT solid none/arrow len=1
+link ABUSE -> REPORT solid none/arrow len=1
+subgraph Input_Layer "Input_Layer" [IN]
+subgraph Passive_Recon "Passive_Recon" [DNS WHOIS ASN]
+subgraph Analysis_Layer "Analysis_Layer" [OTX ABUSE]
+subgraph Output_Layer "Output_Layer" [REPORT]

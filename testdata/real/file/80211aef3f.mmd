@@ -1,0 +1,30 @@
+erDiagram
+    USERS ||--o{ ORDERS : places
+    USERS {
+        int id PK
+        string username
+        string email
+        datetime created_at
+    }
+    ORDERS ||--|{ ORDER_ITEMS : contains
+    ORDERS {
+        int id PK
+        int user_id FK
+        datetime order_date
+        string status
+        decimal total_price
+    }
+    PRODUCTS ||--o{ ORDER_ITEMS : ordered_in
+    PRODUCTS {
+        int id PK
+        string name
+        decimal price
+        int stock_quantity
+    }
+    ORDER_ITEMS {
+        int id PK
+        int order_id FK
+        int product_id FK
+        int quantity
+        decimal unit_price
+    }

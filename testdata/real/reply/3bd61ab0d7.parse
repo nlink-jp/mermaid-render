@@ -1,0 +1,17 @@
+dir TB
+node A rect "User Request" in Client
+node B rect "Browser Cache" in Client
+node C rect "API Gateway" in Server
+node D rect "Auth Service" in Server
+node E rect "App Service" in Server
+node F rect "Database" in Server
+node G rect "Render View"
+link A -> B solid none/arrow len=1
+link B -> C solid none/arrow len=1 "Cache Miss"
+link C -> D solid none/arrow len=1
+link D -> E solid none/arrow len=1 "Authorized"
+link E -> F solid none/arrow len=1
+link B -> G solid none/arrow len=1 "Cache Hit"
+link E -> G solid none/arrow len=1 "Response Data"
+subgraph Client "Client Side" [A B]
+subgraph Server "Backend System" [C D E F]

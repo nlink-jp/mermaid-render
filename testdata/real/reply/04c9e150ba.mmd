@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    actor Analyst
+    participant Agent as Investigation Agent
+    participant MCP as MCP Tools
+    participant TI as Threat Intel & DNS
+
+    Analyst->>Agent: Request IP attribution (e.g. 192.0.2.1)
+    Agent->>MCP: lookup_ip (ASN / GeoIP)
+    MCP->>TI: Query IPinfo Lite DB
+    TI-->>MCP: ASN & Organization details
+    MCP-->>Agent: Return IP metadata
+
+    Agent->>MCP: check_ip (Abuse & Tor check)
+    MCP->>TI: Query AbuseIPDB / Tor node list
+    TI-->>MCP: Reputation & Exit status
+    MCP-->>Agent: Return Reputation score
+
+    Agent->>Agent: Correlate findings & Evaluate confidence
+    Agent-->>Analyst: Return Attribution Report

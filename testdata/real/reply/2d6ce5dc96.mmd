@@ -1,0 +1,6 @@
+flowchart TD
+    IN[Target Artifact] --> P1[Passive Recon: DNS and WHOIS]
+    IN --> P2[Passive Recon: ASN and BGP]
+    P1 --> AN[Correlation and Threat Intel]
+    P2 --> AN
+    AN --> OUT[Attribution Report]

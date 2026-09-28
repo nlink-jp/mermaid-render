@@ -1,0 +1,15 @@
+sequenceDiagram
+    autonumber
+    actor Analyst as Analyst / Agent
+    participant DOH as DoH Resolver
+    participant RDAP as RDAP Server
+    participant ThreatDB as Threat Intel API
+
+    Analyst->>DOH: Query A/AAAA/MX/TXT records
+    DOH-->>Analyst: Return DNS answers + TTL
+    
+    Analyst->>RDAP: Lookup domain registration
+    RDAP-->>Analyst: Return registrar & contact info
+    
+    Analyst->>ThreatDB: Check reputation / IoC hits
+    ThreatDB-->>Analyst: Return pulse / report data

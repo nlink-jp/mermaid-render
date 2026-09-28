@@ -1,0 +1,10 @@
+dir TB
+node A rect "ツールの提案"
+node B rect "ルール層の判定"
+node C rect "モデル層の判定"
+node D rect "人間ゲートの承認"
+node E rect "ツールの実行"
+link A -> B solid none/arrow len=1
+link B -> C solid none/arrow len=1
+link C -> D solid none/arrow len=1
+link D -> E solid none/arrow len=1

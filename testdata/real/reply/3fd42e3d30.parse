@@ -1,0 +1,14 @@
+dir TB
+node IN rect "Target Artifact" in Input
+node DNS rect "DoH and rDNS" in Recon
+node WHOIS rect "RDAP and Registry" in Recon
+node TI rect "Threat Intel" in Analysis
+node ABUSE rect "Reputation Check" in Analysis
+node REPORT rect "Attribution Report" in Output
+link IN -> sg:Recon solid none/arrow len=1
+link sg:Recon -> sg:Analysis solid none/arrow len=1
+link sg:Analysis -> sg:Output solid none/arrow len=1
+subgraph Input "Input" [IN]
+subgraph Recon "Recon" [DNS WHOIS]
+subgraph Analysis "Analysis" [TI ABUSE]
+subgraph Output "Output" [REPORT]

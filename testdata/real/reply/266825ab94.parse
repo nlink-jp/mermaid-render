@@ -1,0 +1,23 @@
+dir LR
+node User rect "Client Application" in ClientLayer
+node Agent rect "gem-agent CLI" in ClientLayer
+node WHOIS rect "whois-lookup" in MCPTools
+node DOH rect "doh-lookup" in MCPTools
+node ASN rect "asn-lookup" in MCPTools
+node ABUSE rect "abuse-lookup" in MCPTools
+node IANA rect "ICANN / IANA / APNIC" in ExternalSources
+node CF rect "Cloudflare / Google DoH" in ExternalSources
+node IPINFO rect "IPinfo Database" in ExternalSources
+node OTX rect "AlienVault OTX" in ExternalSources
+link User -> Agent solid none/arrow len=1
+link Agent -> WHOIS solid none/arrow len=1
+link Agent -> DOH solid none/arrow len=1
+link Agent -> ASN solid none/arrow len=1
+link Agent -> ABUSE solid none/arrow len=1
+link WHOIS -> IANA solid none/arrow len=1
+link DOH -> CF solid none/arrow len=1
+link ASN -> IPINFO solid none/arrow len=1
+link ABUSE -> OTX solid none/arrow len=1
+subgraph ClientLayer "Client Zone" [User Agent]
+subgraph MCPTools "MCP Servers" [WHOIS DOH ASN ABUSE]
+subgraph ExternalSources "External Registries & APIs" [IANA CF IPINFO OTX]

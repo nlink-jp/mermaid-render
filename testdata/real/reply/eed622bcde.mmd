@@ -1,0 +1,13 @@
+sequenceDiagram
+    autonumber
+    actor Analyst
+    participant Agent as AI Agent
+    participant DNS as DoH / DNS Server
+    participant Intel as Threat Intel API
+
+    Analyst->>Agent: Request Attribution (example.com)
+    Agent->>DNS: Query A/AAAA/MX Records
+    DNS-->>Agent: Return DNS Records & IPs
+    Agent->>Intel: Query Indicators & Pulses
+    Intel-->>Agent: Return Reputation & Threat Data
+    Agent->>Analyst: Output Attribution Report

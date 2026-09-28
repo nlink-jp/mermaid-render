@@ -1,0 +1,21 @@
+dir TB
+node A rect "Input Indicator"
+node B rhombus "Type Check"
+node C rect "WHOIS and DNS Lookup"
+node D rect "ASN and GeoIP Lookup"
+node E rect "Subdomain and CNAME Discovery"
+node F rect "Tor and Relay and Abuse Check"
+node G rect "Threat Intel Pivot"
+node H rhombus "Malicious Activity?"
+node I rect "High Risk Report"
+node J rect "Low Risk / Benign Report"
+link A -> B solid none/arrow len=1
+link B -> C solid none/arrow len=1 "Domain / FQDN"
+link B -> D solid none/arrow len=1 "IP Address"
+link C -> E solid none/arrow len=1
+link D -> F solid none/arrow len=1
+link E -> G solid none/arrow len=1
+link F -> G solid none/arrow len=1
+link G -> H solid none/arrow len=1
+link H -> I solid none/arrow len=1 "Yes"
+link H -> J solid none/arrow len=1 "No"

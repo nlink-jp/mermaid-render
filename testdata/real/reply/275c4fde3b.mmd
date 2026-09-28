@@ -1,0 +1,21 @@
+flowchart LR
+    subgraph Passive_Sources [Passive Investigation Layer]
+        DNS[DoH & Passive DNS]
+        RDAP[WHOIS / RDAP]
+        BGP[BGP / ASN Routeview]
+        CT[Cert Transparency Logs]
+    end
+
+    subgraph Analysis_Engine [Correlation Engine]
+        Aggregator[Indicator Aggregator]
+        Scorer[Confidence Scoring]
+    end
+
+    subgraph Output_Layer [Reporting Layer]
+        Markdown[Markdown Summary]
+        STIX[STIX 2.1 Bundle]
+    end
+
+    Passive_Sources --> Aggregator
+    Aggregator --> Scorer
+    Scorer --> Output_Layer

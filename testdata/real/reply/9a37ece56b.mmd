@@ -1,0 +1,10 @@
+flowchart TD
+    Start[Investigation Target] --> CheckType{Target Type?}
+
+    CheckType -->|Domain / FQDN| DnsLookup[DNS Lookup]
+    DnsLookup --> DomainWhois[Domain WHOIS / RDAP]
+    DomainWhois --> Report[Report]
+
+    CheckType -->|IP / CIDR| IpGeo[IP Geolocation & ASN]
+    IpGeo --> IpWhois[IP WHOIS / Reverse DNS]
+    IpWhois --> Report

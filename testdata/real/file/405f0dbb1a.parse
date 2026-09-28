@@ -1,0 +1,18 @@
+dir LR
+node Browser rect "Webブラウザ" in Client
+node App rect "モバイルアプリ" in Client
+node Gateway rect "Reverse Proxy / LB" in API
+node AuthSvc rect "認証サービス" in Backend
+node DataSvc rect "データサービス" in Backend
+node UserDB cylinder "ユーザーDB" in DB
+node MainDB cylinder "メインDB" in DB
+link Browser -> Gateway solid none/arrow len=1
+link App -> Gateway solid none/arrow len=1
+link Gateway -> AuthSvc solid none/arrow len=1
+link Gateway -> DataSvc solid none/arrow len=1
+link AuthSvc -> UserDB solid none/arrow len=1
+link DataSvc -> MainDB solid none/arrow len=1
+subgraph Client "クライアント層" [Browser App]
+subgraph API "APIゲートウェイ" [Gateway]
+subgraph Backend "バックエンドサービス" [AuthSvc DataSvc]
+subgraph DB "データベース" [UserDB MainDB]

@@ -1,0 +1,21 @@
+dir TB
+node A rect "調査対象の入力"
+node B rhombus "入力タイプの判定"
+node C rect "WHOIS / RDAP 照会"
+node D rect "ASN / GeoIP 照会"
+node E rect "DoH DNSレコード解決"
+node F rect "Tor / iCloud Relay 判定"
+node G rect "Passive DNS / CTログ照会"
+node H rect "AbuseIPDB / レピュテーション確認"
+node I rect "脅威インテリジェンス照合"
+node J rect "調査レポート作成"
+link A -> B solid none/arrow len=1
+link B -> C solid none/arrow len=1 "ドメイン名"
+link B -> D solid none/arrow len=1 "IPアドレス"
+link C -> E solid none/arrow len=1
+link D -> F solid none/arrow len=1
+link E -> G solid none/arrow len=1
+link F -> H solid none/arrow len=1
+link G -> I solid none/arrow len=1
+link H -> I solid none/arrow len=1
+link I -> J solid none/arrow len=1

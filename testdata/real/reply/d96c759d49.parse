@@ -1,0 +1,27 @@
+dir TB
+node Start stadium "Investigation Target"
+node CheckType rhombus "Target Type?" in Domain_Flow
+node D1 rect "WHOIS / RDAP Lookup" in Domain_Flow
+node D2 rect "DNS / DoH Resolution" in Domain_Flow
+node D3 rect "Subdomain / CNAME Search" in Domain_Flow
+node D4 rect "CT Logs & Web History" in Domain_Flow
+node I1 rect "ASN & GeoIP Lookup" in IP_Flow
+node I2 rect "Tor / Relay Check" in IP_Flow
+node I3 rect "Reverse DNS / PTR" in IP_Flow
+node I4 rect "Abuse & Reputation Check" in IP_Flow
+node ThreatIntel rect "Threat Intelligence & Correlation"
+node Report rect "Generate Report"
+link Start -> CheckType solid none/arrow len=1
+link CheckType -> D1 solid none/arrow len=1 "Domain / FQDN"
+link D1 -> D2 solid none/arrow len=1
+link D2 -> D3 solid none/arrow len=1
+link D3 -> D4 solid none/arrow len=1
+link CheckType -> I1 solid none/arrow len=1 "IP / CIDR"
+link I1 -> I2 solid none/arrow len=1
+link I2 -> I3 solid none/arrow len=1
+link I3 -> I4 solid none/arrow len=1
+link D4 -> ThreatIntel solid none/arrow len=1
+link I4 -> ThreatIntel solid none/arrow len=1
+link ThreatIntel -> Report solid none/arrow len=1
+subgraph Domain_Flow "Domain Attribution" [CheckType D1 D2 D3 D4]
+subgraph IP_Flow "IP Attribution" [I1 I2 I3 I4]

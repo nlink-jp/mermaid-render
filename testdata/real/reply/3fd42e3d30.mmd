@@ -1,0 +1,22 @@
+flowchart TD
+    subgraph Input
+        IN[Target Artifact]
+    end
+
+    subgraph Recon
+        DNS[DoH and rDNS]
+        WHOIS[RDAP and Registry]
+    end
+
+    subgraph Analysis
+        TI[Threat Intel]
+        ABUSE[Reputation Check]
+    end
+
+    subgraph Output
+        REPORT[Attribution Report]
+    end
+
+    IN --> Recon
+    Recon --> Analysis
+    Analysis --> Output

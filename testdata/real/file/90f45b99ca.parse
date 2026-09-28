@@ -1,0 +1,13 @@
+dir TB
+node A rect "ユーザー操作 ($ open .)"
+node B rect "api.example.com/v1/login (POST)"
+node C rhombus "認証・プロキシ処理"
+node D rect "HTTP 502 (Bad Gateway)"
+node E rect "sandbox-exec: profile denied"
+node F rect "エラーハンドリング / ユーザーへ通知"
+link A -> B solid none/arrow len=1
+link B -> C solid none/arrow len=1
+link C -> D solid none/arrow len=1 "通信障害"
+link C -> E solid none/arrow len=1 "権限/ポリシー違反"
+link D -> F solid none/arrow len=1
+link E -> F solid none/arrow len=1

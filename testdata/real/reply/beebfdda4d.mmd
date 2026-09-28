@@ -1,0 +1,6 @@
+graph LR
+    A[Draft] -->|Submit| B[Under Review]
+    B -->|Approve| C[Published]
+    B -->|Reject| D[Changes Requested]
+    D -->|Resubmit| B
+    C -->|Archive| E[Archived]

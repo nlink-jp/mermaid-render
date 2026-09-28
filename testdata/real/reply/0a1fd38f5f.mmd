@@ -1,0 +1,38 @@
+erDiagram
+    INCIDENT ||--o{ INDICATOR : contains
+    INDICATOR ||--o{ DOMAIN : resolves_to
+    INDICATOR ||--o{ IP_ADDRESS : resolves_to
+    DOMAIN ||--o{ IP_ADDRESS : points_to
+    IP_ADDRESS }|--|| ASN : belongs_to
+    INDICATOR }|--o{ THREAT_ACTOR : attributed_to
+
+    INCIDENT {
+        string incident_id PK
+        string title
+        string severity
+        date detected_at
+    }
+    INDICATOR {
+        string indicator_id PK
+        string type
+        string value
+    }
+    DOMAIN {
+        string fqdn PK
+        string registrar
+        date created_at
+    }
+    IP_ADDRESS {
+        string ip PK
+        string country
+        boolean is_tor
+    }
+    ASN {
+        int asn_number PK
+        string org_name
+    }
+    THREAT_ACTOR {
+        string actor_id PK
+        string name
+        string confidence
+    }

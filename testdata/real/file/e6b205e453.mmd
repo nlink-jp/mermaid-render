@@ -1,0 +1,14 @@
+gantt
+    title システム刷新プロジェクト スケジュール
+    dateFormat  YYYY-MM-DD
+    section 要件定義
+        要件ヒアリング       :done,    des1, 2026-09-01, 2026-09-07
+        要件仕様書作成       :active,  des2, 2026-09-08, 2026-09-15
+    section 設計・開発
+        基本設計             :         des3, after des2, 7d
+        詳細設計             :         des4, after des3, 10d
+        フロントエンド実装   :         dev1, after des4, 15d
+        バックエンド実装     :         dev2, after des4, 15d
+    section テスト・公開
+        結合テスト           :         test1, after dev1, 10d
+        本番リリース         :milestone, m1, after test1, 0d

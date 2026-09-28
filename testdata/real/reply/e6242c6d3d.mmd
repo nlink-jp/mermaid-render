@@ -1,0 +1,11 @@
+flowchart TD
+    A[Input Indicator] --> B{Type Check}
+    B -->|Domain / FQDN| C[WHOIS and DNS Lookup]
+    B -->|IP Address| D[ASN and GeoIP Lookup]
+    C --> E[Subdomain and CNAME Discovery]
+    D --> F[Tor and Relay and Abuse Check]
+    E --> G[Threat Intel Pivot]
+    F --> G
+    G --> H{Malicious Activity?}
+    H -->|Yes| I[High Risk Report]
+    H -->|No| J[Low Risk / Benign Report]

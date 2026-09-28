@@ -1,0 +1,32 @@
+erDiagram
+    INCIDENT ||--o{ INDICATOR : contains
+    INCIDENT {
+        string incident_id PK
+        string title
+        string severity
+        string status
+        date detected_at
+    }
+
+    INDICATOR ||--o{ EVIDENCE : provides
+    INDICATOR {
+        string indicator_id PK
+        string type
+        string value
+        string confidence
+    }
+
+    EVIDENCE {
+        string evidence_id PK
+        string source_tool
+        string raw_data
+        datetime collected_at
+    }
+
+    INDICATOR }o--o| THREAT_ACTOR : attributed_to
+    THREAT_ACTOR {
+        string actor_id PK
+        string name
+        string origin
+        string motivation
+    }

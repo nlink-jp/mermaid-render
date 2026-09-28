@@ -1,0 +1,15 @@
+flowchart TD
+    Start[Investigation Start] --> InputType{Indicator Type?}
+    InputType -- IP Address --> CheckTor[Tor Exit Node Check]
+    InputType -- Domain --> CheckWhois[WHOIS / RDAP Lookup]
+    
+    CheckTor --> CheckASN[ASN & GeoIP Resolution]
+    CheckASN --> CheckAbuse[AbuseIPDB Reputation]
+    
+    CheckWhois --> ResolveDNS[DNS Resolution / DoH]
+    ResolveDNS --> SubdomainEnum[Subdomain & CNAME Enum]
+    
+    CheckAbuse --> ThreatIntel[OTX / TI Indicator Match]
+    SubdomainEnum --> ThreatIntel
+    
+    ThreatIntel --> Report[Generate Attribution Report]

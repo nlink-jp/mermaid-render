@@ -20,6 +20,23 @@ specified in the RFP (the reference is the official mermaid documentation).
 `stateDiagram` and nested subgraphs follow in phase 2. Other diagram types are
 returned as "unsupported diagram type".
 
+## API
+
+```go
+d, err := mermaidrender.Parse(src) // src: the fence's contents
+var e *mermaidrender.Error
+if errors.As(err, &e) {
+	// e.Kind: SyntaxError, UnsupportedType or UnsupportedConstruct; e.Line
+	// is 1-based in src. Every kind means: show the source instead.
+}
+f := d.(*mermaidrender.Flowchart) // Nodes, Links, Subgraphs, Direction
+```
+
+Parsing follows the mermaid 12.0.0 documentation; details it leaves open
+(which characters an id may hold, how link symbols are read, subgraph
+membership) follow that version's own parser. The image side (`raster`) is
+not written yet.
+
 ## Dependencies
 
 `golang.org/x/image` (font loading, text drawing, filling shapes), maintained

@@ -1,0 +1,15 @@
+flowchart TD
+    subgraph Ingestion
+        A[Input Query]
+    end
+
+    subgraph Processing
+        B[Passive Lookup] --> C[Threat Correlation]
+    end
+
+    subgraph Result
+        D[Generate Report]
+    end
+
+    A --> B
+    C --> D

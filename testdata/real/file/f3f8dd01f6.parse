@@ -1,0 +1,15 @@
+dir TB
+node Start stadium "開始"
+node Input parallelogram "データを入力"
+node Process rect "データを検証・処理"
+node Condition rhombus "データは有効？"
+node Success rect "保存処理"
+node Error rect "エラーメッセージ表示"
+node End stadium "終了"
+link Start -> Input solid none/arrow len=1
+link Input -> Process solid none/arrow len=1
+link Process -> Condition solid none/arrow len=1
+link Condition -> Success solid none/arrow len=1 "Yes"
+link Condition -> Error solid none/arrow len=1 "No"
+link Success -> End solid none/arrow len=1
+link Error -> Input solid none/arrow len=1

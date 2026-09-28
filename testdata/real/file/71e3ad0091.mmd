@@ -1,0 +1,29 @@
+classDiagram
+    class User {
+        +int id
+        +string name
+        +string email
+        +login() bool
+        +logout() void
+    }
+
+    class Customer {
+        +string billingAddress
+        +checkout() void
+    }
+
+    class Admin {
+        +list permissions
+        +manageUser(User u) void
+    }
+
+    class Order {
+        +int orderId
+        +Date createdAt
+        +float totalAmount
+        +calculateTotal() float
+    }
+
+    User <|-- Customer : 継承
+    User <|-- Admin : 継承
+    Customer "1" --> "*" Order : 所有

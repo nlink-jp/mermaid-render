@@ -1,0 +1,7 @@
+flowchart TD
+    A["ユーザー操作 ($ open .)"] --> B["api.example.com/v1/login (POST)"]
+    B --> C{"認証・プロキシ処理"}
+    C -->|通信障害| D["HTTP 502 (Bad Gateway)"]
+    C -->|権限/ポリシー違反| E["sandbox-exec: profile denied"]
+    D --> F["エラーハンドリング / ユーザーへ通知"]
+    E --> F

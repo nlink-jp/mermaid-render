@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    actor User as ユーザー
+    participant Client as フロントエンド
+    participant API as APIサーバー
+    participant DB as データベース
+
+    User->>Client: ログイン情報入力
+    Client->>API: POST /api/login (ID, PW)
+    activate API
+    API->>DB: ユーザー照会・パスワード照合
+    DB-->>API: 照合成功
+    API-->>Client: 200 OK (JWTトークン返却)
+    deactivate API
+
+    Note over Client,API: 認証完了後のリクエスト
+    Client->>API: GET /api/data (Authorizationヘッダー)
+    activate API
+    API->>DB: データ取得クエリ
+    DB-->>API: レコード返却
+    API-->>Client: JSONデータ
+    deactivate API
+    Client-->>User: 画面にデータ描画

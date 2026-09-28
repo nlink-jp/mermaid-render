@@ -1,0 +1,10 @@
+flowchart TD
+    Start([開始]) --> Input[/データを入力/]
+    Input --> Process[データを検証・処理]
+    Process --> Condition{データは有効？}
+    
+    Condition -- Yes --> Success[保存処理]
+    Condition -- No --> Error[エラーメッセージ表示]
+    
+    Success --> End([終了])
+    Error --> Input

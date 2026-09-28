@@ -1,0 +1,11 @@
+dir TB
+node A rect "Input Query" in Ingestion
+node B rect "Passive Lookup" in Processing
+node C rect "Threat Correlation" in Processing
+node D rect "Generate Report" in Result
+link B -> C solid none/arrow len=1
+link A -> B solid none/arrow len=1
+link C -> D solid none/arrow len=1
+subgraph Ingestion "Ingestion" [A]
+subgraph Processing "Processing" [B C]
+subgraph Result "Result" [D]

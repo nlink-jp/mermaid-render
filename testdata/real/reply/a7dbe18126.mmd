@@ -1,0 +1,15 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant Agent as AI Agent
+    participant MCP as MCP Tool
+    participant External as External Service
+
+    User->>Agent: Request Investigation (Target IP)
+    Agent->>Agent: Validate Input and Select SOP
+    Agent->>MCP: Call mcp__asn-lookup__lookup_ip
+    MCP->>External: Query Local / Remote Database
+    External-->>MCP: Return ASN and Geo Info
+    MCP-->>Agent: Formatted Result
+    Agent->>Agent: Correlate & Assess Risk
+    Agent-->>User: Present Attribution Report

@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph Input_Layer
+        IN[Target Artifact]
+    end
+
+    subgraph Passive_Recon
+        DNS[DoH and rDNS]
+        WHOIS[RDAP and Registry]
+        ASN[BGP and ASN DB]
+    end
+
+    subgraph Analysis_Layer
+        OTX[Pulse Intel]
+        ABUSE[Reputation Check]
+    end
+
+    subgraph Output_Layer
+        REPORT[Attribution Report]
+    end
+
+    IN --> DNS
+    IN --> WHOIS
+    IN --> ASN
+    DNS --> OTX
+    WHOIS --> OTX
+    ASN --> ABUSE
+    OTX --> REPORT
+    ABUSE --> REPORT

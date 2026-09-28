@@ -1,0 +1,22 @@
+flowchart TD
+    Start([調査開始 / Indicator Input]) --> CheckType{種別判定}
+    
+    CheckType -->|Domain / FQDN| StepDomain[ドメイン帰属調査 SOP]
+    CheckType -->|IP Address| StepIP[IPアドレス帰属調査 SOP]
+    
+    subgraph DomainFlow [ドメイン調査]
+        StepDomain --> D1[WHOIS / RDAP 照会]
+        D1 --> D2[DoH DNSレコード解決]
+        D2 --> D3[サブドメイン・CNAME探索]
+    end
+
+    subgraph IPFlow [IP調査]
+        StepIP --> I1[ASN / GeoIP 特定]
+        I1 --> I2[Tor / iCloud Relay 判定]
+        I2 --> I3[Abuse レピュテーション照会]
+    end
+
+    DomainFlow --> Correlate[相関分析 & ピボット]
+    IPFlow --> Correlate
+    Correlate --> Report[インシデント・帰属レポート出力]
+    Report --> End([完了])

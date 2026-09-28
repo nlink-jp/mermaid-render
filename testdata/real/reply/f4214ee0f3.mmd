@@ -1,0 +1,23 @@
+graph TD
+    Start([調査開始: 対象の入力]) --> CheckType{入力タイプの判定}
+    
+    CheckType -->|ドメイン名 / FQDN| DomainFlow[ドメイン帰属調査 SOP]
+    CheckType -->|IPv4 / IPv6| IPFlow[IPアドレス帰属調査 SOP]
+    
+    subgraph ドメイン調査
+        DomainFlow --> D1[WHOIS / RDAP 照会]
+        DomainFlow --> D2[DoH / DNS レコード解決]
+        DomainFlow --> D3[サブドメイン / CNAME 探索]
+    end
+    
+    subgraph IP調査
+        IPFlow --> I1[ASN / GeoIP / WHOIS]
+        IPFlow --> I2[Tor / iCloud Relay / VPN判定]
+        IPFlow --> I3[rDNS / 逆引き照会]
+    end
+    
+    D1 & D2 & D3 --> ThreatIntel[脅威インテリジェンス照合 / urlscan]
+    I1 & I2 & I3 --> ThreatIntel
+    
+    ThreatIntel --> Correlate[ピボット & 相関分析]
+    Correlate --> Report([レポート作成 & 確度評価])

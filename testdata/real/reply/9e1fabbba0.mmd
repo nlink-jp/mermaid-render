@@ -1,0 +1,26 @@
+erDiagram
+    INDICATOR ||--o{ ATTRIBUTION : identifies
+    INDICATOR {
+        string value PK
+        string type "domain | ip | hash"
+        datetime first_seen
+        datetime last_seen
+    }
+    ATTRIBUTION ||--|{ THREAT_ACTOR : linked_to
+    ATTRIBUTION {
+        string id PK
+        string confidence "High | Medium | Low"
+        string method
+    }
+    THREAT_ACTOR {
+        string name PK
+        string origin_country
+        string motivation
+    }
+    INDICATOR }o--o{ INFRASTRUCTURE : resolves_to
+    INFRASTRUCTURE {
+        string asn PK
+        string cidr
+        string country
+        string hosting_provider
+    }

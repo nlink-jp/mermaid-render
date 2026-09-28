@@ -1,0 +1,31 @@
+flowchart LR
+    subgraph ClientLayer [Client Zone]
+        User[Client Application]
+        Agent[gem-agent CLI]
+    end
+
+    subgraph MCPTools [MCP Servers]
+        direction TB
+        WHOIS[whois-lookup]
+        DOH[doh-lookup]
+        ASN[asn-lookup]
+        ABUSE[abuse-lookup]
+    end
+
+    subgraph ExternalSources [External Registries & APIs]
+        IANA[ICANN / IANA / APNIC]
+        CF[Cloudflare / Google DoH]
+        IPINFO[IPinfo Database]
+        OTX[AlienVault OTX]
+    end
+
+    User --> Agent
+    Agent --> WHOIS
+    Agent --> DOH
+    Agent --> ASN
+    Agent --> ABUSE
+
+    WHOIS --> IANA
+    DOH --> CF
+    ASN --> IPINFO
+    ABUSE --> OTX

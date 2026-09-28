@@ -1,0 +1,20 @@
+erDiagram
+    INCIDENT ||--o{ INDICATOR : contains
+    INCIDENT {
+        string incident_id PK
+        string title
+        string severity
+        string detected_at
+    }
+    INDICATOR ||--o{ THREAT_PULSE : matches
+    INDICATOR {
+        string indicator_id PK
+        string type
+        string value
+        string confidence
+    }
+    THREAT_PULSE {
+        string pulse_id PK
+        string adversary
+        string malware_family
+    }

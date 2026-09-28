@@ -1,0 +1,14 @@
+flowchart TD
+    Start([開始]) --> Input[/ユーザー入力/]
+    Input --> Process[リクエスト検証]
+    
+    subgraph Core[バックエンド処理]
+        Process --> Auth{認証チェック}
+        Auth -- 成功 --> DB[(データベース照会)]
+        Auth -- 失敗 --> Err[エラー生成]
+        DB --> Calc[データ加工]
+    end
+
+    Calc --> Response[/レスポンス返却/]
+    Err --> Response
+    Response --> Finish([終了])

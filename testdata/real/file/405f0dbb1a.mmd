@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph Client["クライアント層"]
+        Browser["Webブラウザ"]
+        App["モバイルアプリ"]
+    end
+
+    subgraph API["APIゲートウェイ"]
+        Gateway["Reverse Proxy / LB"]
+    end
+
+    subgraph Backend["バックエンドサービス"]
+        AuthSvc["認証サービス"]
+        DataSvc["データサービス"]
+    end
+
+    subgraph DB["データベース"]
+        UserDB[("ユーザーDB")]
+        MainDB[("メインDB")]
+    end
+
+    Browser --> Gateway
+    App --> Gateway
+    Gateway --> AuthSvc
+    Gateway --> DataSvc
+    AuthSvc --> UserDB
+    DataSvc --> MainDB

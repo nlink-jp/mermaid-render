@@ -23,7 +23,13 @@ make build    # dist/mmdpng, the development CLI; never released
 
 ```
 mermaid-render/
-├── doc.go            # package mermaidrender: Parse, Diagram (phase 1)
+├── doc.go            # package mermaidrender
+├── diagram.go        # Diagram, Error, ErrorKind
+├── parse.go          # Parse: front matter, comments, type dispatch
+├── flowchart.go      # Flowchart, Node, Link, Subgraph, Shape, Stroke, Head
+├── flowparse.go      # the flowchart parser (flow.jison / flowDb.ts rules noted inline)
+├── label.go          # label text: quotes, entity codes, <br>, HTML refused
+├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
 ├── raster/           # Render, RenderSource, LoadFont, DefaultFont (phase 1)
 ├── tools/mmdpng/     # development CLI: mermaid file -> PNG
 ├── Makefile
@@ -32,6 +38,12 @@ mermaid-render/
 
 ## Gotchas
 
+- **`*.parse` goldens were read against their sources** before they were
+  frozen. `go test -run TestRealBlocks -update` rewrites them; read every
+  changed file against its `.mmd` before committing, or the golden only
+  proves the code agrees with itself.
+- **Link tokens follow flowDb.destructEndLink**: a start mark counts only when
+  the end mark is the same kind; `A---oB` has length 2.
 - **Font names**: `sfnt.Name` returns the first name record whatever its
   language. Matching by name means walking the name table for every language's
   full name (ID 4) and PostScript name (ID 6). Font Book shows Japanese names

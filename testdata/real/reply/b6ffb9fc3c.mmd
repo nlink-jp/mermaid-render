@@ -1,0 +1,33 @@
+erDiagram
+    DOMAIN ||--o{ SUBDOMAIN : contains
+    DOMAIN ||--|{ DNS_RECORD : resolves_to
+    DNS_RECORD }|--|| IP_ADDRESS : points_to
+    IP_ADDRESS }|--|| ASN : routed_by
+    IP_ADDRESS ||--o{ ABUSE_REPORT : has
+    DOMAIN ||--o{ THREAT_PULSE : associated_with
+
+    DOMAIN {
+        string name PK
+        string registrar
+        date creation_date
+        date expiry_date
+    }
+
+    IP_ADDRESS {
+        string ip_address PK
+        string country
+        boolean is_tor_exit
+        boolean is_relay
+    }
+
+    ASN {
+        int asn PK
+        string org_name
+        string country
+    }
+
+    THREAT_PULSE {
+        string pulse_id PK
+        string adversary
+        string malware_family
+    }

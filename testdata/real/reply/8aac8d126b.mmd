@@ -1,0 +1,10 @@
+flowchart TD
+    Start([開始]) --> Fetch[データ取得]
+    Fetch --> Check{データ判定}
+    
+    Check -- OK --> Process[データ処理]
+    Check -- 異常あり --> Error[エラー処理]
+    
+    Process --> Output[結果出力]
+    Output --> Done([完了])
+    Error --> End([異常終了])

@@ -1,0 +1,23 @@
+erDiagram
+    DOMAIN ||--o{ IP_ADDRESS : resolves_to
+    DOMAIN ||--o{ CERTIFICATE : uses
+    DOMAIN ||--|| WHOIS_RECORD : registered_with
+    IP_ADDRESS }|--|| ASN : belongs_to
+    IP_ADDRESS ||--o{ ABUSE_REPORT : has
+    DOMAIN }|--o{ THREAT_PULSE : associated_with
+    IP_ADDRESS }|--o{ THREAT_PULSE : associated_with
+
+    DOMAIN {
+        string fqdn PK
+        string registrar
+        date created_at
+    }
+    IP_ADDRESS {
+        string ip_v4 PK
+        string country
+        boolean is_tor
+    }
+    ASN {
+        int asn PK
+        string org_name
+    }

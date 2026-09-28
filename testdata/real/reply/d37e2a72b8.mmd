@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    actor User as Client
+    participant API as Gateway
+    participant Auth as AuthService
+    participant DB as Database
+
+    User->>API: POST /login (credentials)
+    activate API
+    API->>Auth: ValidateCredentials(user, pass)
+    activate Auth
+    Auth->>DB: FindUser(username)
+    activate DB
+    DB-->>Auth: UserRecord
+    deactivate DB
+    Auth-->>API: JWT Token
+    deactivate Auth
+    API-->>User: 200 OK (Token)
+    deactivate API

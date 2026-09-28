@@ -1,0 +1,11 @@
+dir LR
+node A rect "Draft"
+node B rect "Under Review"
+node C rect "Published"
+node D rect "Changes Requested"
+node E rect "Archived"
+link A -> B solid none/arrow len=1 "Submit"
+link B -> C solid none/arrow len=1 "Approve"
+link B -> D solid none/arrow len=1 "Reject"
+link D -> B solid none/arrow len=1 "Resubmit"
+link C -> E solid none/arrow len=1 "Archive"

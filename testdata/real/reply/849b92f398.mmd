@@ -1,0 +1,18 @@
+flowchart TD
+    Start([調査開始]) --> Input[/IP or ドメイン入力/]
+    Input --> CheckType{入力種別の判定}
+    
+    subgraph PassiveLookup [パッシブ調査プロセス]
+        direction TB
+        CheckType -- IPアドレス --> IPFlow[ASN/GeoIP/Abuse照会]
+        CheckType -- ドメイン名 --> DomainFlow[WHOIS/DoH/サブドメイン探索]
+        IPFlow --> ThreatIntel[脅威インテリジェンス照合]
+        DomainFlow --> ThreatIntel
+    end
+
+    ThreatIntel --> Correlate[相関分析 & ピボット]
+    Correlate --> Decision{悪性判定?}
+    Decision -- Yes --> Alert[インシデント報告 / 遮断対応]
+    Decision -- No / 不明 --> Record[ログ記録 & 継続監視]
+    Alert --> End([完了])
+    Record --> End

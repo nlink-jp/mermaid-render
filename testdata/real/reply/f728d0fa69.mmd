@@ -1,0 +1,13 @@
+sequenceDiagram
+    autonumber
+    actor Analyst
+    participant Agent as AI Agent
+    participant DNS as DoH Resolver
+    participant TI as Threat Intel DB
+
+    Analyst->>Agent: Request IP attribution
+    Agent->>DNS: Query PTR record
+    DNS-->>Agent: Return hostname
+    Agent->>TI: Query reputation and ASN
+    TI-->>Agent: Return score and category
+    Agent->>Analyst: Present structured report
