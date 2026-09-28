@@ -500,7 +500,7 @@ same way as pathguard.
     - A self-link's label was not counted in its layer's size and overlapped a label next door.
     - A link crossed a frame's title area in the layer just above or below it (one real diagram).
   - **A link crossing an unrelated subgraph's frame is classed as ugly, not wrong (a developer's
-    judgement, pending the operator's confirmation).** The heads still say which nodes a link joins,
+    judgement, approved by the operator on 2026-09-28).** The heads still say which nodes a link joins,
     and mermaid itself draws such crossings. Ordering weighs them heavily so avoidable ones are
     avoided; the synthetic and real cases must have none; in the 20,000-seed sweep 16 segments
     remain and are counted.
