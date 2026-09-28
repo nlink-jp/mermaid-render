@@ -135,7 +135,7 @@ func (p *seqParser) document(stop map[string]bool) error {
 			return err
 		}
 		if len(p.d.Events) > MaxEvents {
-			return errf(UnsupportedConstruct, t.line, "more than %d messages, notes and blocks", MaxEvents)
+			return errf(UnsupportedConstruct, t.line, "more than %d messages, notes, activations and blocks", MaxEvents)
 		}
 	}
 }

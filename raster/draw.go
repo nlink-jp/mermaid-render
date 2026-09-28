@@ -52,11 +52,11 @@ func (c *canvas) tracef(format string, a ...any) {
 	}
 }
 
-func (c *canvas) px(p Pt) (float32, float32) {
+func (c *canvas) px(p pt) (float32, float32) {
 	return float32((p.X + c.offX) * c.em), float32((p.Y + c.offY) * c.em)
 }
 
-func (c *canvas) fill(pts []Pt, col color.Color) {
+func (c *canvas) fill(pts []pt, col color.Color) {
 	if len(pts) < 3 {
 		return
 	}
@@ -87,18 +87,18 @@ func (c *canvas) fill(pts []Pt, col color.Color) {
 }
 
 // segment strokes a straight segment of width w.
-func (c *canvas) segment(a, b Pt, w float64, col color.Color) {
+func (c *canvas) segment(a, b pt, w float64, col color.Color) {
 	dx, dy := b.X-a.X, b.Y-a.Y
 	l := math.Hypot(dx, dy)
 	if l == 0 {
 		return
 	}
 	nx, ny := -dy/l*w/2, dx/l*w/2
-	c.fill([]Pt{{a.X + nx, a.Y + ny}, {b.X + nx, b.Y + ny}, {b.X - nx, b.Y - ny}, {a.X - nx, a.Y - ny}}, col)
+	c.fill([]pt{{a.X + nx, a.Y + ny}, {b.X + nx, b.Y + ny}, {b.X - nx, b.Y - ny}, {a.X - nx, a.Y - ny}}, col)
 }
 
 // polyline strokes a path; dotted draws it in dashes.
-func (c *canvas) polyline(pts []Pt, w float64, dotted bool, col color.Color) {
+func (c *canvas) polyline(pts []pt, w float64, dotted bool, col color.Color) {
 	if len(pts) > 0 {
 		c.tracef("line dashed=%v %.2f,%.2f", dotted, pts[0].X, pts[0].Y)
 	}
@@ -119,19 +119,19 @@ func (c *canvas) polyline(pts []Pt, w float64, dotted bool, col color.Color) {
 		for s := -phase; s < l; s += on + off {
 			s0, s1 := math.Max(s, 0), math.Min(s+on, l)
 			if s1 > s0 {
-				c.segment(Pt{a.X + (b.X-a.X)*s0/l, a.Y + (b.Y-a.Y)*s0/l}, Pt{a.X + (b.X-a.X)*s1/l, a.Y + (b.Y-a.Y)*s1/l}, w, col)
+				c.segment(pt{a.X + (b.X-a.X)*s0/l, a.Y + (b.Y-a.Y)*s0/l}, pt{a.X + (b.X-a.X)*s1/l, a.Y + (b.Y-a.Y)*s1/l}, w, col)
 			}
 		}
 		phase = math.Mod(phase+l, on+off)
 	}
 }
 
-func (c *canvas) outlineShape(pts []Pt, fillCol, strokeCol color.Color, w float64, dashed bool) {
+func (c *canvas) outlineShape(pts []pt, fillCol, strokeCol color.Color, w float64, dashed bool) {
 	if fillCol != nil {
 		c.fill(pts, fillCol)
 	}
 	if strokeCol != nil {
-		closed := append(append([]Pt(nil), pts...), pts[0])
+		closed := append(append([]pt(nil), pts...), pts[0])
 		c.polyline(closed, w, dashed, strokeCol)
 		if !dashed {
 			c.fill(ellipse(pts[0].X, pts[0].Y, w/2, w/2, 12), strokeCol)
@@ -140,7 +140,7 @@ func (c *canvas) outlineShape(pts []Pt, fillCol, strokeCol color.Color, w float6
 }
 
 // node draws a node's shape (its label is drawn by the caller).
-func (c *canvas) node(n NodeBox) {
+func (c *canvas) node(n nodeBox) {
 	r := n.Box
 	if n.Shape == mr.Cylinder {
 		c.cylinder(r)
@@ -149,8 +149,8 @@ func (c *canvas) node(n NodeBox) {
 	c.outlineShape(outline(n.Shape, r, n.Slant), colNode, colStroke, lineW, false)
 	switch n.Shape {
 	case mr.Subroutine:
-		c.segment(Pt{r.X0 + 0.4, r.Y0}, Pt{r.X0 + 0.4, r.Y1}, lineW, colStroke)
-		c.segment(Pt{r.X1 - 0.4, r.Y0}, Pt{r.X1 - 0.4, r.Y1}, lineW, colStroke)
+		c.segment(pt{r.X0 + 0.4, r.Y0}, pt{r.X0 + 0.4, r.Y1}, lineW, colStroke)
+		c.segment(pt{r.X1 - 0.4, r.Y0}, pt{r.X1 - 0.4, r.Y1}, lineW, colStroke)
 	case mr.DoubleCircle:
 		cx, cy := r.Center().X, r.Center().Y
 		in := ellipse(cx, cy, r.W()/2-0.3, r.H()/2-0.3, 64)
@@ -163,13 +163,13 @@ func (c *canvas) node(n NodeBox) {
 // which the drawing fills at the cap's middle.
 const cylCap = 0.35
 
-func (c *canvas) cylinder(r Rect) {
+func (c *canvas) cylinder(r rect) {
 	cx, rx := r.Center().X, r.W()/2
-	arc := func(cy, from, to float64) []Pt {
-		var pts []Pt
+	arc := func(cy, from, to float64) []pt {
+		var pts []pt
 		for i := 0; i <= 32; i++ {
 			a := from + (to-from)*float64(i)/32
-			pts = append(pts, Pt{cx + rx*math.Cos(a), cy + cylCap*math.Sin(a)})
+			pts = append(pts, pt{cx + rx*math.Cos(a), cy + cylCap*math.Sin(a)})
 		}
 		return pts
 	}
@@ -182,7 +182,7 @@ func (c *canvas) cylinder(r Rect) {
 	c.polyline(arc(top, 0, math.Pi), lineW, false, colStroke)
 }
 
-func labelCenter(n NodeBox) Pt {
+func labelCenter(n nodeBox) pt {
 	p := n.Box.Center()
 	switch n.Shape {
 	case mr.Cylinder:
@@ -194,8 +194,8 @@ func labelCenter(n NodeBox) Pt {
 }
 
 // edge draws a link's line and heads.
-func (c *canvas) edge(e EdgePath) {
-	pts := append([]Pt(nil), e.Points...)
+func (c *canvas) edge(e edgePath) {
+	pts := append([]pt(nil), e.Points...)
 	if len(pts) < 2 {
 		return
 	}
@@ -211,7 +211,7 @@ func (c *canvas) edge(e EdgePath) {
 	}
 	dotted := e.Link.Stroke == mr.Dotted
 	// Pull the line back where a head sits, so it does not show through.
-	trim := func(h mr.Head, tip, prev Pt) Pt {
+	trim := func(h mr.Head, tip, prev pt) pt {
 		d := math.Hypot(tip.X-prev.X, tip.Y-prev.Y)
 		cut := 0.0
 		switch h {
@@ -224,7 +224,7 @@ func (c *canvas) edge(e EdgePath) {
 			return tip
 		}
 		cut = math.Min(cut, d*0.9)
-		return Pt{tip.X - (tip.X-prev.X)*cut/d, tip.Y - (tip.Y-prev.Y)*cut/d}
+		return pt{tip.X - (tip.X-prev.X)*cut/d, tip.Y - (tip.Y-prev.Y)*cut/d}
 	}
 	n := len(pts)
 	endTip, endPrev := pts[n-1], pts[n-2]
@@ -238,7 +238,7 @@ func (c *canvas) edge(e EdgePath) {
 // heads draws a link's heads alone. Render draws them again after the
 // frame titles, whose backgrounds would otherwise hide a head arriving
 // under a title.
-func (c *canvas) heads(e EdgePath) {
+func (c *canvas) heads(e edgePath) {
 	pts := e.Points
 	if len(pts) < 2 {
 		return
@@ -253,7 +253,7 @@ func (c *canvas) heads(e EdgePath) {
 	c.head(e.Link.Start, pts[0], pts[1])
 }
 
-func (c *canvas) head(h mr.Head, tip, from Pt) {
+func (c *canvas) head(h mr.Head, tip, from pt) {
 	dx, dy := tip.X-from.X, tip.Y-from.Y
 	l := math.Hypot(dx, dy)
 	if l == 0 {
@@ -262,27 +262,27 @@ func (c *canvas) head(h mr.Head, tip, from Pt) {
 	dx, dy = dx/l, dy/l
 	switch h {
 	case mr.Arrow:
-		b := Pt{tip.X - dx*arrowLen, tip.Y - dy*arrowLen}
-		c.fill([]Pt{tip, {b.X - dy*arrowHalfW, b.Y + dx*arrowHalfW}, {b.X + dy*arrowHalfW, b.Y - dx*arrowHalfW}}, colEdge)
+		b := pt{tip.X - dx*arrowLen, tip.Y - dy*arrowLen}
+		c.fill([]pt{tip, {b.X - dy*arrowHalfW, b.Y + dx*arrowHalfW}, {b.X + dy*arrowHalfW, b.Y - dx*arrowHalfW}}, colEdge)
 	case mr.CircleHead:
-		ctr := Pt{tip.X - dx*markR, tip.Y - dy*markR}
+		ctr := pt{tip.X - dx*markR, tip.Y - dy*markR}
 		ring := ellipse(ctr.X, ctr.Y, markR, markR, 24)
 		c.fill(ring, colBG)
 		c.polyline(append(ring, ring[0]), lineW, false, colEdge)
 	case mr.CrossHead:
-		ctr := Pt{tip.X - dx*markX, tip.Y - dy*markX}
+		ctr := pt{tip.X - dx*markX, tip.Y - dy*markX}
 		for _, s := range []float64{1, -1} {
 			ax, ay := (dx-s*dy)*markX, (dy+s*dx)*markX
-			c.segment(Pt{ctr.X - ax, ctr.Y - ay}, Pt{ctr.X + ax, ctr.Y + ay}, lineW*1.3, colEdge)
+			c.segment(pt{ctr.X - ax, ctr.Y - ay}, pt{ctr.X + ax, ctr.Y + ay}, lineW*1.3, colEdge)
 		}
 	}
 }
 
-func (c *canvas) frame(f FrameBox) {
+func (c *canvas) frame(f frameBox) {
 	c.outlineShape(roundRect(f.Box, 0.4), colFrame, colFrameSt, 0.07, true)
 }
 
-func (c *canvas) labelBG(r Rect) {
+func (c *canvas) labelBG(r rect) {
 	c.fill(roundRect(r, 0.2), colBG)
 }
 

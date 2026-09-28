@@ -48,7 +48,7 @@ var (
 )
 
 type sqHead struct {
-	box   Rect // the header box (an actor's: its figure and label)
+	box   rect // the header box (an actor's: its figure and label)
 	label string
 	actor bool
 	lw    float64 // label width and height
@@ -56,19 +56,19 @@ type sqHead struct {
 }
 
 type sqMsg struct {
-	pts    []Pt
+	pts    []pt
 	dotted bool
 	head   mr.ArrowHead
 	both   bool
 	text   string
-	tbox   Rect // zero when there is no text
+	tbox   rect // zero when there is no text
 	number string
-	numAt  Pt
+	numAt  pt
 	line   int
 }
 
 type sqNote struct {
-	box  Rect
+	box  rect
 	text string
 	line int
 }
@@ -76,23 +76,23 @@ type sqNote struct {
 type sqSection struct {
 	y    float64
 	text string
-	tbox Rect
+	tbox rect
 }
 
 type sqFrame struct {
-	box      Rect
+	box      rect
 	kind     string
-	tab      Rect // the kind label's tab
+	tab      rect // the kind label's tab
 	cond     string
-	condBox  Rect
+	condBox  rect
 	sections []sqSection
 	depth    int
 }
 
 type sqBox struct {
-	box   Rect
+	box   rect
 	title string
-	tbox  Rect
+	tbox  rect
 }
 
 // seqLayout is a placed sequence diagram, in em.
@@ -100,8 +100,9 @@ type seqLayout struct {
 	W, H      float64
 	cols      []float64
 	heads     []sqHead // top, then bottom
-	lifelines [][2]Pt
-	acts      []Rect
+	lifelines [][2]pt
+	acts      []rect
+	actCol    []int // the participant each bar in acts belongs to
 	msgs      []sqMsg
 	notes     []sqNote
 	frames    []*sqFrame
@@ -141,7 +142,7 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			w = math.Max(lw, 1.6)
 			h = sqFigH + lh + 0.2
 		}
-		heads[i] = sqHead{box: Rect{-w / 2, 0, w / 2, h}, label: p.Label, actor: p.Actor, lw: lw, lh: lh}
+		heads[i] = sqHead{box: rect{-w / 2, 0, w / 2, h}, label: p.Label, actor: p.Actor, lw: lw, lh: lh}
 		hdrH = math.Max(hdrH, h)
 	}
 
@@ -273,7 +274,7 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 	y += boxTitleH
 	for i := range heads {
 		h := heads[i]
-		h.box = Rect{cols[i] + h.box.X0, y, cols[i] + h.box.X1, y + hdrH}
+		h.box = rect{cols[i] + h.box.X0, y, cols[i] + h.box.X1, y + hdrH}
 		sl.heads = append(sl.heads, h)
 	}
 	lifeTop := y + hdrH
@@ -286,8 +287,8 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 	acts := map[int][]openAct{}
 	lastY := lifeTop
 	var stack []*sqFrame
-	contents := map[*sqFrame][]Rect{}
-	note := func(r Rect) {
+	contents := map[*sqFrame][]rect{}
+	note := func(r rect) {
 		for _, f := range stack {
 			contents[f] = append(contents[f], r)
 		}
@@ -326,25 +327,25 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 				x0 := edge(a, math.Inf(1), depth[a])
 				x1 := edge(a, math.Inf(1), dTo)
 				reach := cols[a] + barReach[a] + sqSelfW
-				msg.pts = []Pt{{x0, arrowY}, {reach, arrowY}, {reach, arrowY + sqSelfH}, {x1, arrowY + sqSelfH}}
+				msg.pts = []pt{{x0, arrowY}, {reach, arrowY}, {reach, arrowY + sqSelfH}, {x1, arrowY + sqSelfH}}
 				if e.Text != "" {
 					tx := cols[a] + barReach[a] + sqSelfText
-					msg.tbox = Rect{tx, textTop, tx + sz.w, textTop + sz.h}
+					msg.tbox = rect{tx, textTop, tx + sz.w, textTop + sz.h}
 				}
 				lastY = arrowY + sqSelfH
 				y = lastY + sqRowGap
-				note(Rect{cols[a], arrowY, reach, arrowY + sqSelfH})
+				note(rect{cols[a], arrowY, reach, arrowY + sqSelfH})
 			} else {
 				x0 := edge(a, cols[b], depth[a])
 				x1 := edge(b, cols[a], dTo)
-				msg.pts = []Pt{{x0, arrowY}, {x1, arrowY}}
+				msg.pts = []pt{{x0, arrowY}, {x1, arrowY}}
 				if e.Text != "" {
 					cx := (x0 + x1) / 2
-					msg.tbox = Rect{cx - sz.w/2, textTop, cx + sz.w/2, textTop + sz.h}
+					msg.tbox = rect{cx - sz.w/2, textTop, cx + sz.w/2, textTop + sz.h}
 				}
 				lastY = arrowY
 				y = arrowY + sqRowGap
-				note(Rect{math.Min(x0, x1), arrowY - 0.3, math.Max(x0, x1), arrowY + 0.3})
+				note(rect{math.Min(x0, x1), arrowY - 0.3, math.Max(x0, x1), arrowY + 0.3})
 			}
 			msg.numAt = msg.pts[0]
 			if e.BothEnds {
@@ -352,33 +353,33 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 				dir := math.Copysign(1, msg.pts[1].X-msg.pts[0].X)
 				msg.numAt.X -= dir * (arrowLen + sqNumR + 0.15)
 			}
-			if msg.tbox != (Rect{}) {
+			if msg.tbox != (rect{}) {
 				note(msg.tbox)
 			}
 			sl.msgs = append(sl.msgs, msg)
 		case mr.Note:
 			a, b := idx[e.From], idx[e.To]
 			nw, nh := sz.w+2*sqNotePad, sz.h+2*sqNotePad
-			var r Rect
+			var r rect
 			switch e.Place {
 			case mr.RightOf:
 				x := cols[a] + barReach[a] + sqNoteGap
-				r = Rect{x, y, x + nw, y + nh}
+				r = rect{x, y, x + nw, y + nh}
 			case mr.LeftOf:
 				x := cols[a] - barReach[a] - sqNoteGap
-				r = Rect{x - nw, y, x, y + nh}
+				r = rect{x - nw, y, x, y + nh}
 			default:
 				lo, hi := cols[min(a, b)], cols[max(a, b)]
 				if a == b {
 					nw = math.Max(nw, sqMinNoteW)
-					r = Rect{lo - nw/2, y, lo + nw/2, y + nh}
+					r = rect{lo - nw/2, y, lo + nw/2, y + nh}
 				} else {
 					x0, x1 := lo-sqNoteOver, hi+sqNoteOver
 					if x1-x0 < nw {
 						c := (lo + hi) / 2
 						x0, x1 = c-nw/2, c+nw/2
 					}
-					r = Rect{x0, y, x1, y + nh}
+					r = rect{x0, y, x1, y + nh}
 				}
 			}
 			sl.notes = append(sl.notes, sqNote{box: r, text: e.Text, line: e.Line})
@@ -389,7 +390,7 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			i := idx[e.From]
 			acts[i] = append(acts[i], openAct{start: lastY, level: depth[i]})
 			x := cols[i] + float64(depth[i])*sqActStep
-			note(Rect{x - sqActW/2, lastY, x + sqActW/2, lastY}) // a frame holds the bars that start in it
+			note(rect{x - sqActW/2, lastY, x + sqActW/2, lastY}) // a frame holds the bars that start in it
 			depth[i]++
 		case mr.Deactivate:
 			i := idx[e.From]
@@ -402,8 +403,9 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			depth[i]--
 			end := math.Max(lastY, o.start+sqMinBar)
 			x := cols[i] + float64(o.level)*sqActStep
-			sl.acts = append(sl.acts, Rect{x - sqActW/2, o.start, x + sqActW/2, end})
-			note(Rect{x - sqActW/2, end, x + sqActW/2, end}) // and those that end in it
+			sl.acts = append(sl.acts, rect{x - sqActW/2, o.start, x + sqActW/2, end})
+			sl.actCol = append(sl.actCol, i)
+			note(rect{x - sqActW/2, end, x + sqActW/2, end}) // and those that end in it
 			if end > lastY {
 				lastY = end
 				y = math.Max(y, end+sqRowGap)
@@ -416,9 +418,9 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			}
 			tabH := math.Max(kh, sz.h) + 2*sqTabPad
 			f.box.Y0 = y - 0.3
-			f.tab = Rect{0, f.box.Y0, kw + 2*sqTabPad + 0.4, f.box.Y0 + tabH}
+			f.tab = rect{0, f.box.Y0, kw + 2*sqTabPad + 0.4, f.box.Y0 + tabH}
 			if f.cond != "" {
-				f.condBox = Rect{0, f.box.Y0 + (tabH-sz.h)/2, sz.w, f.box.Y0 + (tabH+sz.h)/2}
+				f.condBox = rect{0, f.box.Y0 + (tabH-sz.h)/2, sz.w, f.box.Y0 + (tabH+sz.h)/2}
 			}
 			sl.frames = append(sl.frames, f)
 			stack = append(stack, f)
@@ -429,7 +431,7 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			sy := y - 0.2
 			s := sqSection{y: sy, text: condText(e.Text)}
 			if s.text != "" {
-				s.tbox = Rect{0, sy + 0.25, sz.w, sy + 0.25 + sz.h}
+				s.tbox = rect{0, sy + 0.25, sz.w, sy + 0.25 + sz.h}
 				y = s.tbox.Y1 + 0.5
 			} else {
 				y = sy + 0.6
@@ -448,15 +450,16 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 	for i, st := range acts {
 		for _, o := range st {
 			x := cols[i] + float64(o.level)*sqActStep
-			sl.acts = append(sl.acts, Rect{x - sqActW/2, o.start, x + sqActW/2, math.Max(y-sqRowGap/2, o.start+sqMinBar)})
+			sl.acts = append(sl.acts, rect{x - sqActW/2, o.start, x + sqActW/2, math.Max(y-sqRowGap/2, o.start+sqMinBar)})
+			sl.actCol = append(sl.actCol, i)
 		}
 	}
-	sortRects(sl.acts)
+	sl.sortActs()
 	lifeBottom := y
 	for i := range heads {
-		sl.lifelines = append(sl.lifelines, [2]Pt{{cols[i], lifeTop}, {cols[i], lifeBottom}})
+		sl.lifelines = append(sl.lifelines, [2]pt{{cols[i], lifeTop}, {cols[i], lifeBottom}})
 		h := sl.heads[i]
-		h.box = Rect{h.box.X0, lifeBottom, h.box.X1, lifeBottom + hdrH}
+		h.box = rect{h.box.X0, lifeBottom, h.box.X1, lifeBottom + hdrH}
 		sl.heads = append(sl.heads, h)
 	}
 	sl.H = lifeBottom + hdrH
@@ -514,11 +517,11 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 			h := sl.heads[idx[p]]
 			x0, x1 = math.Min(x0, h.box.X0), math.Max(x1, h.box.X1)
 		}
-		sb := sqBox{box: Rect{x0 - sqBoxPad, 0, x1 + sqBoxPad, sl.H}, title: b.Title}
+		sb := sqBox{box: rect{x0 - sqBoxPad, 0, x1 + sqBoxPad, sl.H}, title: b.Title}
 		if b.Title != "" {
 			tw, th, _ := measure(b.Title, false, b.Line)
 			c := (sb.box.X0 + sb.box.X1) / 2
-			sb.tbox = Rect{c - tw/2, 0.2, c + tw/2, 0.2 + th}
+			sb.tbox = rect{c - tw/2, 0.2, c + tw/2, 0.2 + th}
 			if sb.box.W() < tw+0.8 {
 				sb.box.X0, sb.box.X1 = c-tw/2-0.4, c+tw/2+0.4
 			}
@@ -528,19 +531,19 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 
 	// Bounds: shift everything so the leftmost element starts at 0.
 	minX, maxX := math.Inf(1), math.Inf(-1)
-	grow := func(r Rect) { minX, maxX = math.Min(minX, r.X0), math.Max(maxX, r.X1) }
+	grow := func(r rect) { minX, maxX = math.Min(minX, r.X0), math.Max(maxX, r.X1) }
 	for _, h := range sl.heads {
 		grow(h.box)
 	}
 	for _, m := range sl.msgs {
 		for _, p := range m.pts {
-			grow(Rect{p.X, p.Y, p.X, p.Y})
+			grow(rect{p.X, p.Y, p.X, p.Y})
 		}
-		if m.tbox != (Rect{}) {
+		if m.tbox != (rect{}) {
 			grow(m.tbox)
 		}
 		if m.number != "" {
-			grow(Rect{m.numAt.X - 2*sqNumR, 0, m.numAt.X + 2*sqNumR, 0})
+			grow(rect{m.numAt.X - 2*sqNumR, 0, m.numAt.X + 2*sqNumR, 0})
 		}
 	}
 	for _, nt := range sl.notes {
@@ -551,6 +554,10 @@ func layoutSequence(d *mr.Sequence, m measurer) (*seqLayout, error) {
 	}
 	for _, b := range sl.boxes {
 		grow(b.box)
+	}
+	// Deep bars on the last participant reach past its header.
+	for _, a := range sl.acts {
+		grow(a)
 	}
 	sl.shift(-minX)
 	sl.W = maxX - minX
@@ -565,15 +572,19 @@ func condText(s string) string {
 	return "[" + s + "]"
 }
 
-func sortRects(rs []Rect) {
+// sortActs orders the bars left to right, then top to bottom, their
+// owners with them: the open bars were collected from a map.
+func (sl *seqLayout) sortActs() {
+	rs, cs := sl.acts, sl.actCol
 	for i := 1; i < len(rs); i++ {
 		for j := i; j > 0 && (rs[j].X0 < rs[j-1].X0 || rs[j].X0 == rs[j-1].X0 && rs[j].Y0 < rs[j-1].Y0); j-- {
 			rs[j], rs[j-1] = rs[j-1], rs[j]
+			cs[j], cs[j-1] = cs[j-1], cs[j]
 		}
 	}
 }
 
-func (r Rect) moved(dx float64) Rect { return Rect{r.X0 + dx, r.Y0, r.X1 + dx, r.Y1} }
+func (r rect) moved(dx float64) rect { return rect{r.X0 + dx, r.Y0, r.X1 + dx, r.Y1} }
 
 func (sl *seqLayout) shift(dx float64) {
 	for i := range sl.cols {
@@ -594,7 +605,7 @@ func (sl *seqLayout) shift(dx float64) {
 		for k := range m.pts {
 			m.pts[k].X += dx
 		}
-		if m.tbox != (Rect{}) {
+		if m.tbox != (rect{}) {
 			m.tbox = m.tbox.moved(dx)
 		}
 		m.numAt.X += dx
@@ -623,7 +634,7 @@ func (sl *seqLayout) shift(dx float64) {
 
 // drawSequence draws a placed sequence diagram.
 func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
-	text := func(r Rect, s string, bold bool, size float64, col color.Color) error {
+	text := func(r rect, s string, bold bool, size float64, col color.Color) error {
 		p := r.Center()
 		return fn.drawText(c.img, (p.X+c.offX)*c.em, (p.Y+c.offY)*c.em, s, bold, c.em*size, col)
 	}
@@ -636,26 +647,26 @@ func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
 		}
 	}
 	for _, l := range sl.lifelines {
-		c.polyline([]Pt{l[0], l[1]}, lineW*0.8, true, colFrameSt)
+		c.polyline([]pt{l[0], l[1]}, lineW*0.8, true, colFrameSt)
 	}
 	for _, f := range sl.frames {
 		c.outlineShape(roundRect(f.box, 0), nil, colFrameSt, lineW, false)
 		tab := f.tab
 		cut := math.Min(0.35, tab.H()/2)
-		c.outlineShape([]Pt{{tab.X0, tab.Y0}, {tab.X1, tab.Y0}, {tab.X1, tab.Y1 - cut}, {tab.X1 - cut, tab.Y1}, {tab.X0, tab.Y1}}, colNode, colFrameSt, lineW, false)
-		if err := text(Rect{tab.X0, tab.Y0, tab.X1 - 0.2, tab.Y1}, f.kind, true, 1, colText); err != nil {
+		c.outlineShape([]pt{{tab.X0, tab.Y0}, {tab.X1, tab.Y0}, {tab.X1, tab.Y1 - cut}, {tab.X1 - cut, tab.Y1}, {tab.X0, tab.Y1}}, colNode, colFrameSt, lineW, false)
+		if err := text(rect{tab.X0, tab.Y0, tab.X1 - 0.2, tab.Y1}, f.kind, true, 1, colText); err != nil {
 			return err
 		}
 		if f.cond != "" {
-			c.labelBG(Rect{f.condBox.X0 - 0.15, f.condBox.Y0, f.condBox.X1 + 0.15, f.condBox.Y1})
+			c.labelBG(rect{f.condBox.X0 - 0.15, f.condBox.Y0, f.condBox.X1 + 0.15, f.condBox.Y1})
 			if err := text(f.condBox, f.cond, false, 1, colText); err != nil {
 				return err
 			}
 		}
 		for _, s := range f.sections {
-			c.polyline([]Pt{{f.box.X0, s.y}, {f.box.X1, s.y}}, lineW, true, colFrameSt)
+			c.polyline([]pt{{f.box.X0, s.y}, {f.box.X1, s.y}}, lineW, true, colFrameSt)
 			if s.text != "" {
-				c.labelBG(Rect{s.tbox.X0 - 0.15, s.tbox.Y0, s.tbox.X1 + 0.15, s.tbox.Y1})
+				c.labelBG(rect{s.tbox.X0 - 0.15, s.tbox.Y0, s.tbox.X1 + 0.15, s.tbox.Y1})
 				if err := text(s.tbox, s.text, false, 1, colText); err != nil {
 					return err
 				}
@@ -672,8 +683,8 @@ func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
 		if m.both {
 			c.seqHead(m.head, m.pts[0], m.pts[1])
 		}
-		if m.tbox != (Rect{}) {
-			c.labelBG(Rect{m.tbox.X0 - 0.15, m.tbox.Y0, m.tbox.X1 + 0.15, m.tbox.Y1})
+		if m.tbox != (rect{}) {
+			c.labelBG(rect{m.tbox.X0 - 0.15, m.tbox.Y0, m.tbox.X1 + 0.15, m.tbox.Y1})
 			if err := text(m.tbox, m.text, false, 1, colText); err != nil {
 				return glyphErr(err, m.line)
 			}
@@ -691,7 +702,7 @@ func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
 		// Wide enough for the digits at 0.7 em: "10" and "1.25" too.
 		rx := math.Max(sqNumR, w*0.7/2+0.2)
 		c.fill(ellipse(p.X, p.Y, rx, sqNumR, 24), colEdge)
-		if err := text(Rect{p.X, p.Y, p.X, p.Y}, m.number, true, 0.7, colBG); err != nil {
+		if err := text(rect{p.X, p.Y, p.X, p.Y}, m.number, true, 0.7, colBG); err != nil {
 			return err
 		}
 	}
@@ -709,7 +720,7 @@ func (c *canvas) drawSequence(sl *seqLayout, fn *Font) error {
 	return nil
 }
 
-func (c *canvas) seqHead(h mr.ArrowHead, tip, from Pt) {
+func (c *canvas) seqHead(h mr.ArrowHead, tip, from pt) {
 	if h != mr.HeadNone {
 		c.tracef("head %s at %.2f,%.2f", h, tip.X, tip.Y)
 	}
@@ -725,9 +736,9 @@ func (c *canvas) seqHead(h mr.ArrowHead, tip, from Pt) {
 			return
 		}
 		dx, dy = dx/l, dy/l
-		b := Pt{tip.X - dx*arrowLen, tip.Y - dy*arrowLen}
-		c.segment(tip, Pt{b.X - dy*arrowHalfW, b.Y + dx*arrowHalfW}, lineW*1.2, colEdge)
-		c.segment(tip, Pt{b.X + dy*arrowHalfW, b.Y - dx*arrowHalfW}, lineW*1.2, colEdge)
+		b := pt{tip.X - dx*arrowLen, tip.Y - dy*arrowLen}
+		c.segment(tip, pt{b.X - dy*arrowHalfW, b.Y + dx*arrowHalfW}, lineW*1.2, colEdge)
+		c.segment(tip, pt{b.X + dy*arrowHalfW, b.Y - dx*arrowHalfW}, lineW*1.2, colEdge)
 	}
 }
 
@@ -747,10 +758,10 @@ func (c *canvas) seqHeader(h sqHead, fn *Font) error {
 	c.fill(head, colNode)
 	c.polyline(append(head, head[0]), lineW, false, colStroke)
 	neck, hip := top+2*r, top+1.45
-	c.segment(Pt{cx, neck}, Pt{cx, hip}, lineW, colStroke)
-	c.segment(Pt{cx - 0.55, neck + 0.3}, Pt{cx + 0.55, neck + 0.3}, lineW, colStroke)
-	c.segment(Pt{cx, hip}, Pt{cx - 0.45, top + sqFigH - 0.15}, lineW, colStroke)
-	c.segment(Pt{cx, hip}, Pt{cx + 0.45, top + sqFigH - 0.15}, lineW, colStroke)
+	c.segment(pt{cx, neck}, pt{cx, hip}, lineW, colStroke)
+	c.segment(pt{cx - 0.55, neck + 0.3}, pt{cx + 0.55, neck + 0.3}, lineW, colStroke)
+	c.segment(pt{cx, hip}, pt{cx - 0.45, top + sqFigH - 0.15}, lineW, colStroke)
+	c.segment(pt{cx, hip}, pt{cx + 0.45, top + sqFigH - 0.15}, lineW, colStroke)
 	ly := b.Y0 + sqFigH + 0.1 + h.lh/2
 	return fn.drawText(c.img, (cx+c.offX)*c.em, (ly+c.offY)*c.em, h.label, false, c.em, colText)
 }

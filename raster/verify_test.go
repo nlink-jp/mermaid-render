@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,29 +19,29 @@ func TestRenderRefusesLayoutFaults(t *testing.T) {
 	fn := systemFont(t)
 	cases := []struct {
 		name, src string
-		corrupt   func(*Layout, *seqLayout)
+		corrupt   func(*flowLayout, *seqLayout)
 		want      string
 	}{
 		{"flowchart: a box on another", "flowchart TD\n    A --> B\n    A --> C",
-			func(l *Layout, _ *seqLayout) { l.Nodes[2].Box = l.Nodes[1].Box }, "overlap"},
+			func(l *flowLayout, _ *seqLayout) { l.Nodes[2].Box = l.Nodes[1].Box }, "overlap"},
 		{"flowchart: a label lost", "flowchart TD\n    A -->|yes| B",
-			func(l *Layout, _ *seqLayout) { l.Edges[0].LabelBox = Rect{} }, "lost its label"},
+			func(l *flowLayout, _ *seqLayout) { l.Edges[0].LabelBox = rect{} }, "lost its label"},
 		{"ER: an entity on another", "erDiagram\n    A ||--o{ B : has\n    A ||--o{ C : owns",
-			func(l *Layout, _ *seqLayout) { l.Nodes[2].Box = l.Nodes[1].Box }, "overlap"},
+			func(l *flowLayout, _ *seqLayout) { l.Nodes[2].Box = l.Nodes[1].Box }, "overlap"},
 		{"ER: a label over a crow's foot", "erDiagram\n    A ||--o{ B : has",
-			func(l *Layout, _ *seqLayout) {
+			func(l *flowLayout, _ *seqLayout) {
 				p := l.Edges[0].Points
 				d := math.Hypot(p[1].X-p[0].X, p[1].Y-p[0].Y)
-				c := Pt{p[0].X + (p[1].X-p[0].X)*0.6/d, p[0].Y + (p[1].Y-p[0].Y)*0.6/d}
-				l.Edges[0].LabelBox = Rect{c.X - 0.1, c.Y - 0.1, c.X + 0.1, c.Y + 0.1}
+				c := pt{p[0].X + (p[1].X-p[0].X)*0.6/d, p[0].Y + (p[1].Y-p[0].Y)*0.6/d}
+				l.Edges[0].LabelBox = rect{c.X - 0.1, c.Y - 0.1, c.X + 0.1, c.Y + 0.1}
 			}, "over a marker"},
 		{"sequence: an arrow off its lifelines", "sequenceDiagram\n    A->>B: hi",
-			func(_ *Layout, s *seqLayout) {
+			func(_ *flowLayout, s *seqLayout) {
 				p := s.msgs[0].pts
 				p[0], p[len(p)-1] = p[len(p)-1], p[0]
 			}, "lifelines"},
 		{"sequence: a note over a header", "sequenceDiagram\n    Note over A: hi",
-			func(_ *Layout, s *seqLayout) { s.notes[0].box = s.heads[0].box }, "overlaps"},
+			func(_ *flowLayout, s *seqLayout) { s.notes[0].box = s.heads[0].box }, "overlaps"},
 	}
 	for _, c := range cases {
 		d, err := mr.Parse(c.src)
@@ -123,9 +124,9 @@ func TestVerifyAcceptsAFrameCrossing(t *testing.T) {
 	for dy := -base.H; dy <= base.H; dy += 0.25 {
 		for dx := -base.W; dx <= base.W; dx += 0.25 {
 			lay := *base
-			lay.Nodes = append([]NodeBox(nil), base.Nodes...)
-			lay.Frames = append([]FrameBox(nil), base.Frames...)
-			move := func(r Rect) Rect { return Rect{r.X0 + dx, r.Y0 + dy, r.X1 + dx, r.Y1 + dy} }
+			lay.Nodes = append([]nodeBox(nil), base.Nodes...)
+			lay.Frames = append([]frameBox(nil), base.Frames...)
+			move := func(r rect) rect { return rect{r.X0 + dx, r.Y0 + dy, r.X1 + dx, r.Y1 + dy} }
 			lay.Frames[fi].Box = move(lay.Frames[fi].Box)
 			lay.Frames[fi].TitleBox = move(lay.Frames[fi].TitleBox)
 			for i := range lay.Nodes {
@@ -153,20 +154,20 @@ func TestVerifyAcceptsAFrameCrossing(t *testing.T) {
 // other, a head longer than its run, a crow's foot off its line, two feet
 // touching.
 func TestVerifyLooseStillRefuses(t *testing.T) {
-	near := func(to, from Pt, d float64) Pt {
+	near := func(to, from pt, d float64) pt {
 		l := math.Hypot(from.X-to.X, from.Y-to.Y)
-		return Pt{to.X + (from.X-to.X)*d/l, to.Y + (from.Y-to.Y)*d/l}
+		return pt{to.X + (from.X-to.X)*d/l, to.Y + (from.Y-to.Y)*d/l}
 	}
 	type flowCase struct {
 		name, src string
-		corrupt   func(*Layout)
+		corrupt   func(*flowLayout)
 		want      string
 	}
 	for _, c := range []flowCase{
 		{"two heads on one point", "flowchart TD\n    A --> B\n    A --> C",
-			func(l *Layout) { l.Edges[1].Points[0] = l.Edges[0].Points[0] }, "meet at the same point"},
+			func(l *flowLayout) { l.Edges[1].Points[0] = l.Edges[0].Points[0] }, "meet at the same point"},
 		{"a head longer than its run", "flowchart TD\n    A --> B\n    A --> C\n    A --> D",
-			func(l *Layout) {
+			func(l *flowLayout) {
 				for i, e := range l.Edges {
 					if p := e.Points; len(p) >= 3 {
 						n := len(p)
@@ -210,31 +211,105 @@ func TestVerifyLooseStillRefuses(t *testing.T) {
 	}
 }
 
-// The check runs on every render, so it must stay cheap at the limits:
-// comparing every pair of segments took half a second on this diagram
-// (499 labelled links among 299 nodes); swept, it takes tens of ms.
+// The check runs on every render, so it must stay cheap at the limits.
+// Two legal diagrams: 499 labelled links at random among 299 nodes, where
+// comparing every pair of segments took half a second, and a 300-node
+// chain with 201 labelled links each skipping 20 layers (7,944 segments),
+// where every segment against every node took 0.1 s.
 func TestVerifyCost(t *testing.T) {
 	r := rand.New(rand.NewSource(1))
-	var b strings.Builder
-	b.WriteString("flowchart TD\n")
+	var random, chain strings.Builder
+	random.WriteString("flowchart TD\n")
 	for i := range 499 {
 		a := r.Intn(299)
-		fmt.Fprintf(&b, " n%d -->|l%d| n%d\n", a, i, (a+1+r.Intn(5))%299)
+		fmt.Fprintf(&random, " n%d -->|l%d| n%d\n", a, i, (a+1+r.Intn(5))%299)
 	}
-	d, err := mr.Parse(b.String())
-	if err != nil {
-		t.Fatal(err)
+	chain.WriteString("flowchart TD\n")
+	for i := range 299 {
+		fmt.Fprintf(&chain, " n%d --> n%d\n", i, i+1)
 	}
-	f := d.(*mr.Flowchart)
-	lay, err := layoutFlowchart(f, fakeMeasure)
-	if err != nil {
-		t.Fatal(err)
+	for i := range 201 {
+		fmt.Fprintf(&chain, " n%d -->|s%d| n%d\n", i, i, i+20)
 	}
-	start := time.Now()
-	if fs := flowFaults(f, lay, fakeMeasure, false, nil); len(fs) > 0 {
-		t.Errorf("faults: %v", fs)
+	for name, src := range map[string]string{"random": random.String(), "chain": chain.String()} {
+		d, err := mr.Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := d.(*mr.Flowchart)
+		lay, err := layoutFlowchart(f, fakeMeasure)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		start := time.Now()
+		if fs := flowFaults(f, lay, fakeMeasure, false, nil); len(fs) > 0 {
+			t.Errorf("%s: faults: %v", name, fs)
+		}
+		el := time.Since(start)
+		t.Logf("%s: %d edges, check took %v", name, len(lay.Edges), el)
+		if el > 150*time.Millisecond {
+			t.Errorf("%s: the check took %v", name, el)
+		}
 	}
-	if d := time.Since(start); d > 250*time.Millisecond {
-		t.Errorf("the check took %v", d)
+}
+
+// Sequences the render-time check once refused: a bar opened after a
+// message (not open at its arrow, as in mermaid), bars nested deeper than
+// a fixed reach, and deep bars on the last participant, which ran past
+// the picture's right edge.
+func TestRenderActivations(t *testing.T) {
+	fn := systemFont(t)
+	deep := func(n int, form string) string {
+		var b strings.Builder
+		b.WriteString("sequenceDiagram\n    A->>B: go\n")
+		for range n {
+			b.WriteString(form)
+		}
+		return b.String()
+	}
+	for name, src := range map[string]string{
+		"activate the sender after a message":  "sequenceDiagram\n    A->>B: hi\n    activate A\n    A->>B: r",
+		"activate twice after +":               "sequenceDiagram\n    A->>+B: hi\n    activate B\n    B->>A: r",
+		"six nested bars on the last lifeline": deep(6, "    A->>+B: in\n") + strings.Repeat("    B-->>-A: out\n", 6),
+		"twelve nested bars":                   deep(12, "    A->>+B: in\n") + strings.Repeat("    B-->>-A: out\n", 12),
+		"twelve activate statements":           "sequenceDiagram\n    A->>B: go\n" + strings.Repeat("    activate A\n", 12) + "    A->>B: then",
+	} {
+		d, err := mr.Parse(src)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if _, err := Render(d, Options{Font: fn}); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+		_, sl := seqOf(t, src, fakeMeasure)
+		checkSeq(t, name, d.(*mr.Sequence), sl)
+	}
+}
+
+// The grid finds what lies within pad across a cell edge, each index once
+// and in order, and nothing for a rectangle that is not finite.
+func TestGridNear(t *testing.T) {
+	var g grid
+	g.add(2, rect{3.90, 0, 3.95, 1}, 0.05) // cell 0, reaching the edge at 4
+	g.add(1, rect{0, 0, 9, 1}, 0.05)       // cells 0 to 2
+	g.add(0, rect{20, 0, 21, 1}, 0.05)     // far off
+	got := g.near(rect{4.02, 0, 4.1, 1}, 0.05)
+	if want := []int{1, 2}; !slices.Equal(got, want) {
+		t.Errorf("near = %v, want %v", got, want)
+	}
+	if got := g.near(rect{math.NaN(), 0, 1, 1}, 0); got != nil {
+		t.Errorf("near a NaN rectangle = %v", got)
+	}
+}
+
+// A link cut to one point is reported, not a panic, in either reading.
+func TestVerifyShortLink(t *testing.T) {
+	d, el := erOf(t, "erDiagram\n    A ||--o{ B : has", fakeMeasure)
+	el.Edges[0].Points = el.Edges[0].Points[:1]
+	for _, strict := range []bool{false, true} {
+		fs := append(flowFaults(el.graph, el.flowLayout, fakeMeasure, strict, nil), erFaults(d, el, fakeMeasure, strict)...)
+		if !strings.Contains(strings.Join(fs, "; "), "has 1 points") {
+			t.Errorf("strict %v: %v, want the short link reported", strict, fs)
+		}
 	}
 }

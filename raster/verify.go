@@ -3,7 +3,7 @@ package raster
 import (
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -33,12 +33,12 @@ func (f *faults) add(format string, a ...any) {
 }
 
 // verify runs the checks for whichever layout render made.
-func verify(d mr.Diagram, lay *Layout, el *erLayout, sl *seqLayout, m measurer) []string {
+func verify(d mr.Diagram, lay *flowLayout, el *erLayout, sl *seqLayout, m measurer) []string {
 	switch d := d.(type) {
 	case *mr.Flowchart:
 		return flowFaults(d, lay, m, false, nil)
 	case *mr.ER:
-		return append(flowFaults(el.graph, el.Layout, m, false, nil), erFaults(d, el, m, false)...)
+		return append(flowFaults(el.graph, el.flowLayout, m, false, nil), erFaults(d, el, m, false)...)
 	case *mr.Sequence:
 		return seqFaults(d, sl, false)
 	}
@@ -47,7 +47,7 @@ func verify(d mr.Diagram, lay *Layout, el *erLayout, sl *seqLayout, m measurer) 
 
 // segment is one straight piece of link k.
 type segment struct {
-	a, b Pt
+	a, b pt
 	link int
 }
 
@@ -60,17 +60,17 @@ type segment struct {
 // picture (the ends are still read from the heads; mermaid draws such
 // crossings too), but it is avoided where the order allows. Strict checks
 // fail on one unless frameCrossings is non-nil, where they are counted.
-func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCrossings *int) []string {
+func flowFaults(f *mr.Flowchart, lay *flowLayout, m measurer, strict bool, frameCrossings *int) []string {
 	var out faults
 	if len(lay.Nodes) != len(f.Nodes) || len(lay.Edges) != len(f.Links) || len(lay.Frames) != len(f.Subgraphs) {
 		out.add("placed %d nodes, %d links, %d frames; want %d, %d, %d", len(lay.Nodes), len(lay.Edges), len(lay.Frames), len(f.Nodes), len(f.Links), len(f.Subgraphs))
 		return out
 	}
-	box := map[string]NodeBox{}
+	box := map[string]nodeBox{}
 	for _, n := range lay.Nodes {
 		box[n.ID] = n
 	}
-	frame := map[string]FrameBox{}
+	frame := map[string]frameBox{}
 	for _, fr := range lay.Frames {
 		frame[fr.ID] = fr
 	}
@@ -89,7 +89,7 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 		}
 		for _, h := range []struct {
 			head   mr.Head
-			a, b   Pt
+			a, b   pt
 			atFrom bool
 		}{{e.Link.Start, p[0], p[1], true}, {e.Link.End, p[len(p)-1], p[len(p)-2], false}} {
 			if h.head == mr.NoHead {
@@ -100,7 +100,7 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 			}
 		}
 	}
-	all := Rect{-eps, -eps, lay.W + eps, lay.H + eps}
+	all := rect{-eps, -eps, lay.W + eps, lay.H + eps}
 	for i, a := range lay.Nodes {
 		if !all.contains(a.Box) {
 			out.add("node %s outside the layout", a.ID)
@@ -119,7 +119,7 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 		}
 		c := labelCenter(n)
 		poly := outline(n.Shape, n.Box, n.Slant)
-		for _, p := range []Pt{{c.X - tw/2, c.Y - th/2}, {c.X + tw/2, c.Y - th/2}, {c.X + tw/2, c.Y + th/2}, {c.X - tw/2, c.Y + th/2}} {
+		for _, p := range []pt{{c.X - tw/2, c.Y - th/2}, {c.X + tw/2, c.Y - th/2}, {c.X + tw/2, c.Y + th/2}, {c.X - tw/2, c.Y + th/2}} {
 			if !inPolygon(poly, p) && !onOutline(poly, p) {
 				out.add("label %q sticks out of node %s at %v", n.Label, n.ID, p)
 				break
@@ -151,12 +151,12 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 		}
 	}
 	// Labels overlap no node, no other label, no title.
-	var labels []Rect
+	var labels []rect
 	for _, e := range lay.Edges {
 		if e.Label == "" {
 			continue
 		}
-		if e.LabelBox == (Rect{}) {
+		if e.LabelBox == (rect{}) {
 			out.add("link %s->%s lost its label %q", e.Link.From.ID, e.Link.To.ID, e.Label)
 			continue
 		}
@@ -181,7 +181,12 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 	for _, n := range f.Nodes {
 		subgraphOf[n.ID] = n.Subgraph
 	}
-	arrivals := map[string][]Pt{}
+	var nodeGrid grid
+	for i, n := range lay.Nodes {
+		nodeGrid.add(i, n.Box, 0)
+	}
+	arrivals := map[string][]pt{}
+	var arrivalOrder []string // map order must not reach the first fault
 	for _, e := range lay.Edges {
 		lk := e.Link
 		name := lk.From.ID + "->" + lk.To.ID
@@ -189,7 +194,7 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 			out.add("link %s has %d points", name, len(e.Points))
 			continue
 		}
-		endOK := func(ep mr.Endpoint, p Pt) bool {
+		endOK := func(ep mr.Endpoint, p pt) bool {
 			if ep.Subgraph {
 				return onRectBorder(frame[ep.ID].Box, p)
 			}
@@ -205,8 +210,11 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 		}
 		for _, p := range [2]struct {
 			ep mr.Endpoint
-			at Pt
+			at pt
 		}{{lk.From, first}, {lk.To, last}} {
+			if arrivals[p.ep.ID] == nil {
+				arrivalOrder = append(arrivalOrder, p.ep.ID)
+			}
 			arrivals[p.ep.ID] = append(arrivals[p.ep.ID], p.at)
 		}
 		// Which frames the link may enter: those holding or being an end.
@@ -220,7 +228,8 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 		}
 		for i := 0; i+1 < len(e.Points); i++ {
 			a, b := e.Points[i], e.Points[i+1]
-			for _, n := range lay.Nodes {
+			for _, ni := range nodeGrid.near(bbox(a, b), 0) {
+				n := lay.Nodes[ni]
 				if n.ID == lk.From.ID && !lk.From.Subgraph || n.ID == lk.To.ID && !lk.To.Subgraph {
 					continue
 				}
@@ -239,7 +248,7 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 					}
 				}
 			}
-			if !all.contains(Rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)}) {
+			if !all.contains(rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)}) {
 				out.add("link %s leaves the layout", name)
 			}
 		}
@@ -259,24 +268,19 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 			segs = append(segs, segment{e.Points[i], e.Points[i+1], li})
 		}
 	}
-	// Pairs are swept left to right: two segments whose boxes are more
-	// than apart away cannot cross or come closer (a dense diagram has
-	// thousands of segments; every pair took half a second).
-	byX := make([]int, len(segs))
-	for i := range byX {
-		byX[i] = i
+	// Only segments near each other are compared: two whose boxes are
+	// more than apart away cannot cross or come closer.
+	var segGrid grid
+	for i, sg := range segs {
+		segGrid.add(i, bbox(sg.a, sg.b), apart/2)
 	}
-	x0 := func(s segment) float64 { return math.Min(s.a.X, s.b.X) }
-	sort.SliceStable(byX, func(i, j int) bool { return x0(segs[byX[i]]) < x0(segs[byX[j]]) })
-	for ii, i := range byX {
-		for _, j := range byX[ii+1:] {
-			a, b := segs[i], segs[j]
-			if x0(b) > math.Max(a.a.X, a.b.X)+apart {
-				break
+	for i := range segs {
+		for _, j := range segGrid.near(bbox(segs[i].a, segs[i].b), apart/2) {
+			if j <= i {
+				continue
 			}
-			if a.link == b.link ||
-				math.Min(b.a.Y, b.b.Y) > math.Max(a.a.Y, a.b.Y)+apart ||
-				math.Min(a.a.Y, a.b.Y) > math.Max(b.a.Y, b.b.Y)+apart {
+			a, b := segs[i], segs[j]
+			if a.link == b.link {
 				continue
 			}
 			if a.link > b.link {
@@ -297,8 +301,8 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 		if e.Label == "" {
 			continue
 		}
-		for _, sg := range segs {
-			if sg.link != li && segmentHitsRect(sg.a, sg.b, e.LabelBox, 1e-3) {
+		for _, si := range segGrid.near(e.LabelBox, 0) {
+			if sg := segs[si]; sg.link != li && segmentHitsRect(sg.a, sg.b, e.LabelBox, 1e-3) {
 				out.add("link %d runs through the label %q", sg.link, e.Label)
 			}
 		}
@@ -310,7 +314,8 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 	if strict {
 		meet = portGap - 0.05
 	}
-	for id, pts := range arrivals {
+	for _, id := range arrivalOrder {
+		pts := arrivals[id]
 		for i := range pts {
 			for j := i + 1; j < len(pts); j++ {
 				if math.Hypot(pts[i].X-pts[j].X, pts[i].Y-pts[j].Y) < meet {
@@ -329,11 +334,11 @@ func flowFaults(f *mr.Flowchart, lay *Layout, m measurer, strict bool, frameCros
 func erFaults(d *mr.ER, el *erLayout, m measurer, strict bool) []string {
 	var out faults
 	type endAt struct {
-		p    Pt
+		p    pt
 		node int
 	}
 	var ends []endAt
-	var zones []Rect
+	var zones []rect
 	idx := map[string]int{}
 	for i, n := range el.Nodes {
 		idx[n.ID] = i
@@ -344,7 +349,11 @@ func erFaults(d *mr.ER, el *erLayout, m measurer, strict bool) []string {
 	}
 	for _, e := range el.Edges {
 		p := e.Points
-		for _, s := range [][2]Pt{{p[0], p[1]}, {p[len(p)-1], p[len(p)-2]}} {
+		if len(p) < 2 {
+			zones = append(zones, rect{}, rect{}) // two per edge, as labels index them
+			continue                              // flowFaults reports it
+		}
+		for _, s := range [][2]pt{{p[0], p[1]}, {p[len(p)-1], p[len(p)-2]}} {
 			tip, next := s[0], s[1]
 			if d := math.Hypot(next.X-tip.X, next.Y-tip.Y); d < run {
 				out.add("link %s->%s: a marker's run is %.3f em (needs %.2f)", e.Link.From.ID, e.Link.To.ID, d, run)
@@ -352,9 +361,9 @@ func erFaults(d *mr.ER, el *erLayout, m measurer, strict bool) []string {
 			ux, uy := (next.X - tip.X), (next.Y - tip.Y)
 			l := math.Hypot(ux, uy)
 			ux, uy = ux/l, uy/l
-			a := Pt{tip.X - uy*markHalf, tip.Y + ux*markHalf}
-			b := Pt{tip.X + ux*markerReach + uy*markHalf, tip.Y + uy*markerReach - ux*markHalf}
-			zones = append(zones, Rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)})
+			a := pt{tip.X - uy*markHalf, tip.Y + ux*markHalf}
+			b := pt{tip.X + ux*markerReach + uy*markHalf, tip.Y + uy*markerReach - ux*markHalf}
+			zones = append(zones, rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)})
 		}
 		ends = append(ends, endAt{p[0], idx[e.Link.From.ID]}, endAt{p[len(p)-1], idx[e.Link.To.ID]})
 	}
@@ -398,7 +407,7 @@ func erFaults(d *mr.ER, el *erLayout, m measurer, strict bool) []string {
 	// A bend keeps its distance from its own link's label (a self-link's
 	// label sits beside its loop by design).
 	for _, e := range el.Edges {
-		if !strict || e.Label == "" || e.Link.From == e.Link.To {
+		if !strict || e.Label == "" || e.Link.From == e.Link.To || len(e.Points) < 2 {
 			continue
 		}
 		p := e.Points
@@ -434,9 +443,9 @@ func erFaults(d *mr.ER, el *erLayout, m measurer, strict bool) []string {
 // rows, and nested frames nested.
 func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 	var out faults
-	all := Rect{-eps, -eps, sl.W + eps, sl.H + eps}
+	all := rect{-eps, -eps, sl.W + eps, sl.H + eps}
 	type labelled struct {
-		r    Rect
+		r    rect
 		what string
 	}
 	var texts []labelled
@@ -460,15 +469,32 @@ func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 		out.add("%d messages and %d notes placed, want %d and %d", len(sl.msgs), len(sl.notes), len(msgEvents), len(noteEvents))
 		return out
 	}
-	reach := func(i int, x float64) bool {
-		return math.Abs(x-sl.cols[i]) <= sqActW/2+10*sqActStep+eps
+	// A lifeline's reach is its bars' span, however deep they nest.
+	lo := append([]float64(nil), sl.cols...)
+	hi := append([]float64(nil), sl.cols...)
+	for j, bar := range sl.acts {
+		i := sl.actCol[j]
+		lo[i], hi[i] = math.Min(lo[i], bar.X0), math.Max(hi[i], bar.X1)
+	}
+	reach := func(i int, x float64) bool { return x >= lo[i]-eps && x <= hi[i]+eps }
+	// Whether the event after message k activates the message's receiver:
+	// then the arrow ends on the bar it opens (A->>+B, or activate B next).
+	activates := make([]bool, len(msgEvents))
+	for k, mk := 0, 0; k < len(d.Events); k++ {
+		if d.Events[k].Kind != mr.Message {
+			continue
+		}
+		if k+1 < len(d.Events) && d.Events[k+1].Kind == mr.Activate && d.Events[k+1].From == d.Events[k].To {
+			activates[mk] = true
+		}
+		mk++
 	}
 	prevY := math.Inf(-1)
 	for k, m := range sl.msgs {
 		e := msgEvents[k]
 		a, b := idx[e.From], idx[e.To]
 		first, last := m.pts[0], m.pts[len(m.pts)-1]
-		if !all.contains(Rect{first.X, first.Y, first.X, first.Y}) || !all.contains(Rect{last.X, last.Y, last.X, last.Y}) {
+		if !all.contains(rect{first.X, first.Y, first.X, first.Y}) || !all.contains(rect{last.X, last.Y, last.X, last.Y}) {
 			out.add("message %d runs outside the picture", k)
 		}
 		if first.Y <= prevY {
@@ -479,17 +505,31 @@ func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 			out.add("message %d (%q) does not start and end on its lifelines", k, e.Text)
 		}
 		// Each end is on its lifeline, or on the side of the outermost bar
-		// open there, facing the other end.
-		endAt := func(i int, p Pt, right bool) float64 {
+		// open there, facing the other end: a bar opened before the
+		// message, and at the receiver the one bar the message opens. A
+		// bar opened after it (activate A after A->>B) is not open yet, as
+		// in mermaid.
+		endAt := func(i int, p pt, right, opens bool) float64 {
 			x := sl.cols[i]
-			for _, bar := range sl.acts {
-				if bar.Y0-eps <= p.Y && p.Y <= bar.Y1+eps && bar.X0 < x+10*sqActStep && bar.X1 > x-sqActW {
-					if right {
-						x = math.Max(x, bar.X1)
-					} else {
-						x = math.Min(x, bar.X0)
-					}
+			use := func(bar rect) {
+				if right {
+					x = math.Max(x, bar.X1)
+				} else {
+					x = math.Min(x, bar.X0)
 				}
+			}
+			var opened *rect
+			for j, bar := range sl.acts {
+				switch {
+				case sl.actCol[j] != i || p.Y > bar.Y1+eps:
+				case bar.Y0 < p.Y-eps:
+					use(bar)
+				case opens && math.Abs(bar.Y0-p.Y) <= eps && (opened == nil || bar.X0 < opened.X0):
+					opened = &sl.acts[j]
+				}
+			}
+			if opened != nil {
+				use(*opened)
 			}
 			return x
 		}
@@ -500,15 +540,20 @@ func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 		if a == b && m.pts[1].X <= first.X {
 			out.add("message %d (%q) to itself loops the wrong way", k, e.Text)
 		}
-		toRight := a == b || sl.cols[b] > sl.cols[a]
-		if want := endAt(a, first, toRight); math.Abs(first.X-want) > eps {
-			out.add("message %d (%q) starts at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, first.X, want)
+		// Where exactly on its lifeline or bar an end sits is precision,
+		// not a wrong picture: reach above already refuses an end off its
+		// participant.
+		if strict {
+			toRight := a == b || sl.cols[b] > sl.cols[a]
+			if want := endAt(a, first, toRight, false); math.Abs(first.X-want) > eps {
+				out.add("message %d (%q) starts at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, first.X, want)
+			}
+			fromRight := a == b || sl.cols[a] > sl.cols[b]
+			if want := endAt(b, last, fromRight, activates[k]); math.Abs(last.X-want) > eps {
+				out.add("message %d (%q) ends at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, last.X, want)
+			}
 		}
-		fromRight := a == b || sl.cols[a] > sl.cols[b]
-		if want := endAt(b, last, fromRight); math.Abs(last.X-want) > eps {
-			out.add("message %d (%q) ends at %.3f, not at %.3f (its lifeline or bar)", k, e.Text, last.X, want)
-		}
-		if m.tbox != (Rect{}) {
+		if m.tbox != (rect{}) {
 			texts = append(texts, labelled{m.tbox, "message " + e.Text})
 			if m.tbox.Y1 > first.Y+eps {
 				out.add("message %d's text is not above its arrow", k)
@@ -534,7 +579,7 @@ func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 			for _, p := range m.pts {
 				right = math.Max(right, p.X)
 			}
-			if m.tbox != (Rect{}) {
+			if m.tbox != (rect{}) {
 				right = math.Max(right, m.tbox.X1)
 			}
 			if right >= sl.cols[a+1]-eps {
@@ -593,7 +638,7 @@ func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 					out.add("a %s frame does not hold a message in its rows", f.kind)
 				}
 			}
-			if m.tbox != (Rect{}) && in(m.tbox.Y0, m.tbox.Y1) && !f.box.contains(m.tbox) {
+			if m.tbox != (rect{}) && in(m.tbox.Y0, m.tbox.Y1) && !f.box.contains(m.tbox) {
 				out.add("a %s frame does not hold the text %q in its rows", f.kind, m.text)
 			}
 		}
@@ -637,10 +682,9 @@ func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 		if prev.From == prev.To {
 			y = sl.msgs[mi].pts[len(sl.msgs[mi].pts)-1].Y
 		}
-		col := sl.cols[idx[e.From]]
 		found := false
-		for _, bar := range sl.acts {
-			near := bar.X0 < col+10*sqActStep && bar.X1 > col-sqActW
+		for j, bar := range sl.acts {
+			near := sl.actCol[j] == idx[e.From]
 			if e.Kind == mr.Activate && e.From == prev.To && near && math.Abs(bar.Y0-y) < eps ||
 				e.Kind == mr.Deactivate && e.From == prev.From && near && math.Abs(bar.Y1-y) < eps {
 				found = true
@@ -659,7 +703,7 @@ func seqFaults(d *mr.Sequence, sl *seqLayout, strict bool) []string {
 }
 
 // onOutline reports whether p lies on the polygon's boundary.
-func onOutline(poly []Pt, p Pt) bool {
+func onOutline(poly []pt, p pt) bool {
 	for i := range poly {
 		a, b := poly[i], poly[(i+1)%len(poly)]
 		if distToSeg(p, a, b) < 1e-4 {
@@ -669,7 +713,7 @@ func onOutline(poly []Pt, p Pt) bool {
 	return false
 }
 
-func distToSeg(p, a, b Pt) float64 {
+func distToSeg(p, a, b pt) float64 {
 	dx, dy := b.X-a.X, b.Y-a.Y
 	l2 := dx*dx + dy*dy
 	t := 0.0
@@ -679,11 +723,11 @@ func distToSeg(p, a, b Pt) float64 {
 	return math.Hypot(p.X-(a.X+t*dx), p.Y-(a.Y+t*dy))
 }
 
-func onRectBorder(r Rect, p Pt) bool {
-	return onOutline([]Pt{{r.X0, r.Y0}, {r.X1, r.Y0}, {r.X1, r.Y1}, {r.X0, r.Y1}}, p)
+func onRectBorder(r rect, p pt) bool {
+	return onOutline([]pt{{r.X0, r.Y0}, {r.X1, r.Y0}, {r.X1, r.Y1}, {r.X0, r.Y1}}, p)
 }
 
-func inPolygon(poly []Pt, p Pt) bool {
+func inPolygon(poly []pt, p pt) bool {
 	in := false
 	for i, j := 0, len(poly)-1; i < len(poly); j, i = i, i+1 {
 		a, b := poly[i], poly[j]
@@ -694,14 +738,71 @@ func inPolygon(poly []Pt, p Pt) bool {
 	return in
 }
 
-func segDist(a, b, c, d Pt) float64 {
+func segDist(a, b, c, d pt) float64 {
 	return math.Min(math.Min(distToSeg(a, c, d), distToSeg(b, c, d)), math.Min(distToSeg(c, a, b), distToSeg(d, a, b)))
 }
 
 // angleBetween is the acute angle between two segments, in degrees.
 func angleBetween(a, b segment) float64 {
-	ang := func(p, q Pt) float64 { return math.Atan2(q.Y-p.Y, q.X-p.X) }
+	ang := func(p, q pt) float64 { return math.Atan2(q.Y-p.Y, q.X-p.X) }
 	d := math.Abs(ang(a.a, a.b)-ang(b.a, b.b)) * 180 / math.Pi
 	d = math.Mod(d, 180)
 	return math.Min(d, 180-d)
+}
+
+func bbox(a, b pt) rect {
+	return rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)}
+}
+
+// grid buckets rectangles by square cells, so a check compares only what
+// lies near: comparing everything with everything took up to half a
+// second at the limits.
+type grid struct {
+	cells map[[2]int][]int
+}
+
+const gridCell = 4.0 // em
+
+// cells gives the cells r, grown by pad, covers; none for a rectangle
+// that is not finite (the checks report it as outside the layout).
+func cells(r rect, pad float64) (x0, y0, x1, y1 int, ok bool) {
+	for _, v := range []float64{r.X0, r.Y0, r.X1, r.Y1} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return 0, 0, 0, 0, false
+		}
+	}
+	f := func(v float64) int { return int(math.Floor(v / gridCell)) }
+	return f(r.X0 - pad), f(r.Y0 - pad), f(r.X1 + pad), f(r.Y1 + pad), true
+}
+
+func (g *grid) add(i int, r rect, pad float64) {
+	if g.cells == nil {
+		g.cells = map[[2]int][]int{}
+	}
+	x0, y0, x1, y1, ok := cells(r, pad)
+	if !ok {
+		return
+	}
+	for x := x0; x <= x1; x++ {
+		for y := y0; y <= y1; y++ {
+			g.cells[[2]int{x, y}] = append(g.cells[[2]int{x, y}], i)
+		}
+	}
+}
+
+// near gives, in ascending order and once each, the indexes added in a
+// cell that r, grown by pad, covers.
+func (g *grid) near(r rect, pad float64) []int {
+	x0, y0, x1, y1, ok := cells(r, pad)
+	if !ok {
+		return nil
+	}
+	var out []int
+	for x := x0; x <= x1; x++ {
+		for y := y0; y <= y1; y++ {
+			out = append(out, g.cells[[2]int{x, y}]...)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }

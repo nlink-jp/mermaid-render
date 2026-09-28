@@ -55,7 +55,7 @@ type probe struct {
 	trace func(string)
 	// corrupt changes the layout before it is checked, to prove the check
 	// runs: a fault no real layout has cannot be reached otherwise.
-	corrupt func(lay *Layout, seq *seqLayout)
+	corrupt func(lay *flowLayout, seq *seqLayout)
 }
 
 // render is Render with a probe.
@@ -77,7 +77,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		return nil, fmt.Errorf("raster: Scale %v is outside (0, %d]", opts.Scale, MaxScale)
 	}
 	var (
-		lay       *Layout
+		lay       *flowLayout
 		er        *erLayout
 		seq       *seqLayout
 		nodeLines []int
@@ -99,7 +99,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		if er, err = layoutER(d, fn.measureEm); err != nil {
 			return nil, err
 		}
-		lay = er.Layout
+		lay = er.flowLayout
 		for _, e := range d.Entities {
 			nodeLines = append(nodeLines, e.Line)
 		}
@@ -109,16 +109,10 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		if seq, err = layoutSequence(d, fn.measureEm); err != nil {
 			return nil, err
 		}
-		lay = &Layout{W: seq.W, H: seq.H}
+		lay = &flowLayout{W: seq.W, H: seq.H}
 		title, titleLine = d.Title(), d.TitleLine()
 	default:
 		return nil, &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("%T", d)}
-	}
-	if pr.corrupt != nil {
-		pr.corrupt(lay, seq)
-	}
-	if fs := verify(d, lay, er, seq, fn.measureEm); len(fs) > 0 {
-		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fs[0]}
 	}
 	var tw, th float64
 	var err error
@@ -135,10 +129,17 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	if wPx*hPx > MaxPixels {
 		return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf("image would be %dx%d pixels (limit %d)", wPx, hPx, MaxPixels)}
 	}
+	// Checked after the size, which is cheaper and refuses first.
+	if pr.corrupt != nil {
+		pr.corrupt(lay, seq)
+	}
+	if fs := verify(d, lay, er, seq, fn.measureEm); len(fs) > 0 {
+		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fs[0]}
+	}
 	img := image.NewRGBA(image.Rect(0, 0, wPx, hPx))
 	draw.Draw(img, img.Bounds(), image.NewUniform(colBG), image.Point{}, draw.Src)
 	c := &canvas{img: img, em: em, trace: pr.trace}
-	c.outlineShape(roundRect(Rect{0.06, 0.06, wEm - 0.06, hEm - 0.06}, 0.5), nil, colCard, 0.06, false)
+	c.outlineShape(roundRect(rect{0.06, 0.06, wEm - 0.06, hEm - 0.06}, 0.5), nil, colCard, 0.06, false)
 	if title != "" {
 		if err := fn.drawText(img, wEm/2*em, (cardPad+th/2-0.2)*em, title, true, em, colText); err != nil {
 			return nil, glyphErr(err, titleLine)
@@ -154,7 +155,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		}
 		return img, nil
 	}
-	text := func(p Pt, s string, bold bool) error {
+	text := func(p pt, s string, bold bool) error {
 		return fn.drawText(img, (p.X+c.offX)*em, (p.Y+c.offY)*em, s, bold, em, colText)
 	}
 	for _, fr := range lay.Frames {
@@ -168,7 +169,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	for _, fr := range lay.Frames {
 		if fr.Title != "" {
 			tb := fr.TitleBox
-			c.fill(roundRect(Rect{tb.X0 - labelPad, tb.Y0 - labelPad/2, tb.X1 + labelPad, tb.Y1 + labelPad/2}, 0.2), colFrame)
+			c.fill(roundRect(rect{tb.X0 - labelPad, tb.Y0 - labelPad/2, tb.X1 + labelPad, tb.Y1 + labelPad/2}, 0.2), colFrame)
 			if err := fn.drawText(img, (tb.X0+tb.W()/2+c.offX)*em, (tb.Center().Y+c.offY)*em, fr.Title, true, em, colText); err != nil {
 				return nil, glyphErr(err, 0)
 			}

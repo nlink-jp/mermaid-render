@@ -24,7 +24,7 @@ func fakeMeasure(s string, bold bool) (float64, float64, error) {
 		lw := 0.0
 		for _, r := range l {
 			if r == '☃' {
-				return 0, 0, &MissingGlyphError{Rune: r}
+				return 0, 0, &missingGlyphError{Rune: r}
 			}
 			if r < utf8.RuneSelf {
 				lw += 0.6
@@ -37,7 +37,7 @@ func fakeMeasure(s string, bold bool) (float64, float64, error) {
 	return w, 1.2 * float64(len(lines)), nil
 }
 
-func layoutOf(t *testing.T, src string, m measurer) (*mr.Flowchart, *Layout) {
+func layoutOf(t *testing.T, src string, m measurer) (*mr.Flowchart, *flowLayout) {
 	t.Helper()
 	d, err := mr.Parse(src)
 	if err != nil {
@@ -55,11 +55,11 @@ func layoutOf(t *testing.T, src string, m measurer) (*mr.Flowchart, *Layout) {
 // tests hold what a render refuses and what it only draws less well.
 // frameCrossings non-nil counts links through frames not theirs instead
 // of failing on them.
-func checkLayout(t *testing.T, name string, f *mr.Flowchart, lay *Layout, m measurer) {
+func checkLayout(t *testing.T, name string, f *mr.Flowchart, lay *flowLayout, m measurer) {
 	checkLayoutCounting(t, name, f, lay, m, nil)
 }
 
-func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout, m measurer, frameCrossings *int) {
+func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *flowLayout, m measurer, frameCrossings *int) {
 	t.Helper()
 	for _, msg := range flowFaults(f, lay, m, true, frameCrossings) {
 		t.Errorf("%s: %s", name, msg)
@@ -355,8 +355,8 @@ func TestLayoutRegressions(t *testing.T) {
 // clipAt lands on the outline even when the inside point it aims at lies
 // outside the shape: here beyond a parallelogram's slant.
 func TestClipAtFallsBackToTheCentre(t *testing.T) {
-	r := Rect{0, 0, 6, 2}
-	outside, inside := Pt{5.9, 5}, Pt{5.9, 1} // below the slanted right end
+	r := rect{0, 0, 6, 2}
+	outside, inside := pt{5.9, 5}, pt{5.9, 1} // below the slanted right end
 	p := clipAt(mr.Parallelogram, r, 1, outside, inside)
 	if !onOutline(outline(mr.Parallelogram, r, 1), p) {
 		t.Errorf("clipAt = %v, not on the outline", p)
@@ -387,7 +387,7 @@ func TestChainThroughFramesIsStraight(t *testing.T) {
 		f, lay := layoutOf(t, strings.Replace(src, "TD", dir, 1), fakeMeasure)
 		checkLayout(t, dir, f, lay, fakeMeasure)
 		horiz := dir == "LR"
-		col := func(r Rect) float64 {
+		col := func(r rect) float64 {
 			if horiz {
 				return r.Center().Y
 			}
@@ -453,7 +453,7 @@ func TestLoneEndMeetsTheMiddle(t *testing.T) {
     C --> R[Attribution Report]`
 	f, lay := layoutOf(t, src, fakeMeasure)
 	checkLayout(t, "lone end", f, lay, fakeMeasure)
-	var b NodeBox
+	var b nodeBox
 	for _, n := range lay.Nodes {
 		if n.ID == "B" {
 			b = n
@@ -487,7 +487,7 @@ func TestStepBesideTheNode(t *testing.T) {
     E -->|Response Data| G`
 	f, lay := layoutOf(t, src, fakeMeasure)
 	checkLayout(t, "step", f, lay, fakeMeasure)
-	var b NodeBox
+	var b nodeBox
 	for _, n := range lay.Nodes {
 		if n.ID == "B" {
 			b = n

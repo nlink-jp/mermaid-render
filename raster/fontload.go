@@ -265,6 +265,12 @@ const MaxFontBytes = 256 << 20
 
 // readFont reads a regular file of at most MaxFontBytes.
 func readFont(path string) ([]byte, error) {
+	// Checked before opening too: opening a named pipe waits for a writer.
+	if st, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("font %s: %w", path, err)
+	} else if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("font %s: not a regular file", path)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("font %s: %w", path, err)

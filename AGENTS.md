@@ -39,7 +39,8 @@ mermaid-render/
 ├── raster/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
 │   ├── seq.go        # sequence: columns from pairwise needs, events stacked, drawing
-│   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, MissingGlyphError
+│   ├── doc.go        # package raster
+│   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, missingGlyphError
 │   ├── fontload.go   # FontSpec, LoadFont, name-table reader (every language)
 │   ├── layout.go     # layered layout: chains, two-level ranks, items, ordering
 │   ├── coords.go     # cross-axis coordinates: difference constraints + descent
@@ -144,10 +145,22 @@ mermaid-render/
   mutation script that looks only for `_test.go:` lines misreads a test
   killed for memory (an unbounded font read of /dev/zero) as surviving.
   Read the exit status too.
-- **The render-time check must stay cheap**: pairs of segments are swept by
-  x, and `segmentHitsRect` rejects by bounding box first; comparing every
-  pair took half a second at the limits (`TestVerifyCost`, which catches
-  only a slide of that order).
+- **The render-time check must stay cheap**: segments, nodes and labels are
+  bucketed on a 4 em grid (`grid` in verify.go) and only neighbours are
+  compared, and `segmentHitsRect` rejects by bounding box first. Comparing
+  everything took half a second at the limits; sweeping by x alone still
+  took 0.14 s on a chain whose links share a few columns (`TestVerifyCost`
+  holds both inputs, and catches only a slide of that order).
+- **A sequence bar knows its participant** (`seqLayout.actCol`): the checks
+  used to guess it from x within ten bar steps, and refused deeper nesting.
+  A bar opened after a message (`activate A` after `A->>B`) is not open at
+  that message's arrow, as in mermaid; only the receiver's bar the message
+  itself opens is (`endAt`). Where exactly an end sits on its bar is checked
+  strictly only — precision, not a wrong picture.
+- **The API is `Parse`, `Render`, `RenderSource`, `Font`, `FontSpec`,
+  `Options` and the limits.** Layout types stay unexported so gem-agent
+  cannot pin to them; `missingGlyphError` reaches callers only as an
+  `*mr.Error`'s message.
 - **Drawing is checked through a trace** (`render(d, opts, probe{trace: …})`,
   `canvas.tracef`): markers, heads and every polyline's dash flag are
   reported, and tests compare them with the source. Trace inside the

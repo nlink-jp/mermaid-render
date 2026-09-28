@@ -18,58 +18,58 @@ import (
 // self-links, one level of subgraphs kept contiguous, and TD computed then
 // transformed for the other directions.
 
-// Pt is a point in em.
-type Pt struct{ X, Y float64 }
+// pt is a point in em.
+type pt struct{ X, Y float64 }
 
-// Rect is an axis-aligned rectangle in em.
-type Rect struct{ X0, Y0, X1, Y1 float64 }
+// rect is an axis-aligned rectangle in em.
+type rect struct{ X0, Y0, X1, Y1 float64 }
 
-func (r Rect) W() float64 { return r.X1 - r.X0 }
-func (r Rect) H() float64 { return r.Y1 - r.Y0 }
-func (r Rect) Center() Pt { return Pt{(r.X0 + r.X1) / 2, (r.Y0 + r.Y1) / 2} }
+func (r rect) W() float64 { return r.X1 - r.X0 }
+func (r rect) H() float64 { return r.Y1 - r.Y0 }
+func (r rect) Center() pt { return pt{(r.X0 + r.X1) / 2, (r.Y0 + r.Y1) / 2} }
 
 // overlaps reports whether r and o share interior area.
-func (r Rect) overlaps(o Rect) bool {
+func (r rect) overlaps(o rect) bool {
 	return r.X0 < o.X1 && o.X0 < r.X1 && r.Y0 < o.Y1 && o.Y0 < r.Y1
 }
 
-func (r Rect) contains(o Rect) bool {
+func (r rect) contains(o rect) bool {
 	return r.X0 <= o.X0 && r.Y0 <= o.Y0 && o.X1 <= r.X1 && o.Y1 <= r.Y1
 }
 
-// NodeBox is a placed node.
-type NodeBox struct {
+// nodeBox is a placed node.
+type nodeBox struct {
 	ID    string
 	Label string
 	Shape mr.Shape
-	Box   Rect
+	Box   rect
 	// Slant is how far the slanted shapes' sides lean in: half the height
 	// the node had before it grew to hold links, and at most 0.3 of its
 	// width, so growing never eats into the room its text was given.
 	Slant float64
 }
 
-// FrameBox is a placed subgraph frame and its title.
-type FrameBox struct {
+// frameBox is a placed subgraph frame and its title.
+type frameBox struct {
 	ID, Title string
-	Box       Rect
-	TitleBox  Rect
+	Box       rect
+	TitleBox  rect
 }
 
-// EdgePath is a routed link: Points run from the link's From to its To.
-type EdgePath struct {
+// edgePath is a routed link: Points run from the link's From to its To.
+type edgePath struct {
 	Link     *mr.Link
-	Points   []Pt
+	Points   []pt
 	Label    string
-	LabelBox Rect // zero when there is no label
+	LabelBox rect // zero when there is no label
 }
 
-// Layout is a placed flowchart.
-type Layout struct {
+// flowLayout is a placed flowchart.
+type flowLayout struct {
 	W, H   float64
-	Nodes  []NodeBox
-	Frames []FrameBox
-	Edges  []EdgePath
+	Nodes  []nodeBox
+	Frames []frameBox
+	Edges  []edgePath
 }
 
 // measurer gives a text's size in em. It fails for a character no font can
@@ -202,12 +202,12 @@ type layouter struct {
 	solList  []*item // the item behind each variable
 }
 
-func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {
+func layoutFlowchart(f *mr.Flowchart, m measurer) (*flowLayout, error) {
 	return layoutGraph(f, m, &layouter{portGap: portGap, rankGap: rankGap, endRoom: trackOut, labelRoom: trackIn})
 }
 
 // layoutGraph lays out f with the spacing (and node sizes) set in l.
-func layoutGraph(f *mr.Flowchart, m measurer, l *layouter) (*Layout, error) {
+func layoutGraph(f *mr.Flowchart, m measurer, l *layouter) (*flowLayout, error) {
 	// Empty subgraphs become nodes of their own, so they count as nodes.
 	if len(f.Nodes)+len(f.Subgraphs) > MaxNodes || len(f.Subgraphs) > MaxSubgraphs || len(f.Links) > MaxLinks {
 		return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf(
@@ -254,7 +254,7 @@ func layoutGraph(f *mr.Flowchart, m measurer, l *layouter) (*Layout, error) {
 }
 
 func glyphErr(err error, line int) error {
-	if me, ok := err.(*MissingGlyphError); ok {
+	if me, ok := err.(*missingGlyphError); ok {
 		return &mr.Error{Kind: mr.UnsupportedConstruct, Line: line, Msg: me.Error()}
 	}
 	return err
@@ -395,33 +395,33 @@ func (l *layouter) attachmentsClear(i int, off float64) bool {
 		cross, rs = l.nh[i], l.nw[i]
 	}
 	// The outline in the abstract frame: the visual outline transformed.
-	r := Rect{-cross / 2, -rs / 2, cross / 2, rs / 2}
+	r := rect{-cross / 2, -rs / 2, cross / 2, rs / 2}
 	vis := r
 	if l.horiz {
-		vis = Rect{-rs / 2, -cross / 2, rs / 2, cross / 2}
+		vis = rect{-rs / 2, -cross / 2, rs / 2, cross / 2}
 	}
 	poly := outline(l.shapeOf(i), vis, math.Min(l.slant0[i], 0.3*vis.W()))
 	if l.horiz {
 		for j, p := range poly {
-			poly[j] = Pt{p.Y, p.X}
+			poly[j] = pt{p.Y, p.X}
 		}
 	}
 	if l.f.Direction == mr.BT || l.f.Direction == mr.RL {
 		for j, p := range poly {
-			poly[j] = Pt{p.X, -p.Y}
+			poly[j] = pt{p.X, -p.Y}
 		}
 	}
-	hit := func(from, to Pt) (Pt, bool) { return firstHit(poly, from, to) }
-	var loopEnds []Pt
+	hit := func(from, to pt) (pt, bool) { return firstHit(poly, from, to) }
+	var loopEnds []pt
 	for o := l.portGap / 2; o <= off+1e-9; o += l.portGap {
 		for _, y := range []float64{-o, o} {
-			if p, ok := hit(Pt{cross, y}, Pt{0, y}); ok {
+			if p, ok := hit(pt{cross, y}, pt{0, y}); ok {
 				loopEnds = append(loopEnds, p)
 			}
 		}
 	}
 	for _, y := range []float64{-off, off} {
-		if p, ok := hit(Pt{cross, y}, Pt{0, y}); ok {
+		if p, ok := hit(pt{cross, y}, pt{0, y}); ok {
 			loopEnds = append(loopEnds, p)
 		}
 	}
@@ -431,7 +431,7 @@ func (l *layouter) attachmentsClear(i int, off float64) bool {
 		for j := range steps {
 			// Both ends of the range exactly: aligned ports sit on them.
 			x := -half + 2*half*float64(j)/float64(max(steps-1, 1))
-			p, ok := hit(Pt{x, face}, Pt{x, 0})
+			p, ok := hit(pt{x, face}, pt{x, 0})
 			if !ok {
 				continue
 			}

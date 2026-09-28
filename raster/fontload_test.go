@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"unicode/utf16"
 )
@@ -197,7 +198,7 @@ func TestLoadFontFallback(t *testing.T) {
 		t.Errorf("runs %+v, want Menlo then Hiragino", rs)
 	}
 	_, _, err = fn.measureEm("ok 😀", false)
-	var me *MissingGlyphError
+	var me *missingGlyphError
 	if !errors.As(err, &me) || me.Rune != '😀' {
 		t.Errorf("an emoji: %v, want a MissingGlyphError", err)
 	}
@@ -356,9 +357,14 @@ func TestFontReadsAreBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = f.Close()
+	fifo := filepath.Join(dir, "fifo.ttf")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for path, want := range map[string]string{
 		"/dev/zero": "not a regular file",
 		dir:         "not a regular file",
+		fifo:        "not a regular file", // opening it would wait for a writer
 		big:         "limit",
 	} {
 		_, err := LoadFont(FontSpec{Path: path})

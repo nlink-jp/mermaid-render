@@ -31,7 +31,7 @@ func erOf(t *testing.T, src string, m measurer) (*mr.ER, *erLayout) {
 // then what an ER diagram adds (erFaults), strictly.
 func checkER(t *testing.T, name string, d *mr.ER, el *erLayout, m measurer) {
 	t.Helper()
-	checkLayout(t, name, el.graph, el.Layout, m)
+	checkLayout(t, name, el.graph, el.flowLayout, m)
 	for _, msg := range erFaults(d, el, m, true) {
 		t.Errorf("%s: %s", name, msg)
 	}

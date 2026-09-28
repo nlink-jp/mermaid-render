@@ -134,9 +134,9 @@ func TestRealSiblingCrossings(t *testing.T) {
 
 // properCrossings counts where a horizontal segment of one path crosses a
 // vertical segment of the other strictly inside both.
-func properCrossings(p, q []Pt) int {
+func properCrossings(p, q []pt) int {
 	n := 0
-	count := func(p, q []Pt) {
+	count := func(p, q []pt) {
 		for i := 0; i+1 < len(p); i++ {
 			if math.Abs(p[i].Y-p[i+1].Y) > 1e-6 {
 				continue

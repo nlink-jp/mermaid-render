@@ -61,7 +61,7 @@ func (t *erTable) size(labelW float64) (w, h float64) {
 // Edge per relationship), each entity's table, and the relationship behind
 // each placed link.
 type erLayout struct {
-	*Layout
+	*flowLayout
 	tables []erTable // nil entry: an entity without attributes
 	rels   map[*mr.Link]*mr.Relationship
 	graph  *mr.Flowchart // what was laid out
@@ -116,7 +116,7 @@ func layoutER(d *mr.ER, m measurer) (*erLayout, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &erLayout{Layout: lay, tables: tables, rels: rels, graph: f}, nil
+	return &erLayout{flowLayout: lay, tables: tables, rels: rels, graph: f}, nil
 }
 
 // measureTable measures an entity's rows. Keys join with "," as erBox
@@ -170,7 +170,7 @@ func measureTable(e *mr.Entity, m measurer) (erTable, error) {
 
 // fit stretches a table to its placed box: the columns share the extra
 // width, the rows the extra height (a node grows to hold its links).
-func (t *erTable) fit(box Rect) (cols, rows []float64) {
+func (t *erTable) fit(box rect) (cols, rows []float64) {
 	w, h := 0.0, t.hdrH
 	for _, c := range t.cols {
 		w += c
@@ -202,7 +202,7 @@ const (
 // running on towards from. Next to the entity is the maximum (a bar for
 // one, a crow's foot for many); further out the minimum (a bar for one, a
 // circle for zero).
-func (c *canvas) marker(card mr.Cardinality, tip, from Pt) {
+func (c *canvas) marker(card mr.Cardinality, tip, from pt) {
 	dx, dy := from.X-tip.X, from.Y-tip.Y
 	l := math.Hypot(dx, dy)
 	if l == 0 {
@@ -210,7 +210,7 @@ func (c *canvas) marker(card mr.Cardinality, tip, from Pt) {
 	}
 	ux, uy := dx/l, dy/l // along the line, away from the entity
 	nx, ny := -uy, ux    // across it
-	at := func(t, s float64) Pt { return Pt{tip.X + ux*t + nx*s, tip.Y + uy*t + ny*s} }
+	at := func(t, s float64) pt { return pt{tip.X + ux*t + nx*s, tip.Y + uy*t + ny*s} }
 	var parts []string
 	defer func() { c.tracef("marker at %.2f,%.2f: %s", tip.X, tip.Y, strings.Join(parts, " ")) }()
 	bar := func(t float64) {
@@ -247,7 +247,7 @@ func (c *canvas) marker(card mr.Cardinality, tip, from Pt) {
 
 // entity draws an entity: a box with its name, or a table (a header with
 // the name, then a row per attribute).
-func (c *canvas) entity(n NodeBox, t erTable, fn *Font) error {
+func (c *canvas) entity(n nodeBox, t erTable, fn *Font) error {
 	b := n.Box
 	text := func(x, y float64, s string, bold bool) error {
 		return fn.drawText(c.img, (x+c.offX)*c.em, (y+c.offY)*c.em, s, bold, c.em, colText)
@@ -257,7 +257,7 @@ func (c *canvas) entity(n NodeBox, t erTable, fn *Font) error {
 		return text(b.Center().X, b.Center().Y, n.Label, true)
 	}
 	cols, rows := t.fit(b)
-	hdr := Rect{b.X0, b.Y0, b.X1, b.Y0 + t.hdrH}
+	hdr := rect{b.X0, b.Y0, b.X1, b.Y0 + t.hdrH}
 	c.fill(roundRect(hdr, 0), colNode)
 	y := hdr.Y1
 	for i, rh := range rows {
@@ -265,7 +265,7 @@ func (c *canvas) entity(n NodeBox, t erTable, fn *Font) error {
 		if i%2 == 1 {
 			col = colRowAlt
 		}
-		c.fill(roundRect(Rect{b.X0, y, b.X1, y + rh}, 0), col)
+		c.fill(roundRect(rect{b.X0, y, b.X1, y + rh}, 0), col)
 		x := b.X0
 		for j, s := range t.cells[i] {
 			if s != "" {
@@ -284,16 +284,16 @@ func (c *canvas) entity(n NodeBox, t erTable, fn *Font) error {
 	// Grid: the header's rule, the row rules, the column rules below the
 	// header.
 	thin := lineW * 0.6
-	c.segment(Pt{b.X0, hdr.Y1}, Pt{b.X1, hdr.Y1}, lineW, colStroke)
+	c.segment(pt{b.X0, hdr.Y1}, pt{b.X1, hdr.Y1}, lineW, colStroke)
 	y = hdr.Y1
 	for _, rh := range rows[:len(rows)-1] {
 		y += rh
-		c.segment(Pt{b.X0, y}, Pt{b.X1, y}, thin, colFrameSt)
+		c.segment(pt{b.X0, y}, pt{b.X1, y}, thin, colFrameSt)
 	}
 	x := b.X0
 	for _, cw := range cols[:len(cols)-1] {
 		x += cw
-		c.segment(Pt{x, hdr.Y1}, Pt{x, b.Y1}, thin, colFrameSt)
+		c.segment(pt{x, hdr.Y1}, pt{x, b.Y1}, thin, colFrameSt)
 	}
 	c.outlineShape(roundRect(b, 0), nil, colStroke, lineW, false)
 	return text(b.Center().X, hdr.Center().Y, n.Label, true)

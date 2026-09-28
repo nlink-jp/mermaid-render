@@ -10,7 +10,7 @@ import (
 // place turns layers and cross coordinates into the final layout: rank
 // positions, frames, link paths through ports, then the direction's
 // transform and clipping at the node shapes.
-func (l *layouter) place() *Layout {
+func (l *layouter) place() *flowLayout {
 	nl := len(l.layers)
 	band := make([]float64, nl)
 	for k, layer := range l.layers {
@@ -299,9 +299,9 @@ func (l *layouter) place() *Layout {
 	trackY := func(k, t int) float64 { return start[k] + band[k] + trackTop[k] + float64(t)*trackSep }
 
 	// Frames, in abstract coordinates (cross = x, rank = y).
-	frameRect := make([]Rect, len(l.clusters))
+	frameRect := make([]rect, len(l.clusters))
 	for ci, c := range l.clusters {
-		r := Rect{X0: c.L, X1: c.R, Y0: start[c.r0] - framePad, Y1: start[c.r1] + band[c.r1] + framePad}
+		r := rect{X0: c.L, X1: c.R, Y0: start[c.r0] - framePad, Y1: start[c.r1] + band[c.r1] + framePad}
 		if titleLow {
 			r.Y0 -= tspace(c)
 		}
@@ -313,7 +313,7 @@ func (l *layouter) place() *Layout {
 	}
 
 	// Node boxes in abstract coordinates.
-	nodeRect := make([]Rect, len(l.nw))
+	nodeRect := make([]rect, len(l.nw))
 	for i := range l.nw {
 		it := l.nodeItem[i]
 		rs := l.nh[i]
@@ -321,20 +321,20 @@ func (l *layouter) place() *Layout {
 			rs = l.nw[i]
 		}
 		cy := center(it.layer)
-		nodeRect[i] = Rect{X0: it.x - baseHalf[i], X1: it.x + baseHalf[i], Y0: cy - rs/2, Y1: cy + rs/2}
+		nodeRect[i] = rect{X0: it.x - baseHalf[i], X1: it.x + baseHalf[i], Y0: cy - rs/2, Y1: cy + rs/2}
 	}
 
 	// Paths in abstract coordinates, low end to high end.
 	type path struct {
-		pts        []Pt
+		pts        []pt
 		clipLow    int // node to clip the first segment at, or -1
 		clipHigh   int
-		label      Rect
+		label      rect
 		hasLabel   bool
 		reversed   bool
 		link       *mr.Link
 		loopOfNode int
-		loopIn     [2]Pt // abstract points inside the node, level with the loop's ends
+		loopIn     [2]pt // abstract points inside the node, level with the loop's ends
 	}
 	paths := make([]*path, len(l.chains))
 	loops := map[int]float64{} // node -> reach used so far
@@ -349,8 +349,8 @@ func (l *layouter) place() *Layout {
 			reach := loopReach
 			y0, y1 := r.Center().Y-ch.loopOff, r.Center().Y+ch.loopOff
 			p := &path{link: lk, clipLow: -1, clipHigh: -1, loopOfNode: n}
-			p.pts = []Pt{{face, y0}, {edge + reach, y0}, {edge + reach, y1}, {face, y1}}
-			p.loopIn = [2]Pt{{l.nodeItem[n].x, y0}, {l.nodeItem[n].x, y1}}
+			p.pts = []pt{{face, y0}, {edge + reach, y0}, {edge + reach, y1}, {face, y1}}
+			p.loopIn = [2]pt{{l.nodeItem[n].x, y0}, {l.nodeItem[n].x, y1}}
 			extra := reach
 			if ch.lw > 0 {
 				cross, rs := ch.lw, ch.lh
@@ -359,7 +359,7 @@ func (l *layouter) place() *Layout {
 				}
 				cx := edge + reach + cross/2
 				cy := (y0 + y1) / 2
-				p.label = Rect{cx - cross/2, cy - rs/2, cx + cross/2, cy + rs/2}
+				p.label = rect{cx - cross/2, cy - rs/2, cx + cross/2, cy + rs/2}
 				p.hasLabel = true
 				extra += cross
 			}
@@ -372,27 +372,27 @@ func (l *layouter) place() *Layout {
 		p := &path{link: lk, clipLow: -1, clipHigh: -1, reversed: !ch.fromLow, loopOfNode: -1}
 		if lowEnd.node >= 0 {
 			n := lowEnd.node
-			p.pts = append(p.pts, Pt{px[0], nodeRect[n].Center().Y}, Pt{px[0], start[ch.lo] + band[ch.lo]})
+			p.pts = append(p.pts, pt{px[0], nodeRect[n].Center().Y}, pt{px[0], start[ch.lo] + band[ch.lo]})
 			p.clipLow = n
 		} else {
-			p.pts = append(p.pts, Pt{px[0], frameRect[lowEnd.cluster].Y1})
+			p.pts = append(p.pts, pt{px[0], frameRect[lowEnd.cluster].Y1})
 		}
 		for ci, c := range chainCross[ch] {
 			k := ch.lo + ci
 			switch {
 			case c.split:
 				y1, y2 := trackY(k, c.track), trackY(k, c.track2)
-				p.pts = append(p.pts, Pt{c.top, y1}, Pt{c.mid, y1}, Pt{c.mid, y2}, Pt{c.bot, y2})
+				p.pts = append(p.pts, pt{c.top, y1}, pt{c.mid, y1}, pt{c.mid, y2}, pt{c.bot, y2})
 			case c.track >= 0:
 				y := trackY(k, c.track)
-				p.pts = append(p.pts, Pt{c.top, y}, Pt{c.bot, y})
+				p.pts = append(p.pts, pt{c.top, y}, pt{c.bot, y})
 			}
 			if ci < len(ch.items) {
 				it := ch.items[ci]
 				a, b := start[it.layer], start[it.layer]+band[it.layer]
-				p.pts = append(p.pts, Pt{it.x, a})
+				p.pts = append(p.pts, pt{it.x, a})
 				if b > a {
-					p.pts = append(p.pts, Pt{it.x, b})
+					p.pts = append(p.pts, pt{it.x, b})
 				}
 				if it == ch.label {
 					cross, rs := ch.lw, ch.lh
@@ -400,58 +400,58 @@ func (l *layouter) place() *Layout {
 						cross, rs = ch.lh, ch.lw
 					}
 					cy := center(it.layer)
-					p.label = Rect{it.x - cross/2, cy - rs/2, it.x + cross/2, cy + rs/2}
+					p.label = rect{it.x - cross/2, cy - rs/2, it.x + cross/2, cy + rs/2}
 					p.hasLabel = true
 				}
 			}
 		}
 		if highEnd.node >= 0 {
 			n := highEnd.node
-			p.pts = append(p.pts, Pt{px[1], start[ch.hi]}, Pt{px[1], nodeRect[n].Center().Y})
+			p.pts = append(p.pts, pt{px[1], start[ch.hi]}, pt{px[1], nodeRect[n].Center().Y})
 			p.clipHigh = n
 		} else {
-			p.pts = append(p.pts, Pt{px[1], frameRect[highEnd.cluster].Y0})
+			p.pts = append(p.pts, pt{px[1], frameRect[highEnd.cluster].Y0})
 		}
 		paths[i] = p
 	}
 
 	// Transform to the diagram's direction.
-	tp := func(p Pt) Pt {
+	tp := func(p pt) pt {
 		switch l.f.Direction {
 		case mr.BT:
-			return Pt{p.X, -p.Y}
+			return pt{p.X, -p.Y}
 		case mr.LR:
-			return Pt{p.Y, p.X}
+			return pt{p.Y, p.X}
 		case mr.RL:
-			return Pt{-p.Y, p.X}
+			return pt{-p.Y, p.X}
 		}
 		return p
 	}
-	tr := func(r Rect) Rect {
-		a, b := tp(Pt{r.X0, r.Y0}), tp(Pt{r.X1, r.Y1})
-		return Rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)}
+	tr := func(r rect) rect {
+		a, b := tp(pt{r.X0, r.Y0}), tp(pt{r.X1, r.Y1})
+		return rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)}
 	}
-	out := &Layout{}
-	vis := make([]Rect, len(l.nw))
+	out := &flowLayout{}
+	vis := make([]rect, len(l.nw))
 	for i := range l.nw {
 		vis[i] = tr(nodeRect[i])
 	}
 	for i, n := range l.nodes {
-		out.Nodes = append(out.Nodes, NodeBox{ID: n.ID, Label: n.Label, Shape: n.Shape, Box: vis[i],
+		out.Nodes = append(out.Nodes, nodeBox{ID: n.ID, Label: n.Label, Shape: n.Shape, Box: vis[i],
 			Slant: math.Min(l.slant0[i], 0.3*vis[i].W())})
 	}
 	for ci, c := range l.clusters {
 		fr := tr(frameRect[ci])
-		fb := FrameBox{ID: c.sg.ID, Title: c.sg.Title, Box: fr}
+		fb := frameBox{ID: c.sg.ID, Title: c.sg.Title, Box: fr}
 		if c.titleH > 0 {
 			x0 := fr.X0 + framePad*0.7
 			y0 := fr.Y0 + titleGap
-			fb.TitleBox = Rect{x0, y0, x0 + c.titleW, y0 + c.titleH}
+			fb.TitleBox = rect{x0, y0, x0 + c.titleW, y0 + c.titleH}
 		}
 		out.Frames = append(out.Frames, fb)
 	}
 	for _, p := range paths {
-		pts := make([]Pt, len(p.pts))
+		pts := make([]pt, len(p.pts))
 		for i, q := range p.pts {
 			pts[i] = tp(q)
 		}
@@ -473,16 +473,16 @@ func (l *layouter) place() *Layout {
 				pts[i], pts[j] = pts[j], pts[i]
 			}
 		}
-		e := EdgePath{Link: p.link, Points: dedupe(pts), Label: p.link.Label}
+		e := edgePath{Link: p.link, Points: dedupe(pts), Label: p.link.Label}
 		if p.hasLabel {
 			e.LabelBox = tr(p.label)
 		}
 		out.Edges = append(out.Edges, e)
 	}
 	// Move to the origin.
-	bb := Rect{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
-	grow := func(r Rect) {
-		bb = Rect{math.Min(bb.X0, r.X0), math.Min(bb.Y0, r.Y0), math.Max(bb.X1, r.X1), math.Max(bb.Y1, r.Y1)}
+	bb := rect{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
+	grow := func(r rect) {
+		bb = rect{math.Min(bb.X0, r.X0), math.Min(bb.Y0, r.Y0), math.Max(bb.X1, r.X1), math.Max(bb.Y1, r.Y1)}
 	}
 	for _, n := range out.Nodes {
 		grow(n.Box)
@@ -492,29 +492,29 @@ func (l *layouter) place() *Layout {
 	}
 	for _, e := range out.Edges {
 		for _, p := range e.Points {
-			grow(Rect{p.X, p.Y, p.X, p.Y})
+			grow(rect{p.X, p.Y, p.X, p.Y})
 		}
 		if e.Label != "" {
 			grow(e.LabelBox)
 		}
 	}
 	if len(out.Nodes) == 0 && len(out.Frames) == 0 {
-		bb = Rect{}
+		bb = rect{}
 	}
-	shift := func(r Rect) Rect { return Rect{r.X0 - bb.X0, r.Y0 - bb.Y0, r.X1 - bb.X0, r.Y1 - bb.Y0} }
+	shift := func(r rect) rect { return rect{r.X0 - bb.X0, r.Y0 - bb.Y0, r.X1 - bb.X0, r.Y1 - bb.Y0} }
 	for i := range out.Nodes {
 		out.Nodes[i].Box = shift(out.Nodes[i].Box)
 	}
 	for i := range out.Frames {
 		out.Frames[i].Box = shift(out.Frames[i].Box)
-		if out.Frames[i].TitleBox != (Rect{}) {
+		if out.Frames[i].TitleBox != (rect{}) {
 			out.Frames[i].TitleBox = shift(out.Frames[i].TitleBox)
 		}
 	}
 	for i := range out.Edges {
 		for j := range out.Edges[i].Points {
 			p := out.Edges[i].Points[j]
-			out.Edges[i].Points[j] = Pt{p.X - bb.X0, p.Y - bb.Y0}
+			out.Edges[i].Points[j] = pt{p.X - bb.X0, p.Y - bb.Y0}
 		}
 		if out.Edges[i].Label != "" {
 			out.Edges[i].LabelBox = shift(out.Edges[i].LabelBox)
@@ -1086,7 +1086,7 @@ func pickPorts(lo, hi float64, n int, occ []float64, portGap float64) []float64 
 	return xs
 }
 
-func (l *layouter) slantOf(n int, vis []Rect) float64 {
+func (l *layouter) slantOf(n int, vis []rect) float64 {
 	return math.Min(l.slant0[n], 0.3*vis[n].W())
 }
 
@@ -1346,12 +1346,12 @@ func portSpreadOf(s mr.Shape) float64 {
 // dedupe drops repeated points and points in the middle of a straight run:
 // a path is its corners. (A run split at a band edge read, to a spacing
 // check, as a segment ending beside a link it actually crosses.)
-func dedupe(pts []Pt) []Pt {
+func dedupe(pts []pt) []pt {
 	pts = dedupeRepeats(pts)
 	if len(pts) < 3 {
 		return pts
 	}
-	out := []Pt{pts[0]}
+	out := []pt{pts[0]}
 	for i := 1; i+1 < len(pts); i++ {
 		a, b, c := out[len(out)-1], pts[i], pts[i+1]
 		if math.Abs((b.X-a.X)*(c.Y-b.Y)-(b.Y-a.Y)*(c.X-b.X)) < 1e-9 &&
@@ -1363,7 +1363,7 @@ func dedupe(pts []Pt) []Pt {
 	return append(out, pts[len(pts)-1])
 }
 
-func dedupeRepeats(pts []Pt) []Pt {
+func dedupeRepeats(pts []pt) []pt {
 	out := pts[:0]
 	for i, p := range pts {
 		if i > 0 && math.Abs(p.X-out[len(out)-1].X) < 1e-9 && math.Abs(p.Y-out[len(out)-1].Y) < 1e-9 {

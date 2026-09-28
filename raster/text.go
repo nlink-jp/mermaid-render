@@ -135,10 +135,10 @@ func ignorable(r rune) bool {
 		r == 0x200B || r == 0x200C || r == 0x200D
 }
 
-// MissingGlyphError says no face can draw a character of a label.
-type MissingGlyphError struct{ Rune rune }
+// missingGlyphError says no face can draw a character of a label.
+type missingGlyphError struct{ Rune rune }
 
-func (e *MissingGlyphError) Error() string {
+func (e *missingGlyphError) Error() string {
 	return fmt.Sprintf("no font can draw %q (U+%04X)", e.Rune, e.Rune)
 }
 
@@ -188,7 +188,7 @@ func (fn *Font) runs(line string, bold bool) ([]run, error) {
 			if unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r) {
 				continue
 			}
-			return nil, &MissingGlyphError{Rune: r}
+			return nil, &missingGlyphError{Rune: r}
 		}
 		if n := len(buf); n > 0 && buf[n-1].f == pick {
 			buf[n-1].rs = append(buf[n-1].rs, r)
@@ -288,7 +288,7 @@ func (fn *Font) drawText(dst draw.Image, cx, cy float64, text string, bold bool,
 				dr, mask, mp, adv, ok := fc.Glyph(dot, c)
 				if !ok {
 					// can() said this face draws c; a failure here is a bug.
-					return &MissingGlyphError{Rune: c}
+					return &missingGlyphError{Rune: c}
 				}
 				draw.DrawMask(dst, dr, src, image.Point{}, mask, mp, draw.Over)
 				x += fix(adv)

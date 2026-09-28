@@ -168,13 +168,15 @@ func randomSequence(seed int64) string {
 		}
 	}
 	active := map[int]int{}
+	var placed []int // participants a message has placed, in order
 	depth := 0
 	var open []string
 	arrows := []string{"->>", "-->>", "->", "-->", "-x", "--x", "-)", "--)", "<<->>"}
 	for range 3 + rng.Intn(14) {
-		switch k := rng.Intn(10); {
+		switch k := rng.Intn(12); {
 		case k < 5:
 			a, c := rng.Intn(n), rng.Intn(n)
+			placed = append(placed, a, c)
 			mod := ""
 			if rng.Intn(4) == 0 {
 				mod = "+"
@@ -193,6 +195,19 @@ func randomSequence(seed int64) string {
 				fmt.Fprintf(&b, "Note right of P%d: %s\n", a, words[rng.Intn(len(words))])
 			default:
 				fmt.Fprintf(&b, "Note over P%d,P%d: %s\n", a, rng.Intn(n), words[rng.Intn(len(words))])
+			}
+		case k >= 10 && len(placed) > 0:
+			// activate / deactivate statements, nested up to three deep at
+			// once: bars opened after a message, beside the + form.
+			a := placed[rng.Intn(len(placed))]
+			if active[a] > 0 && rng.Intn(2) == 0 {
+				fmt.Fprintf(&b, "deactivate P%d\n", a)
+				active[a]--
+				continue
+			}
+			for range 1 + rng.Intn(3) {
+				fmt.Fprintf(&b, "activate P%d\n", a)
+				active[a]++
 			}
 		case k < 9 && depth < 3:
 			kind := []string{"loop", "alt", "par", "critical", "opt", "break"}[rng.Intn(6)]
@@ -273,7 +288,7 @@ func TestSequenceDrawnHeads(t *testing.T) {
 		if line := fmt.Sprintf("line dashed=%v %.2f,%.2f", e.Dotted, p.X, p.Y); !drawn[line] {
 			t.Errorf("message %q: no %q", e.Text, line)
 		}
-		heads := []Pt{}
+		heads := []pt{}
 		if e.Head != mr.HeadNone {
 			heads = append(heads, q)
 			if e.BothEnds {
