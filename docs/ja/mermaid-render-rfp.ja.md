@@ -129,7 +129,7 @@ PNG への変換は呼び出し側が行う（`termimg.Payload` が受け取る�
 ### 第 1 段階で対応する構文
 
 **基準は mermaid 公式ドキュメント**（mermaid.js.org の Flowchart / Sequence diagram /
-Entity Relationship Diagram の各ページ）。雛形を作るときに、参照した版を記録して固定する。
+Entity Relationship Diagram の各ページ）。**参照した版は mermaid 12.0.0（2026-09-10 公開）**。ドキュメントに書かれていない字句の細部（ノード ID に使える文字、線の記号の読み方、subgraph の所属）は、同じ版の `flow.jison` と `flowDb.ts` で確かめ、その旨をテストに書く。
 以下は、その仕様の中から、実データ（Discussion Log）と仕様上の基本構文を合わせて選んだもの。
 【実】は実データに現れたもの。
 

@@ -145,8 +145,10 @@ files (gem-agent ADR-0089 §5 / ADR-0090 §5).
 ### Syntax supported in phase 1
 
 **The reference is the official mermaid documentation** (the Flowchart, Sequence diagram and
-Entity Relationship Diagram pages on mermaid.js.org). The version consulted is recorded and
-pinned at scaffolding time. What follows is chosen from that specification by combining the real
+Entity Relationship Diagram pages on mermaid.js.org). **The version consulted is mermaid 12.0.0
+(published 2026-09-10).** Lexical details the documentation does not state (which characters a
+node ID may hold, how link symbols are read, subgraph membership) are checked against the same
+version's `flow.jison` and `flowDb.ts`, and the tests say so. What follows is chosen from that specification by combining the real
 data (Discussion Log) with the specification's core syntax. [R] marks constructs seen in the
 real data.
 
