@@ -685,6 +685,16 @@ same way as pathguard.
     see inside an external module (→ bounded reads). Both are now phase 3 pre-release items. The
     cell size is read with `TIOCGWINSZ`, an ioctl, so this does not contradict the rejected
     "asking the terminal for its cell size" below.
+  - **Pre-release independent review (2026-09-29)**: the render-time check refused sequence
+    diagrams that activate a participant after a message (11% of random sequences with activate
+    statements). A bar opened after a message is not open at its arrow (as in mermaid); where an
+    arrow ends on a bar is precision, checked by the strict tests only. Bars now carry their
+    participant (no ten-step guess), so deep nesting renders, and deep bars on the last
+    participant widen the picture. Random sequences now include activate / deactivate statements
+    (why the gap was missed). Also: a named pipe as a font blocked (refused before opening), the
+    check's cost (a grid: 0.14 s to 16 ms, run after the pixel limit), layout types exported for
+    no reason (unexported), and the CHANGELOG rewritten as what ships. 6,000 random diagrams with
+    the real font: no false refusal.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
