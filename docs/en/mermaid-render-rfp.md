@@ -232,7 +232,10 @@ above.
      so links only ever meet at right angles; tracks are 0.8 em apart. When two links swap into
      each other's columns, one detours through a free column. An across run that passes over
      another link's leaving column turns below it, and one that passes over its arriving column turns
-     above it, so links fanning out of one node do not cross. Ports sit, where they can, right above or below the column the
+     above it, so links fanning out of one node do not cross. Every arrowhead ends a straight run
+     longer than the head (links drawn against the layer order too). A link that changes column does
+     so beside a node where it can. A node taking one link of a fan alone is met at its middle
+     (a link already straight stays as it is). Ports sit, where they can, right above or below the column the
      link goes on in.
   7. Links sharing a node get their own ports, at least 0.8 em apart per face; a node or frame grows
      when a face is short (self-link ends included, checked by measuring on the real outline). A link
@@ -550,6 +553,14 @@ same way as pathguard.
     freezing staircases. Links now aim at the frame's middle, members carry the frame's edges, the
     tie goes to the neighbour above, and a last pass moves runs of one-to-one links onto one column.
     The bend baseline fell to 106 / 2.
+    Round 3 left 18 of 22 unmarked. Two of the other four (Resubmit, and the link back from the
+    error box) had the arrowhead of a link drawn against the layer order on its bend: the track sat
+    0.45 em from the gap's start. A head at a gap's start now gets 0.9 em there too, and a straight
+    run before every head is a layout property. Cache Hit bent halfway down because a port's column
+    was carried into the link even when that saved no step (now only when it does). A box taking
+    one link of a fan alone was not met at its middle because nothing moved the link when the box
+    could not move (a last pass moves its bend points there; changing the tie rule instead raised
+    bends from 106 to 134 and was dropped).
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.

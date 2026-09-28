@@ -76,6 +76,14 @@ mermaid-render/
   (`endItems`), so its neighbours are not a column to aim at: `upFrame` /
   `dnFrame` mark the dummy next to such an end, and targets, block shifts and
   `centerNodes` use the frame's middle instead.
+- **A gap has two arrowhead sides.** Heads at a gap's end got `trackOut`;
+  a link drawn against the layer order has its head at the gap's start,
+  which got only `trackIn` (0.45 em) and put the head on the bend. `headTop`
+  gives such a gap `trackOut` there too.
+- **Late fixes beat global rules for alignment** (`centerLoneEnds`): moving
+  a fan's lone end onto its box's middle by changing the descent's tie rule
+  raised bends 106 -> 134; a final pass over already-stepped links does it
+  without touching straight ones.
 - **Attachment spacing is measured, not ruled by shape** (`attachmentsClear`):
   shape-by-shape rules kept missing cases (a rhombus's shared slopes, a
   stadium's rounded ends). Measure after every other growth, and sample the

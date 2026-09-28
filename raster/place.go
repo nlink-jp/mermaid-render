@@ -165,6 +165,11 @@ func (l *layouter) place() *Layout {
 		l.straighten(portX)
 		portX = assignPorts()
 	}
+	// Last, a link from a fan into a node that takes it alone meets that
+	// node's middle, and steps beside the fan instead.
+	if l.centerLoneEnds(portX) {
+		portX = assignPorts()
+	}
 
 	// Each chain crosses the gap after every layer from its low end to the
 	// layer before its high end, from one column (top) to another
@@ -192,6 +197,25 @@ func (l *layouter) place() *Layout {
 	tracks := make([]int, nl)
 	for k, cs := range gapCross {
 		tracks[k] = assignTracks(cs)
+	}
+	// A link turning in the gap right after its low end, with a head
+	// there (a link drawn against the layer order, or one with a head at
+	// both ends), needs the arrowhead's room above its track as well: at
+	// trackIn the head sits on the bend (the operator's third check).
+	headTop := make([]bool, nl)
+	for _, ch := range l.chains {
+		cs := chainCross[ch]
+		if ch.self || len(cs) == 0 || cs[0].track < 0 {
+			continue
+		}
+		lk := l.f.Links[ch.link]
+		h := lk.End
+		if ch.fromLow {
+			h = lk.Start
+		}
+		if h != mr.NoHead {
+			headTop[ch.lo] = true
+		}
 	}
 
 	// Where a frame's title sits in abstract coordinates.
@@ -242,13 +266,17 @@ func (l *layouter) place() *Layout {
 		if below > 0 || above > 0 {
 			margin = frameSep / 2
 		}
-		trackTop[k] = below + margin + trackIn
+		in := trackIn
+		if headTop[k] {
+			in = trackOut
+		}
+		trackTop[k] = below + margin + in
 		need := rankGap
 		if below > 0 || above > 0 {
 			need = math.Max(need, below+above+frameSep)
 		}
 		if tracks[k] > 0 {
-			need = math.Max(need, below+above+2*margin+trackIn+float64(tracks[k]-1)*trackSep+trackOut)
+			need = math.Max(need, below+above+2*margin+in+float64(tracks[k]-1)*trackSep+trackOut)
 		}
 		gapAfter[k] = need
 		v += band[k] + need
@@ -549,19 +577,48 @@ func (l *layouter) straighten(portX map[*chain][2]float64) {
 	}
 	// A link that cannot run in one column still keeps a column as long as
 	// it can: each dummy takes the column of the station before it where
-	// the constraints allow, so the link steps aside only where it must.
+	// the constraints allow, so the link steps aside only where it must —
+	// and only when that saves a step. Carrying the port's column into the
+	// middle of a link that already runs in one column there moves its
+	// step from beside the node into the open (the operator's third check:
+	// bend next to the node).
+	changes := func(cols []float64) int {
+		n := 0
+		for i := 0; i+1 < len(cols); i++ {
+			if math.Abs(cols[i+1]-cols[i]) > 1e-9 {
+				n++
+			}
+		}
+		return n
+	}
 	for _, ch := range l.chains {
 		if ch.self || len(ch.items) == 0 || done[ch] {
 			continue
 		}
-		col := portX[ch][0]
+		px := portX[ch]
+		before := []float64{px[0]}
 		for _, it := range ch.items {
+			before = append(before, it.x)
+		}
+		before = append(before, px[1])
+		after := []float64{px[0]}
+		col := px[0]
+		for _, it := range ch.items {
+			x := it.x
 			lo, hi := s.interval(id[it])
 			if col >= lo-1e-9 && col <= hi+1e-9 {
-				s.x[id[it]] = col
-				it.x = col
+				x = col
 			}
-			col = it.x
+			after = append(after, x)
+			col = x
+		}
+		after = append(after, px[1])
+		if changes(after) >= changes(before) {
+			continue
+		}
+		for i, it := range ch.items {
+			s.x[id[it]] = after[i+1]
+			it.x = after[i+1]
 		}
 	}
 }
@@ -769,6 +826,71 @@ func (l *layouter) centerNodes() bool {
 		}
 		if !any {
 			break
+		}
+		moved = true
+	}
+	return moved
+}
+
+// centerLoneEnds moves the bend points of each link that one end takes
+// alone and the other end fans out with others onto the lone end's middle,
+// where every one of them can stand (the operator's third check: a link
+// entering a box off its middle). A link that already runs straight stays:
+// a straight line off the middle beats a centred one with two bends. It
+// reports whether anything moved.
+func (l *layouter) centerLoneEnds(portX map[*chain][2]float64) bool {
+	s, id := l.sol, l.solID
+	if s == nil {
+		return false
+	}
+	moved := false
+	for _, ch := range l.chains {
+		if ch.self || len(ch.items) == 0 {
+			continue
+		}
+		low, high := ch.from, ch.to
+		if !ch.fromLow {
+			low, high = ch.to, ch.from
+		}
+		if low.node < 0 || high.node < 0 {
+			continue
+		}
+		straight := true
+		for _, it := range ch.items {
+			if math.Abs(it.x-portX[ch][0]) > 1e-9 || math.Abs(it.x-portX[ch][1]) > 1e-9 {
+				straight = false
+			}
+		}
+		if straight {
+			continue
+		}
+		lowN := l.facePorts[[3]int{0, low.node, 0}]
+		highN := l.facePorts[[3]int{0, high.node, 1}]
+		var c float64
+		switch {
+		case lowN > 1 && highN == 1:
+			c = l.nodeItem[high.node].x
+		case highN > 1 && lowN == 1:
+			c = l.nodeItem[low.node].x
+		default:
+			continue
+		}
+		ok, same := true, true
+		for _, it := range ch.items {
+			lo, hi := s.interval(id[it])
+			if c < lo-1e-9 || c > hi+1e-9 {
+				ok = false
+				break
+			}
+			if math.Abs(it.x-c) > 1e-9 {
+				same = false
+			}
+		}
+		if !ok || same {
+			continue
+		}
+		for _, it := range ch.items {
+			s.x[id[it]], it.x = c, c
 		}
 		moved = true
 	}

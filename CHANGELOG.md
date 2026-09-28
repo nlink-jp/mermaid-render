@@ -54,6 +54,13 @@ to [Semantic Versioning](https://semver.org/).
   frame's edges with it; a tie between one link in and one out takes the one
   in; runs of one-to-one links move onto one column together. Bends over the
   22 real diagrams: 116 / 5 to 106 / 2.
+- The operator's third check: an arrowhead at the start of a gap (a link
+  drawn against the layer order) gets the same 0.9 em room as one at its
+  end, so it no longer sits on the bend; a port's column is carried into a
+  link only when that saves a step, so links step aside beside their node;
+  a box taking one link of a fan alone is met at its middle. Layout
+  properties now check a straight run longer than the head before every
+  arrowhead.
 - Limits: 300 nodes and subgraphs (at most 100 subgraphs), 1000 characters per
   label, Scale in (0, 8], 12 Mpx per image for time and memory (the PNG's
   size is the caller's to check: 0.10-0.67 bytes per pixel, so a pixel cap

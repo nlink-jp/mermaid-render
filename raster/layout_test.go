@@ -106,6 +106,27 @@ func checkLayoutCounting(t *testing.T, name string, f *mr.Flowchart, lay *Layout
 	for _, fr := range lay.Frames {
 		frame[fr.ID] = fr
 	}
+	// An arrowhead has a straight run of its own: the segment it ends is
+	// longer than the head, so the head never sits on a bend (the
+	// operator's third check: a link drawn upward had 0.45 em there).
+	for _, e := range lay.Edges {
+		p := e.Points
+		if e.Link.From == e.Link.To || len(p) < 3 {
+			continue
+		}
+		for _, h := range []struct {
+			head   mr.Head
+			a, b   Pt
+			atFrom bool
+		}{{e.Link.Start, p[0], p[1], true}, {e.Link.End, p[len(p)-1], p[len(p)-2], false}} {
+			if h.head == mr.NoHead {
+				continue
+			}
+			if d := math.Hypot(h.a.X-h.b.X, h.a.Y-h.b.Y); d < arrowLen+0.15 {
+				fail("link %s->%s: the head at its %s end has a %.3f em run", e.Link.From.ID, e.Link.To.ID, map[bool]string{true: "From", false: "To"}[h.atFrom], d)
+			}
+		}
+	}
 	all := Rect{-eps, -eps, lay.W + eps, lay.H + eps}
 	for i, a := range lay.Nodes {
 		if !all.contains(a.Box) {
@@ -696,6 +717,74 @@ func TestFrameToFrameLinksAreCentred(t *testing.T) {
 		}
 		if d := math.Abs(end.X - mid["Recon"]); d > 0.5 {
 			t.Errorf("%s->%s meets Recon %.3f from its middle", e.Link.From.ID, e.Link.To.ID, d)
+		}
+	}
+}
+
+// A link from a fan into a box that takes it alone meets the box's middle
+// when the box cannot move under the link (the operator's third check:
+// 2d6ce5dc96); its step goes beside the fan.
+func TestLoneEndMeetsTheMiddle(t *testing.T) {
+	src := `flowchart TD
+    T[Target Artifact] --> A[Passive Recon: DNS and WHOIS]
+    T --> B[Passive Recon: ASN and BGP]
+    A --> C[Correlation and Threat Intel]
+    B --> C
+    C --> R[Attribution Report]`
+	f, lay := layoutOf(t, src, fakeMeasure)
+	checkLayout(t, "lone end", f, lay, fakeMeasure)
+	var b NodeBox
+	for _, n := range lay.Nodes {
+		if n.ID == "B" {
+			b = n
+		}
+	}
+	for _, e := range lay.Edges {
+		if e.Link.From.ID == "T" && e.Link.To.ID == "B" {
+			end := e.Points[len(e.Points)-1]
+			if d := math.Abs(end.X - b.Box.Center().X); d > 1e-6 {
+				t.Errorf("T->B meets B %.3f em from its middle", d)
+			}
+		}
+	}
+}
+
+// A link that must step aside steps beside its node, not halfway down: the
+// port's column is carried into the link only when that saves a step (the
+// operator's third check: 3bd61ab0d7's Cache Hit bent at its label).
+func TestStepBesideTheNode(t *testing.T) {
+	src := `flowchart TD
+    subgraph Client [Client Side]
+        A[User Request] --> B[Browser Cache]
+    end
+    subgraph Server [Backend System]
+        B -->|Cache Miss| C[API Gateway]
+        C --> D[Auth Service]
+        D -->|Authorized| E[App Service]
+        E --> F[Database]
+    end
+    B -->|Cache Hit| G[Render View]
+    E -->|Response Data| G`
+	f, lay := layoutOf(t, src, fakeMeasure)
+	checkLayout(t, "step", f, lay, fakeMeasure)
+	var b NodeBox
+	for _, n := range lay.Nodes {
+		if n.ID == "B" {
+			b = n
+		}
+	}
+	for _, e := range lay.Edges {
+		if e.Link.From.ID != "B" || e.Link.To.ID != "G" {
+			continue
+		}
+		for i := 0; i+1 < len(e.Points); i++ {
+			p, q := e.Points[i], e.Points[i+1]
+			if math.Abs(p.Y-q.Y) < 1e-9 && math.Abs(p.X-q.X) > 1e-9 {
+				if d := p.Y - b.Box.Y1; d > 3 {
+					t.Errorf("B->G first steps aside %.3f em below B", d)
+				}
+				break
+			}
 		}
 	}
 }
