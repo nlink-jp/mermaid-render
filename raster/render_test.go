@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"image/png"
+	"math"
 	"strings"
 	"testing"
+	"time"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -89,5 +91,54 @@ func TestRenderPixelLimit(t *testing.T) {
 	var e *mr.Error
 	if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct || !strings.Contains(e.Msg, "pixels") {
 		t.Errorf("a %d-node chain: %v, want the pixel limit", 121, err)
+	}
+}
+
+// The step-2 review's adversarial inputs are refused, and quickly: before
+// the fixes they took seconds to a minute and gigabytes first.
+func TestResourceLimits(t *testing.T) {
+	fn := systemFont(t)
+	var empties, amp strings.Builder
+	empties.WriteString("flowchart TD\n")
+	for i := range 2000 {
+		fmt.Fprintf(&empties, " subgraph e%d\n end\n", i)
+	}
+	amp.WriteString("flowchart LR\n ")
+	for i := range 2000 {
+		if i > 0 {
+			amp.WriteString(" & ")
+		}
+		fmt.Fprintf(&amp, "a%d", i)
+	}
+	amp.WriteString(" --> b")
+	var chain strings.Builder
+	chain.WriteString("flowchart TD\n")
+	for i := range 499 {
+		fmt.Fprintf(&chain, " n%d ----------> n%d\n", i%250, (i+1)%250)
+	}
+	for name, src := range map[string]string{
+		"2000 empty subgraphs":             empties.String(),
+		"a 350k-character label":           "flowchart TD\n A[" + strings.Repeat("長", 350000) + "]",
+		"2000 & 1 links (mermaid's limit)": amp.String(),
+		"a million-dash link":              "flowchart TD\n A " + strings.Repeat("-", 1000000) + "> B",
+		"long links in a big graph":        chain.String(),
+	} {
+		start := time.Now()
+		_, err := RenderSource(src, Options{Font: fn})
+		var e *mr.Error
+		if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct {
+			// A million-dash link is length 10 (mermaid's cap) and renders.
+			if name != "a million-dash link" || err != nil {
+				t.Errorf("%s: %v, want an unsupported-construct refusal", name, err)
+			}
+		}
+		if d := time.Since(start); d > 3*time.Second {
+			t.Errorf("%s: took %v", name, d)
+		}
+	}
+	for _, sc := range []float64{math.Inf(1), -1, math.NaN(), MaxScale + 1} {
+		if _, err := RenderSource("flowchart TD\n A", Options{Font: fn, Scale: sc}); err == nil {
+			t.Errorf("Scale %v accepted", sc)
+		}
 	}
 }

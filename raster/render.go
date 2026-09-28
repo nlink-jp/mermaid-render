@@ -22,10 +22,14 @@ type Options struct {
 const (
 	baseEm  = 14.0
 	cardPad = 1.2 // em, card edge to content
-	// MaxPixels keeps the encoded PNG under termimg's 2 MiB: a dense
-	// diagram measured 0.30 bytes per pixel (150 nodes, 300 links, six
-	// subgraphs: 6.1 Mpx, 1856 KB), the real session diagrams 0.10-0.12.
-	MaxPixels = 6 << 20
+	// MaxPixels bounds the image. The encoded PNG's size per pixel was
+	// measured at 0.10-0.12 bytes for the real session diagrams, 0.30 for
+	// a dense one and up to 0.67 for text-heavy ones (step-2 review); at
+	// that worst 3 Mpx stays under termimg's 2 MiB. It is a measured worst
+	// case, not a guarantee: the caller still checks the encoded size.
+	MaxPixels = 3 << 20
+	// MaxScale bounds Options.Scale.
+	MaxScale = 8
 )
 
 // RenderSource parses src and renders it.
@@ -50,6 +54,9 @@ func Render(d mr.Diagram, opts Options) (*image.RGBA, error) {
 	scale := opts.Scale
 	if scale == 0 {
 		scale = 2
+	}
+	if math.IsNaN(scale) || scale <= 0 || scale > MaxScale {
+		return nil, fmt.Errorf("raster: Scale %v is outside (0, %d]", opts.Scale, MaxScale)
 	}
 	f, ok := d.(*mr.Flowchart)
 	if !ok {

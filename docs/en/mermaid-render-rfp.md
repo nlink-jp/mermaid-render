@@ -512,8 +512,20 @@ same way as pathguard.
     remain and are counted.
   - **Limits measured**: rendering takes 1-9 ms on the real diagrams, PNG encoding 4-49 ms. A dense
     diagram of 150 nodes, 300 links and six subgraphs is 3725×1634 at scale 1 (233 ms, PNG 1,856 KB,
-    0.30 bytes per pixel). → An image is capped at 6 Mpx so that any PNG stays under termimg's 2 MiB.
-    300 nodes and 600 links hit the dummy-item cap (20,000) and are refused at once.
+    0.30 bytes per pixel). → The cap was first 6 Mpx; the step-2 review found text-heavy diagrams at
+    0.67 bytes per pixel, so it is 3 Mpx (the largest real diagram is 2.46 Mpx). The caller still
+    checks the encoded size.
+  - **Step-2 independent review (2026-09-28)**: 18 of 19 findings taken. Three misreadings (an id
+    starting with `direction`, `&` inside an id, an entity code's `;`); links running too close to
+    tell apart (shallow diagonals between layers, frame ports beside member columns, loop ends); a
+    label spilling out of its shape; arrowheads hidden by titles; unbounded resources (subgraph count,
+    label length, `&` products, link length, Scale); test gaps (0.8 em checked at 0.2 em; link spacing
+    and labels inside shapes unchecked). Links between layers became orthogonal with a track per link.
+    Limits: 300 nodes and subgraphs (at most 100 subgraphs), 500 links (mermaid's own), 1000
+    characters per label, link length 10 (as mermaid), Scale 8, 3 Mpx.
+  - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
+    before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
+    "go", length 1. That is closer to what the author meant, so it is not matched.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

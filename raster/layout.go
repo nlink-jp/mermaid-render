@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"unicode/utf8"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -78,9 +79,11 @@ type measurer func(text string, bold bool) (w, h float64, err error)
 // Limits on what is laid out. They keep a layout from running away; they
 // are not a judgement of how a diagram looks.
 const (
-	MaxNodes = 300
-	MaxLinks = 600
-	maxItems = 20000
+	MaxNodes     = 300 // nodes and subgraphs together
+	MaxSubgraphs = 100
+	MaxLinks     = mr.MaxLinks
+	MaxLabel     = 1000 // characters in one label or title
+	maxItems     = 20000
 )
 
 // Spacing, in em.
@@ -173,9 +176,32 @@ type layouter struct {
 }
 
 func layoutFlowchart(f *mr.Flowchart, m measurer) (*Layout, error) {
-	if len(f.Nodes) > MaxNodes || len(f.Links) > MaxLinks {
+	// Empty subgraphs become nodes of their own, so they count as nodes.
+	if len(f.Nodes)+len(f.Subgraphs) > MaxNodes || len(f.Subgraphs) > MaxSubgraphs || len(f.Links) > MaxLinks {
 		return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf(
-			"too large to lay out: %d nodes, %d links (limits %d, %d)", len(f.Nodes), len(f.Links), MaxNodes, MaxLinks)}
+			"too large to lay out: %d nodes, %d subgraphs, %d links (limits %d nodes and subgraphs, %d subgraphs, %d links)",
+			len(f.Nodes), len(f.Subgraphs), len(f.Links), MaxNodes, MaxSubgraphs, MaxLinks)}
+	}
+	long := func(s string, line int) error {
+		if utf8.RuneCountInString(s) > MaxLabel {
+			return &mr.Error{Kind: mr.UnsupportedConstruct, Line: line, Msg: fmt.Sprintf("a label longer than %d characters", MaxLabel)}
+		}
+		return nil
+	}
+	for _, n := range f.Nodes {
+		if err := long(n.Label, n.Line); err != nil {
+			return nil, err
+		}
+	}
+	for _, sg := range f.Subgraphs {
+		if err := long(sg.Title, sg.Line); err != nil {
+			return nil, err
+		}
+	}
+	for _, lk := range f.Links {
+		if err := long(lk.Label, lk.Line); err != nil {
+			return nil, err
+		}
 	}
 	l := &layouter{f: f, m: m, horiz: f.Direction == mr.LR || f.Direction == mr.RL}
 	if err := l.measure(); err != nil {
@@ -570,6 +596,22 @@ func (l *layouter) endLayer(e end, towardHigher bool) int {
 }
 
 func (l *layouter) makeItems() error {
+	// Count the dummies before building any: a link spans as many layers
+	// as its ends are apart.
+	total := len(l.nw)
+	for _, ch := range l.chains {
+		if ch.self {
+			continue
+		}
+		a, b := l.endLayer(ch.from, true), l.endLayer(ch.to, false)
+		if a > b {
+			a, b = l.endLayer(ch.to, true), l.endLayer(ch.from, false)
+		}
+		total += max(b-a-1, 0)
+		if total > maxItems {
+			return &mr.Error{Kind: mr.UnsupportedConstruct, Msg: "too large to lay out: links span too many layers"}
+		}
+	}
 	maxRank := 0
 	for _, r := range l.rank {
 		maxRank = max(maxRank, r)
@@ -695,7 +737,6 @@ func (l *layouter) makeItems() error {
 		l.nodeItem[i] = it
 		add(it)
 	}
-	total := len(l.nw)
 	for _, ch := range l.chains {
 		if ch.self {
 			// Reserve the loop and its label beside the node.
@@ -751,10 +792,6 @@ func (l *layouter) makeItems() error {
 			}
 			ch.items = append(ch.items, it)
 			add(it)
-			total++
-		}
-		if total > maxItems {
-			return &mr.Error{Kind: mr.UnsupportedConstruct, Msg: "too large to lay out: links span too many layers"}
 		}
 	}
 	// Holders keep each subgraph's column open in its layers without members.

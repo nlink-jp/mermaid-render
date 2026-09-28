@@ -116,6 +116,9 @@ type run struct {
 	s string
 }
 
+// runs of a line are built rune by rune into slices, then turned into
+// strings once: appending to a string made a long label quadratic.
+
 // runs splits one line into runs of a single face, skipping ignorable
 // characters.
 func (fn *Font) runs(line string, bold bool) ([]run, error) {
@@ -123,7 +126,11 @@ func (fn *Font) runs(line string, bold bool) ([]run, error) {
 	if bold {
 		faces = fn.bold
 	}
-	var out []run
+	type acc struct {
+		f  *face
+		rs []rune
+	}
+	var buf []acc
 	for _, r := range line {
 		if ignorable(r) {
 			continue
@@ -146,11 +153,15 @@ func (fn *Font) runs(line string, bold bool) ([]run, error) {
 		if pick == nil {
 			return nil, &MissingGlyphError{Rune: r}
 		}
-		if n := len(out); n > 0 && out[n-1].f == pick {
-			out[n-1].s += string(r)
+		if n := len(buf); n > 0 && buf[n-1].f == pick {
+			buf[n-1].rs = append(buf[n-1].rs, r)
 		} else {
-			out = append(out, run{pick, string(r)})
+			buf = append(buf, acc{pick, []rune{r}})
 		}
+	}
+	out := make([]run, len(buf))
+	for i, b := range buf {
+		out[i] = run{b.f, string(b.rs)}
 	}
 	return out, nil
 }

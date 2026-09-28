@@ -40,9 +40,12 @@ Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 (which characters an id may hold, how link symbols are read, subgraph
 membership) follow that version's own parser. `raster` draws flowcharts on a
 white card with a layered layout; the caller encodes the PNG and chooses the
-terminal box. Limits keep a render bounded: 300 nodes, 600 links, 6 Mpx per
-image (a dense diagram's PNG then stays under 2 MiB); beyond them the result
-is an `UnsupportedConstruct` error, like a label character no font can draw.
+terminal box. Limits keep a render bounded: 300 nodes and subgraphs (at most
+100 subgraphs), 500 links (mermaid's own limit, checked while parsing), 1000
+characters per label, link length 10 (as mermaid), `Scale` up to 8, and 3 Mpx
+per image (at the measured worst of 0.67 bytes per pixel the PNG stays under
+2 MiB — still check the encoded size). Beyond them the result is an
+`UnsupportedConstruct` error, like a label character no font can draw.
 
 ## Dependencies
 

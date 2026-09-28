@@ -33,6 +33,11 @@ to [Semantic Versioning](https://semver.org/).
   outline; a slanted shape's slant is fixed from its size before growing, so
   its label never spills out; an outer self-link clears the inner labels;
   frame titles no longer hide arrowheads (heads are drawn again after them).
+- Limits: 300 nodes and subgraphs (at most 100 subgraphs), 1000 characters per
+  label, Scale in (0, 8], 3 Mpx per image (was 6: text-heavy diagrams measured
+  0.67 bytes per pixel); dummy items are counted before any is built; text
+  runs no longer grow quadratically. Each adversarial input of the review is
+  refused at once.
 - Layout properties now also check: link ends 0.8 em apart (was 0.2), links
   crossing only at a clear angle or keeping 0.3 em apart, no link through
   another link's label, every node label inside its shape. A 60,000-seed
