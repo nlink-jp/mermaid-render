@@ -98,6 +98,23 @@ func (a *seqArt) text(x, y int, s string, what seqCell) {
 }
 
 func (a *seqArt) box(r iRect, text string) {
+	// A lifeline running into a note's box joins its border above and below.
+	var joins []int
+	for x := r.x0 + 1; x < r.x1; x++ {
+		if a.g.in(x, r.y0) && a.kind[r.y0][x] == scLifeline {
+			joins = append(joins, x)
+		}
+	}
+	defer func() {
+		for _, x := range joins {
+			if a.g.in(x, r.y0-1) && a.kind[r.y0-1][x] == scLifeline {
+				a.g.cells[r.y0][x].r = '┴'
+			}
+			if a.g.in(x, r.y1+1) && a.kind[r.y1+1][x] == scLifeline {
+				a.g.cells[r.y1][x].r = '┬'
+			}
+		}
+	}()
 	c := [6]rune{'┌', '─', '┐', '│', '└', '┘'}
 	for x := r.x0; x <= r.x1; x++ {
 		for y := r.y0; y <= r.y1; y++ {
@@ -521,6 +538,9 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 		x0 := pos[i] - boxW[i]/2
 		a.box(iRect{x0, top, x0 + boxW[i] - 1, top + boxH - 1}, p.Label)
 		a.box(iRect{x0, bottom, x0 + boxW[i] - 1, bottom + boxH - 1}, p.Label)
+		// The lifeline joins its boxes' borders.
+		a.g.cells[top+boxH-1][pos[i]].r = '┬'
+		a.g.cells[bottom][pos[i]].r = '┴'
 	}
 	if len(stack) > 0 {
 		a.faultf("a block is not closed")

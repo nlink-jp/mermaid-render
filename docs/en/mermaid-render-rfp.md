@@ -612,7 +612,10 @@ it (the operator's decisions of 2026-09-30):
   in its own glyph where one exists): they never merge; a head ends a straight run. Subgraph
   frames in double lines `╔═╗║╚╝` (a node's box is single), their title inside as in the picture,
   in the rows above the members and slid along them clear of the links that cross; when those
-  leave it no room, below the members. ER entities as tables — name, then a row per attribute in the picture's
+  leave it no room, below the members. Where a line meets a border without a head the border
+  joins it (`┬┴├┤`, `╤╧╟╢` on a frame, `╪╫` where it crosses one): a border's stroke runs along the
+  middle of its cell, so a line would otherwise stop half a cell short — lifelines join their
+  participants' boxes and notes the same way. ER entities as tables — name, then a row per attribute in the picture's
   columns (type, name, keys, comment; not wrapped) — and cardinality in mermaid's own notation in
   the two cells next to the table (`||`, `|o`, `}|`, `}o`, mirrored on the left); a
   non-identifying relationship dotted. Sequence: participant boxes at the top and again at the

@@ -364,6 +364,7 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 			continue
 		}
 		own := g.cells[y][x].own
+		overFrame := own >= ownFrame && own < ownTitle
 		switch {
 		case own >= ownBox && own < ownFrame:
 			fault("link %d runs through node %q", us[0].link, f.Nodes[own-ownBox].ID)
@@ -373,7 +374,14 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		case 1:
 			u := us[0]
 			if u.dirs == dUp|dDown || u.dirs == dLeft|dRight || isCorner(u.dirs) {
-				g.cells[y][x] = tcell{r: strokeGlyph(f.Links[u.link].Stroke, u.dirs), own: ownLine + u.link, dirs: u.dirs}
+				r := strokeGlyph(f.Links[u.link].Stroke, u.dirs)
+				// A line across a frame's double border crosses it.
+				if overFrame && u.dirs == dUp|dDown {
+					r = '╪'
+				} else if overFrame && u.dirs == dLeft|dRight {
+					r = '╫'
+				}
+				g.cells[y][x] = tcell{r: r, own: ownLine + u.link, dirs: u.dirs}
 			} else {
 				fault("link %d turns back on itself", u.link)
 			}
@@ -387,6 +395,46 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		default:
 			fault("%d links meet in one cell", len(us))
 		}
+	}
+	// Where a line meets a box without a head, its border joins it: the
+	// border's stroke runs along the cell's middle, a line into it would
+	// stop half a cell short.
+	for i, pts := range tf.paths {
+		lk := f.Links[i]
+		if len(pts) == 0 || tf.marks != nil {
+			continue
+		}
+		cells, _, ok := walk(pts)
+		if !ok {
+			continue
+		}
+		join := func(c [2]int, h mr.Head, b iRect) {
+			if h != mr.NoHead {
+				return
+			}
+			var x, y int
+			var r rune
+			switch {
+			case c[1] == b.y0-1:
+				x, y, r = c[0], b.y0, '┴'
+			case c[1] == b.y1+1:
+				x, y, r = c[0], b.y1, '┬'
+			case c[0] == b.x0-1:
+				x, y, r = b.x0, c[1], '┤'
+			case c[0] == b.x1+1:
+				x, y, r = b.x1, c[1], '├'
+			default:
+				return
+			}
+			if g.in(x, y) && (g.cells[y][x].r == '─' || g.cells[y][x].r == '│' || g.cells[y][x].r == '═' || g.cells[y][x].r == '║') {
+				if g.cells[y][x].r == '═' || g.cells[y][x].r == '║' {
+					r = map[rune]rune{'┴': '╧', '┬': '╤', '┤': '╢', '├': '╟'}[r]
+				}
+				g.cells[y][x].r = r
+			}
+		}
+		join(cells[0], lk.Start, endBox(f, tf, lk.From))
+		join(cells[len(cells)-1], lk.End, endBox(f, tf, lk.To))
 	}
 	// Titles: in the frame's first rows, slid along them clear of the
 	// links that cross (the picture draws its titles over links; text
