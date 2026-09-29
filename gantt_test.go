@@ -234,6 +234,11 @@ func TestParseGanttErrors(t *testing.T) {
 		{"times alone over two days", "gantt\n  dateFormat HH:mm\n  axisFormat %H:%M\n  A :a, 10:00, 3d", UnsupportedConstruct, 4},
 		{"times alone with a month duration", "gantt\n  dateFormat HH:mm\n  axisFormat %H:%M\n  A :a, 10:00, 1M", UnsupportedConstruct, 4},
 		{"a year-less format, even with times alone on the axis", "gantt\n  dateFormat MM-DD HH:mm\n  axisFormat %H:%M\n  A :a, 01-05 10:00, 1h", UnsupportedConstruct, 4},
+		{"times alone with ticks every two days", "gantt\n  dateFormat HH:mm\n  axisFormat %H:%M\n  tickInterval 2day\n  A :a, 10:00, 34h", UnsupportedConstruct, 5},
+		{"times alone with ticks of 7 ms", "gantt\n  dateFormat HH:mm:ss\n  axisFormat %H:%M\n  tickInterval 7millisecond\n  A :a, 10:00:00, 1s", UnsupportedConstruct, 5},
+		{"a task ending before it starts", "gantt\n  dateFormat YYYY-MM-DD\n  A :a, 2020-01-10, 2020-01-01", UnsupportedConstruct, 3},
+		{"X: starts in ms, ends in seconds", "gantt\n  dateFormat X\n  A :a, 1704067200000, 5", UnsupportedConstruct, 3},
+		{"excluded days over centuries (a limit)", "gantt\n  dateFormat YYYY-MM-DD\n  excludes 2024-01-03\n  A :a, 2024-01-01, 9999y", UnsupportedConstruct, 4},
 		{"times alone with week ticks", "gantt\n  dateFormat HH:mm\n  axisFormat %H:%M\n  tickInterval 1week\n  A :a, 10:00, 1h", UnsupportedConstruct, 5},
 		{"a week token dayjs throws on (week 0 formats back)", "gantt\n  dateFormat YYYY ww\n  A :a, 2024 00, 1d", SyntaxError, 3},
 		{"a week token read by the browser", "gantt\n  dateFormat YYYY ww\n  A :a, 2024 03, 1d", UnsupportedConstruct, 3},
@@ -242,6 +247,15 @@ func TestParseGanttErrors(t *testing.T) {
 		var e *Error
 		if !errors.As(err, &e) || e.Kind != c.kind || e.Line != c.line {
 			t.Errorf("%s: %v, want %s at line %d", c.name, err, c.kind, c.line)
+		}
+	}
+}
+
+// Times alone with ticks that keep to the time of day are drawn.
+func TestParseGanttTimesAloneHourTicks(t *testing.T) {
+	for _, iv := range []string{"1day", "2hour", "15minute", "3600000millisecond"} {
+		if _, err := Parse("gantt\n  dateFormat HH:mm\n  axisFormat %H:%M\n  tickInterval " + iv + "\n  A :a, 10:00, 3h"); err != nil {
+			t.Errorf("%s: %v", iv, err)
 		}
 	}
 }

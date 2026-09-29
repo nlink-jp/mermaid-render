@@ -523,7 +523,7 @@ func d3Directive(c, pad rune, t float64) string {
 	case 'X':
 		return d3Format("%-I:%M:%S %p", t)
 	case 'y':
-		return d3Pad(((f.y%100)+100)%100, pad, 2)
+		return d3Pad(f.y%100, pad, 2) // a year before 0 keeps its sign, as d3's pad does
 	case 'Y':
 		return d3Pad(f.y%10000, pad, 4)
 	case 'Z':

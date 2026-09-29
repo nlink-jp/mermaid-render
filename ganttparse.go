@@ -136,7 +136,12 @@ type ganttDB struct {
 	byID               map[string]int
 	today              bool // a date took its fields from today
 	todayLine          int
+	checkedDays        int // days checked against excludes, over all passes
 }
+
+// MaxExcludedDayChecks bounds the day-by-day walk over excluded days
+// (ganttDb's checkTaskDates): a task of centuries would take minutes.
+const MaxExcludedDayChecks = 200000
 
 var ganttTags = []string{"active", "done", "crit", "milestone", "vert"}
 
@@ -244,6 +249,22 @@ var reTickInterval = regexp.MustCompile(`^([1-9]\d*)(millisecond|second|minute|h
 
 // timeOnlyAxis: d3-time-format directives that print no part of a date.
 var reAxisDirective = regexp.MustCompile(`%[-_0]?(.)`)
+
+// tickNeedsDate: tick intervals whose places depend on the date, not only
+// the time of day — weeks, months, days by more than one (d3 filters on the
+// day of the month), milliseconds that do not divide a day (counted from
+// the epoch).
+func tickNeedsDate(unit string, every int) bool {
+	switch unit {
+	case "week", "month":
+		return true
+	case "day":
+		return every > 1
+	case "millisecond":
+		return 86400000%every != 0
+	}
+	return false
+}
 
 func axisPrintsDate(f string) bool {
 	for _, m := range reAxisDirective.FindAllStringSubmatch(f, -1) {
@@ -496,6 +517,9 @@ func (db *ganttDB) checkTaskDates(t *gtTask) error {
 	var render jsDate
 	hasRender := false
 	for start.valid && end.valid && start.ms <= end.ms {
+		if db.checkedDays++; db.checkedDays > MaxExcludedDayChecks {
+			return errf(UnsupportedConstruct, t.line, "more than %d days to check against excludes", MaxExcludedDayChecks)
+		}
 		if !invalid {
 			render, hasRender = end, true
 		}
@@ -575,6 +599,12 @@ func (db *ganttDB) finish(g *Gantt) (*Gantt, error) {
 		if !t.startT.valid || !t.endT.valid {
 			return nil, errf(UnsupportedConstruct, t.line, "task %q has no valid date", strings.TrimSpace(t.text))
 		}
+		if t.endT.ms < t.startT.ms {
+			// mermaid's bar would have a negative width (not drawn), a
+			// milestone would sit before its start, and a chart of such
+			// tasks has its axis backwards.
+			return nil, errf(UnsupportedConstruct, t.line, "task %q ends before it starts", strings.TrimSpace(t.text))
+		}
 		if !lo.valid || t.startT.ms < lo.ms {
 			lo = t.startT
 		}
@@ -608,8 +638,8 @@ func (db *ganttDB) finish(g *Gantt) (*Gantt, error) {
 			return nil, errf(UnsupportedConstruct, line, "dateFormat %q has no date, and excluded days depend on it", db.dateFormat)
 		case axisPrintsDate(g.AxisFormat):
 			return nil, errf(UnsupportedConstruct, line, "dateFormat %q has no date, and the axis %q would print today's", db.dateFormat, g.AxisFormat)
-		case g.TickUnit == "week" || g.TickUnit == "month" || hi.ms-lo.ms >= 2*86400000:
-			return nil, errf(UnsupportedConstruct, line, "dateFormat %q has no date, and week or month ticks depend on it", db.dateFormat)
+		case tickNeedsDate(g.TickUnit, g.TickEvery) || hi.ms-lo.ms >= 2*86400000:
+			return nil, errf(UnsupportedConstruct, line, "dateFormat %q has no date, and the ticks' places depend on it", db.dateFormat)
 		}
 	}
 	if len(g.Tasks) > 0 && (len(db.excludes) > 0 || len(db.includes) > 0) && djDiffYears(hi, lo) <= 5 {

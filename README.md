@@ -95,7 +95,8 @@ maxTextSize), 300 nodes and subgraphs (at most
 parsing), 300 ER entities with at most 200 attributes each, 300 sequence
 participants with at most 2000 events and blocks nested 50 deep, 100 pie
 items whose total is a finite number, composite states nested 20 deep, 500
-gantt tasks, 1000
+gantt tasks (at the default scale about 200 rows reach the pixel limit first),
+200,000 days checked against `excludes`, 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
 per image (for time and memory). A flowchart whose links would need more than
 20,000 layout items (very long links through many layers) is refused too. The PNG's size is the caller's to check — it

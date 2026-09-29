@@ -15,8 +15,9 @@ to [Semantic Versioning](https://semver.org/).
   browser set to UTC; the axis as d3 7.9.0 ticks and formats it
   (`axisFormat`, `tickInterval`, `weekday`). Each part was checked against
   the real library under node. What depends on the day it is drawn or on
-  the browser is unsupported; the today marker is never drawn. Every render
-  checks bars, texts, section titles, markers and axis labels.
+  the browser is unsupported (so is a task ending before it starts); the
+  today marker is never drawn. Every render checks bars on their rows,
+  texts, section titles, markers, excluded days and axis ticks.
 
 ## [0.3.0] - 2026-09-29
 

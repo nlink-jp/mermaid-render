@@ -1106,6 +1106,36 @@ func ganttFaults(g *mr.Gantt, gl *ganttLayout, m measurer) []string {
 		}
 		texts = append(texts, labelled{b.text, "the text of " + t.ID, i})
 	}
+	// Each bar lies on its own row's stripe.
+	if len(gl.stripes) != len(gl.bars) {
+		out.add("%d row stripes for %d rows", len(gl.stripes), len(gl.bars))
+	}
+	for i, b := range gl.bars {
+		if i >= len(gl.stripes) {
+			break
+		}
+		if s := gl.stripes[i]; b.box.Y0 < s.Y0-eps || b.box.Y1 > s.Y1+eps {
+			out.add("task %s's bar is not on its row", b.task.ID)
+		}
+	}
+	// Excluded days are shaded where the scale puts them.
+	var want []rect
+	for k := 0; k+1 < len(g.Excluded); k += 2 {
+		a := math.Max(gl.x(float64(g.Excluded[k])), gl.x0)
+		b := math.Min(gl.x(float64(g.Excluded[k+1])), gl.x0+gl.T)
+		if b > a {
+			want = append(want, rect{a, gl.rowsTop, b, gl.rowsBottom})
+		}
+	}
+	if len(want) != len(gl.excluded) {
+		out.add("%d excluded runs shaded, want %d", len(gl.excluded), len(want))
+	} else {
+		for i, r := range gl.excluded {
+			if !near(r.X0, want[i].X0) || !near(r.X1, want[i].X1) || !near(r.Y0, want[i].Y0) || !near(r.Y1, want[i].Y1) {
+				out.add("an excluded run is shaded at %v, want %v", r, want[i])
+			}
+		}
+	}
 	for _, s := range gl.sections {
 		if !within(s.run, s.text) {
 			out.add("section title %q lies outside its rows or column", strings.Join(s.lines, " "))
@@ -1116,6 +1146,9 @@ func ganttFaults(g *mr.Gantt, gl *ganttLayout, m measurer) []string {
 		if i > 0 && !(tk.x > gl.ticks[i-1].x) {
 			out.add("axis tick %q is out of order", tk.label)
 		}
+		if !near(tk.x, gl.x(tk.t)) {
+			out.add("axis tick %q is not at its time", tk.label)
+		}
 		if tk.label != "" {
 			texts = append(texts, labelled{tk.box, "axis label " + tk.label, -1})
 		}
@@ -1123,6 +1156,9 @@ func ganttFaults(g *mr.Gantt, gl *ganttLayout, m measurer) []string {
 	for _, v := range gl.verts {
 		if !near(v.x, gl.x(float64(v.task.Start))) {
 			out.add("marker %s is not at its time", v.task.ID)
+		}
+		if v.y0 > gl.rowsTop+eps || v.y1 < gl.rowsBottom-eps {
+			out.add("marker %s does not cross every row", v.task.ID)
 		}
 		if v.task.Text != "" {
 			texts = append(texts, labelled{v.label, "the text of marker " + v.task.ID, -1})

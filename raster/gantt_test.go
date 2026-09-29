@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
+	"time"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -196,7 +197,9 @@ func TestRenderRefusesGanttFaults(t *testing.T) {
 			b := &gl.bars[2] // its text moves with it
 			b.box.X0, b.box.X1, b.text.X0, b.text.X1 = b.box.X0-1, b.box.X1-1, b.text.X0-1, b.text.X1-1
 		},
-		"a bar lost": func(gl *ganttLayout) { gl.bars = gl.bars[1:] },
+		"a bar lost": func(gl *ganttLayout) {
+			gl.bars, gl.stripes, gl.stripeCol = gl.bars[1:], gl.stripes[1:], gl.stripeCol[1:]
+		},
 		"rows out of order": func(gl *ganttLayout) {
 			// Listed and drawn in the wrong order, each bar at its own times.
 			a, b := gl.bars[0], gl.bars[1]
@@ -219,10 +222,25 @@ func TestRenderRefusesGanttFaults(t *testing.T) {
 			s.text.Y1 = s.run.Y1 + 0.2
 			s.text.Y0 = s.text.Y1 - h
 		},
-		"axis labels overlapping":     func(gl *ganttLayout) { gl.ticks[1].box = gl.ticks[0].box },
-		"ticks out of order":          func(gl *ganttLayout) { gl.ticks[1].x = gl.ticks[0].x - 1 },
+		"axis labels overlapping": func(gl *ganttLayout) { gl.ticks[1].box = gl.ticks[0].box },
+		"ticks out of order": func(gl *ganttLayout) {
+			// Each at its own time, listed the wrong way round.
+			gl.ticks[0], gl.ticks[1] = gl.ticks[1], gl.ticks[0]
+		},
 		"a marker off its time":       func(gl *ganttLayout) { gl.verts[0].x += 1 },
 		"a label outside the picture": func(gl *ganttLayout) { gl.ticks[0].box.X0 = -5 },
+		"a bar off its row": func(gl *ganttLayout) {
+			gl.bars[0].box.Y0 += 1
+			gl.bars[0].box.Y1 += 1
+			gl.bars[0].text.Y0 += 1
+			gl.bars[0].text.Y1 += 1
+		},
+		"a row's stripe lost": func(gl *ganttLayout) {
+			n := len(gl.stripes) - 1 // the last: every other bar still on its own
+			gl.stripes, gl.stripeCol = gl.stripes[:n], gl.stripeCol[:n]
+		},
+		"a marker's line cut short": func(gl *ganttLayout) { gl.verts[0].y1 = (gl.verts[0].y0 + gl.verts[0].y1) / 2 },
+		"a grid tick off its time":  func(gl *ganttLayout) { gl.ticks[1].x += 0.5 },
 	} {
 		d, _ := mr.Parse(src)
 		_, err := render(d, Options{Font: fn}, probe{corruptGantt: corrupt})
@@ -260,5 +278,57 @@ func TestGanttSectionTitlesCentred(t *testing.T) {
 	}
 	if a, b := gl.sections[0].text.Center().X, gl.sections[1].text.Center().X; math.Abs(a-b) > 1e-9 {
 		t.Errorf("titles centred at %v and %v", a, b)
+	}
+}
+
+// Excluded days are shaded where the scale puts them.
+func TestRenderRefusesGanttExcludedFault(t *testing.T) {
+	fn := systemFont(t)
+	d, _ := mr.Parse("gantt\n  dateFormat YYYY-MM-DD\n  excludes weekends\n  A :a, 2024-01-01, 20d")
+	_, err := render(d, Options{Font: fn}, probe{corruptGantt: func(gl *ganttLayout) {
+		gl.excluded[0].X0 += 3
+		gl.excluded[0].X1 += 3
+	}})
+	var e *mr.Error
+	if !errors.As(err, &e) || e.Kind != mr.LayoutFault {
+		t.Errorf("%v, want a layout fault", err)
+	}
+}
+
+// Tick intervals that ran for ever: a large millisecond step (d3 floors to
+// multiples, not by filtering), an estimate of exactly 10,000 (10,001 ticks
+// with both ends), a week step past the bound.
+func TestGanttTickIntervalsEnd(t *testing.T) {
+	for _, src := range []string{
+		"gantt\n  dateFormat YYYY-MM-DD\n  tickInterval 86400000millisecond\n  A :a, 2020-01-01, 3d",
+		"gantt\n  dateFormat YYYY-MM-DD\n  tickInterval 1day\n  A :a, 2000-01-01, 10000d",
+	} {
+		done := make(chan error, 1)
+		go func() {
+			d, err := mr.Parse(src)
+			if err == nil {
+				_, err = layoutGantt(d.(*mr.Gantt), fakeMeasure)
+			}
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("%q: %v", src, err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%q: still laying out after 10 s", src)
+		}
+	}
+	d, _ := mr.Parse("gantt\n  dateFormat YYYY-MM-DD\n  tickInterval 20000week\n  A :a, 2020-01-01, 3d")
+	if _, err := layoutGantt(d.(*mr.Gantt), fakeMeasure); err == nil {
+		t.Error("a 20000-week tick interval was laid out")
+	}
+}
+
+// %y of a year before 0 keeps its sign, as d3 pads it.
+func TestD3FormatNegativeYear(t *testing.T) {
+	if got := d3Format("%y", utcDate(-1, 5, 1)); got != "-01" {
+		t.Errorf("%%y = %q", got)
 	}
 }

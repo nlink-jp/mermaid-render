@@ -18,17 +18,23 @@ import (
 // apart (mermaid fills its container).
 
 const (
-	gtRow       = 1.9   // em, a row's pitch
-	gtBar       = 1.3   // em, a bar's height
-	gtTextPad   = 0.4   // em, text to a bar's edge
-	gtSecPad    = 0.6   // em, around a section title
-	gtMinScale  = 36.0  // em, the time scale's least width
-	gtMaxScale  = 120.0 // em, past which axis labels are thinned
-	gtTickGap   = 0.8   // em, between two axis labels
-	gtAxisGap   = 0.35  // em, rows to the axis labels
-	gtLaneGap   = 0.3   // em, between vert label lanes
-	gtMaxTicks  = 10000
-	gtTickLimit = gtMaxTicks + 1
+	gtRow      = 1.9   // em, a row's pitch
+	gtBar      = 1.3   // em, a bar's height
+	gtTextPad  = 0.4   // em, text to a bar's edge
+	gtSecPad   = 0.6   // em, around a section title
+	gtMinScale = 36.0  // em, the time scale's least width
+	gtMaxScale = 120.0 // em, past which axis labels are thinned
+	gtTickGap  = 0.8   // em, between two axis labels
+	gtAxisGap  = 0.35  // em, rows to the axis labels
+	gtLaneGap  = 0.3   // em, between vert label lanes
+	gtMaxTicks = 10000
+	// gtTickLimit: an estimate of 10,000 can make 10,001 ticks (both ends),
+	// and months are estimated at 30.4 days; twice the estimate is a
+	// resource bound, not a rule mermaid has.
+	gtTickLimit = 2 * gtMaxTicks
+	// gtMaxWeekStep bounds a week tick interval's step: d3 filters weeks by
+	// their count from the epoch, walking a week at a time.
+	gtMaxWeekStep = 10000
 )
 
 var (
@@ -55,15 +61,17 @@ type gtSection struct {
 }
 
 type gtTick struct {
+	t     float64 // its time
 	x     float64
 	label string
 	box   rect
 }
 
 type gtVert struct {
-	task  *mr.GanttTask
-	x     float64
-	label rect
+	y0, y1 float64 // its line, across the rows
+	task   *mr.GanttTask
+	x      float64
+	label  rect
 }
 
 type ganttLayout struct {
@@ -109,19 +117,20 @@ func gtColors(t *mr.GanttTask) (fill, rim color.RGBA) {
 
 // gtTickInterval is the tickInterval as a d3 interval, or nil for the
 // default ticks (none given, or more than 10,000 estimated).
-func gtTickInterval(g *mr.Gantt, lo, hi float64) *d3Interval {
+func gtTickInterval(g *mr.Gantt, lo, hi float64) (*d3Interval, error) {
 	if g.TickEvery == 0 {
-		return nil
+		return nil, nil
 	}
 	unitMs := map[string]float64{"millisecond": 1, "second": durSecond, "minute": durMinute, "hour": durHour,
 		"day": durDay, "week": durWeek, "month": 2628000000}[g.TickUnit]
 	if est := math.Ceil((hi - lo) / (unitMs * float64(g.TickEvery))); est > gtMaxTicks {
-		return nil
+		return nil, nil
 	}
 	var iv *d3Interval
 	switch g.TickUnit {
 	case "millisecond":
-		iv = d3Millisecond
+		// d3's millisecond.every floors to multiples, not a filter.
+		return d3MillisecondEvery(float64(g.TickEvery)), nil
 	case "second":
 		iv = d3Second
 	case "minute":
@@ -131,12 +140,15 @@ func gtTickInterval(g *mr.Gantt, lo, hi float64) *d3Interval {
 	case "day":
 		iv = d3Day
 	case "week":
+		if g.TickEvery > gtMaxWeekStep {
+			return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf("a tick interval of more than %d weeks", gtMaxWeekStep)}
+		}
 		days := map[string]int{"sunday": 0, "monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4, "friday": 5, "saturday": 6}
 		iv = weekdayInterval(days[g.Weekday])
 	case "month":
 		iv = d3Month
 	}
-	return iv.every(float64(g.TickEvery))
+	return iv.every(float64(g.TickEvery)), nil
 }
 
 func layoutGantt(g *mr.Gantt, m measurer) (*ganttLayout, error) {
@@ -224,13 +236,16 @@ func layoutGantt(g *mr.Gantt, m measurer) (*ganttLayout, error) {
 	}
 	gl.rowsBottom = y
 	// Ticks and their labels decide the scale's width.
-	iv := gtTickInterval(g, gl.lo, gl.hi)
+	iv, err := gtTickInterval(g, gl.lo, gl.hi)
+	if err != nil {
+		return nil, err
+	}
 	var times []float64
 	if gl.hi != gl.lo || iv != nil {
 		times = d3Ticks(gl.lo, gl.hi, iv, gtTickLimit)
 	}
-	if len(times) > gtMaxTicks {
-		return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf("more than %d axis ticks", gtMaxTicks)}
+	if len(times) > gtTickLimit {
+		return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf("more than %d axis ticks", gtTickLimit)}
 	}
 	type lab struct {
 		text string
@@ -310,12 +325,12 @@ func layoutGantt(g *mr.Gantt, m measurer) (*ganttLayout, error) {
 	for i, t := range times {
 		x := gl.x(t)
 		if i%every != 0 {
-			gl.ticks = append(gl.ticks, gtTick{x: x}) // a grid line without a label
+			gl.ticks = append(gl.ticks, gtTick{t: t, x: x}) // a grid line without a label
 			continue
 		}
 		l := labs[i]
 		box := rect{x - l.w/2, axisY, x + l.w/2, axisY + l.h}
-		gl.ticks = append(gl.ticks, gtTick{x: x, label: l.text, box: box})
+		gl.ticks = append(gl.ticks, gtTick{t: t, x: x, label: l.text, box: box})
 		bottom = math.Max(bottom, box.Y1)
 	}
 	// vert markers: a line across the rows, the text below the axis in
@@ -353,7 +368,7 @@ func layoutGantt(g *mr.Gantt, m measurer) (*ganttLayout, error) {
 		ly := top + float64(lane)*(th+gtLaneGap)
 		box := rect{x - tw/2, ly, x + tw/2, ly + th}
 		lanes[lane] = append(lanes[lane], box)
-		gl.verts = append(gl.verts, gtVert{task: t, x: x, label: box})
+		gl.verts = append(gl.verts, gtVert{task: t, x: x, y0: gl.rowsTop, y1: gl.rowsBottom, label: box})
 		bottom = math.Max(bottom, box.Y1)
 	}
 	// Bounds: shift so that everything starts at 0.
@@ -446,7 +461,7 @@ func (c *canvas) drawGantt(gl *ganttLayout, fn *Font) error {
 		c.tracef("task %s row %d inside %v", b.task.ID, b.task.Row, b.inside)
 	}
 	for _, v := range gl.verts {
-		c.segment(pt{v.x, gl.rowsTop}, pt{v.x, gl.rowsBottom}, lineW*1.4, gtVertCol)
+		c.segment(pt{v.x, v.y0}, pt{v.x, v.y1}, lineW*1.4, gtVertCol)
 		if v.task.Text != "" {
 			if err := text(v.label, v.task.Text, gtVertCol, v.task.Line); err != nil {
 				return err

@@ -394,8 +394,13 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     `YYYY-MM`, `YYYY-MM-DD`, with `THH:mm[:ss[.sss]]` and `Z` / `±HH:mm`), which all read alike; a
     `dateFormat` without a year that has a month or day; and one of times alone unless nothing
     shows the day: no `excludes` or `includes`, no duration in months or years, an axis format
-    printing only `%H %I %M %S %L %f %p %X`, no `week` or `month` tick interval, and a chart
-    spanning less than two days (d3 then picks ticks of hours or less).
+    printing only `%H %I %M %S %L %f %p %X`, no tick interval placed by the date (`week`,
+    `month`, `day` by more than one — d3 filters on the day of the month — or `millisecond` not
+    dividing a day, counted from the epoch), and a chart spanning less than two days (d3 then
+    picks ticks of hours or less). Also unsupported: a task ending before it starts (mermaid's bar
+    has a negative width and is not drawn; `dateFormat X` reads starts as milliseconds and ends
+    as seconds, which makes one); more than 200,000 days to check against `excludes` (a limit:
+    ganttDb walks day by day); a `week` tick interval over 10,000 (d3 walks week by week).
   - A first task with no start, tags alone and more than three items are mermaid's crashes:
     errors.
   - The today marker is never drawn. `displayMode: compact` and `topAxis` configuration (front
@@ -408,7 +413,8 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     the section titles); excluded days shaded when the span is at most 5 whole years — every run,
     where mermaid drops one still open at the last day; `vert` markers a line across the rows
     with their text below the axis, in lanes so none overlap; ticks as d3's time scale gives
-    them (10 by default; `tickInterval` unless it would make more than 10,000, then the default),
+    them (10 by default; `tickInterval` unless it would make more than 10,000, then the default;
+    at most 20,000 drawn),
     labels by `axisFormat` (d3-time-format's directives, English).
   - The time scale's width is this engine's: the axis labels side by side with room between
     them, at least 36 em — mermaid fills its container's width. Past 120 em (dense ticks, as
@@ -993,6 +999,17 @@ same way as pathguard.
     6 documentation examples, 3 made for the check (dense ticks thinned, Japanese and a two-line
     section title, the tags). All ○ on all four items. One note: section titles of different
     widths should be centred across the column alike; they are now.
+  - **Pre-release independent review of gantt (2026-09-29)**: 6,000 more charts against the real
+    ganttDb (includes, weekday names, times with excludes, x/X, until chains): no difference; 20,000
+    with the real font, no panic. Found and fixed: a task of centuries with `excludes` stalled the
+    parse (ganttDb's day-by-day walk: now bounded); a large `tickInterval Nmillisecond` stalled
+    the render (the port filtered where d3 floors to multiples: this port's own defect); ticks
+    every 2+ days or of odd milliseconds on a time-only chart depended on today (refused); a task
+    ending before it starts was refused as a layout fault (now unsupported, as mermaid draws no
+    bar); an estimate of exactly 10,000 ticks made 10,001 and was refused; `%y` of a negative
+    year; the render check now also holds each bar on its row's stripe, the excluded runs where
+    the scale puts them, each tick at its time and each marker across every row. 44 mutants,
+    all caught.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText
