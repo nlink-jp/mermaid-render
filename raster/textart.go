@@ -52,6 +52,8 @@ func RenderText(d mr.Diagram, opts TextOptions) (string, error) {
 	switch d := d.(type) {
 	case *mr.Flowchart:
 		g, err = flowText(d, tm)
+	case *mr.ER:
+		g, err = erText(d, tm)
 	default:
 		return "", &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("text art: %T", d)}
 	}
@@ -180,8 +182,8 @@ func (g *tgrid) text(x, y int, s string, own int, tm *textMeasure) {
 }
 
 func (g *tgrid) String() string {
-	var b strings.Builder
-	for y, row := range g.cells {
+	var lines []string
+	for _, row := range g.cells {
 		var line strings.Builder
 		for _, c := range row {
 			switch {
@@ -192,12 +194,16 @@ func (g *tgrid) String() string {
 				line.WriteRune(c.r)
 			}
 		}
-		b.WriteString(strings.TrimRight(line.String(), " "))
-		if y < len(g.cells)-1 {
-			b.WriteByte('\n')
-		}
+		lines = append(lines, strings.TrimRight(line.String(), " "))
 	}
-	return b.String()
+	// Room the layout kept that nothing uses: no blank rows at either end.
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	for len(lines) > 0 && lines[0] == "" {
+		lines = lines[1:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // gridSpacing is the layered layout's spacing in grid units (a unit is a

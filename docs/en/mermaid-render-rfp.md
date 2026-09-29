@@ -635,7 +635,10 @@ it (the operator's decisions of 2026-09-30):
   units apart on a face (one apart collided in 60% of them), a row between layers, two units
   before a head. The 22 real flowcharts draw; of 4,000 random ones 99.6% (the rest are refused). ER is always laid out left to right (right to left when
   written RL): cardinality reads along a horizontal line; a TB diagram is drawn as LR — a stated
-  difference, the relationships unchanged. Sequence has a column layout of its own, like the
+  difference, the relationships unchanged. Its layer gap is a unit wider and its heads' room one
+  more, so a label keeps a cell of line from a mark; a relationship of an entity to itself loops
+  on the table's right face over two interior rows no other link ends on (the layout loops it
+  below, where marks cannot read across). Sequence has a column layout of its own, like the
   picture's. The independent verification ran this on the 22 real flowcharts (clean) and 20,000
   random ones (0.03% collide, all rounding ties, before the interior-cell and title rules).
 - **Checked on every render**, on the grid, as the picture's properties are: every node's box

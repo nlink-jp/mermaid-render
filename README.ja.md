@@ -76,8 +76,9 @@ img, err = raster.RenderSource(src, raster.Options{Font: font})
 art, err := raster.RenderText(d, raster.TextOptions{Width: cellWidth}) // Width が nil なら East Asian Width
 ```
 
-罫線表示は flowchart を端末のセルの格子の上に罫線の文字で描く。絵と同じ層の配置を格子に合わせて走らせる
-（sequence と ER は続けて加える）。`Width` は呼び出し側の端末で文字が占める桁数。制御文字や、複数の rune からなる
+罫線表示は flowchart と ER を端末のセルの格子の上に罫線の文字で描く。絵と同じ層の配置を格子に合わせて走らせる
+（sequence は続けて加える）。ER のエンティティは表で、左から右に並べ、多重度は表の隣に mermaid の記法
+（`||`・`o{` など）で書く。`Width` は呼び出し側の端末で文字が占める桁数。制御文字や、複数の rune からなる
 書記素クラスタを含むラベルは罫線では未対応。描くたびに格子の上で確かめ、破れれば `LayoutFault` で、呼び出し側は
 ソースを見せる。
 

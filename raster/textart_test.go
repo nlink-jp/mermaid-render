@@ -174,3 +174,110 @@ func TestTextArtFaults(t *testing.T) {
 	}
 	_ = fmt.Sprint
 }
+
+// Every real ER diagram draws as text art.
+func TestTextArtRealER(t *testing.T) {
+	files, _ := filepath.Glob("../testdata/real/*/*.mmd")
+	n := 0
+	for _, p := range files {
+		b, _ := os.ReadFile(p)
+		d, err := mr.Parse(string(b))
+		if err != nil {
+			continue
+		}
+		if _, ok := d.(*mr.ER); !ok {
+			continue
+		}
+		n++
+		if _, err := RenderText(d, TextOptions{}); err != nil {
+			t.Errorf("%s: %v", filepath.Base(p), err)
+		}
+	}
+	if n != 11 {
+		t.Errorf("%d real ER diagrams, want 11", n)
+	}
+}
+
+// Random ER diagrams: most draw (dense random ones are refused more often
+// than flowcharts: a self-relationship's label can find no room), and
+// the art is the same every time.
+func TestTextArtRandomER(t *testing.T) {
+	ok, total := 0, 0
+	for seed := int64(1); seed <= 200; seed++ {
+		for _, dir := range []string{"TD", "LR", "BT", "RL"} {
+			d, err := mr.Parse(randomER(seed, dir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			total++
+			art, err := RenderText(d, TextOptions{})
+			var e *mr.Error
+			if err != nil && !(errors.As(err, &e) && e.Kind == mr.LayoutFault) {
+				t.Fatalf("seed %d %s: %v", seed, dir, err)
+			}
+			if err != nil {
+				continue
+			}
+			ok++
+			if again, _ := RenderText(d, TextOptions{}); again != art {
+				t.Fatalf("seed %d %s: not deterministic", seed, dir)
+			}
+		}
+	}
+	if ok*100 < total*93 {
+		t.Errorf("%d of %d random ER diagrams drawn, want 93%%", ok, total)
+	}
+}
+
+// ER: tables, cardinality in mermaid's notation on each side (mirrored for
+// a table on the left), a self-relationship looping on the right face.
+func TestTextArtER(t *testing.T) {
+	src := "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    ORDER ||--|{ LINE_ITEM : contains\n    CUSTOMER {\n        string name PK\n        string email\n    }\n    EMPLOYEE |o..o{ EMPLOYEE : manages"
+	got, err := RenderTextSource(src, TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `┌──────────────────────┐
+│       CUSTOMER       │
+├────────┬───────┬─────┤              ┌────────┐                ┌────────────┐
+│ string │ name  │ PK  │||──places──o{│ ORDER  │||──contains──|{│ LINE_ITEM  │
+│ string │ email │     │              └────────┘                └────────────┘
+└────────┴───────┴─────┘
+
+
+
+      ┌──────────┐
+      │ EMPLOYEE │|o┄┄┐
+      │          │}o┄┄┘ manages
+      └──────────┘`
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	for c, want := range map[mr.Cardinality][2]string{
+		mr.ExactlyOne: {"||", "||"}, mr.ZeroOrOne: {"o|", "|o"}, mr.ZeroOrMore: {"o{", "}o"}, mr.OneOrMore: {"|{", "}|"},
+	} {
+		r := cardRunes(c)
+		if m := mirrored(r); string(r[:]) != want[0] || string(m[:]) != want[1] {
+			t.Errorf("%v: %q / %q, want %q", c, string(r[:]), string(m[:]), want)
+		}
+	}
+}
+
+// A mark must stand on a run across into its table.
+func TestTextArtERMarkFault(t *testing.T) {
+	textProbe = func(tf *textFlow) {
+		// The link into ORDER turned to come down onto its top face.
+		p := tf.paths[0]
+		end := p[len(p)-1]
+		b := tf.boxes[1]
+		tf.paths[0] = [][2]int{p[0], {b.x0 + 2, p[0][1]}, {b.x0 + 2, b.y0 - 1}}
+		_ = end
+	}
+	debugArt = true
+	_, err := RenderTextSource("erDiagram\n    A ||--o{ ORDER : x", TextOptions{})
+	textProbe, debugArt = nil, false
+	var e *mr.Error
+	if !errors.As(err, &e) || e.Kind != mr.LayoutFault || !strings.Contains(e.Msg, "cardinality mark") {
+		t.Errorf("%v, want a fault naming the cardinality mark", err)
+	}
+}

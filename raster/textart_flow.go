@@ -85,6 +85,10 @@ type textFlow struct {
 	paths  [][][2]int // per link: its cells' corners, first and last beside their boxes
 	labels []iRect    // per link (zero when none)
 	w, h   int
+	// An ER diagram's: each node's table, and each link's cardinality
+	// marks at its From and its To in place of heads.
+	tables []*textTable
+	marks  [][2][2]rune
 }
 
 func snapFlow(f *mr.Flowchart, lay *flowLayout) *textFlow {
@@ -289,7 +293,11 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 	for i, n := range f.Nodes {
 		b := tf.boxes[i]
 		w, h := tm.size(n.Label)
-		if b.x1-b.x0+1 < w+4 || b.y1-b.y0+1 < h+2 {
+		w, h = w+4, h+2
+		if tf.tables != nil {
+			w, h = tf.tables[i].w, tf.tables[i].h
+		}
+		if b.x1-b.x0+1 < w || b.y1-b.y0+1 < h {
 			fault("node %q: its box is smaller than its text", n.ID)
 		}
 		for j := 0; j < i; j++ {
@@ -297,12 +305,12 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 				fault("nodes %q and %q overlap", f.Nodes[j].ID, n.ID)
 			}
 		}
-		drawBorder(g, b, cornersOf(n.Shape), ownBox+i)
-		for y := b.y0 + 1; y < b.y1; y++ {
-			for x := b.x0 + 1; x < b.x1; x++ {
-				g.cells[y][x] = tcell{own: ownBox + i}
-			}
+		if tf.tables != nil {
+			drawTable(g, b, tf.tables[i], ownBox+i, tm)
+			continue
 		}
+		drawBorder(g, b, cornersOf(n.Shape), ownBox+i)
+		fillOwn(g, b, ownBox+i)
 		centreText(g, iRect{b.x0 + 1, b.y0 + 1, b.x1 - 1, b.y1 - 1}, n.Label, ownBox+i, tm)
 	}
 	// Lines: each link's cells and the directions it leaves them in.
@@ -477,6 +485,39 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 			}
 			g.cells[c[1]][c[0]].r = r
 		}
+		if tf.marks != nil {
+			// Cardinality in the two cells next to each table, on a run
+			// across into its left or right face.
+			mark := func(c, before [2]int, m [2]rune, b iRect) {
+				if !g.in(c[0], c[1]) || !g.in(before[0], before[1]) || c[1] != before[1] ||
+					g.cells[c[1]][c[0]].dirs != dLeft|dRight || g.cells[before[1]][before[0]].dirs != dLeft|dRight {
+					fault("link %s-%s: a cardinality mark does not stand on a run across into its table", lk.From.ID, lk.To.ID)
+					return
+				}
+				if c[0] == b.x0-1 { // the table on the right
+					g.cells[c[1]][before[0]].r, g.cells[c[1]][c[0]].r = m[0], m[1]
+				} else {
+					mm := mirrored(m)
+					g.cells[c[1]][c[0]].r, g.cells[c[1]][before[0]].r = mm[0], mm[1]
+				}
+			}
+			if len(cells) < 4 {
+				fault("link %s-%s: no room for its cardinality marks", lk.From.ID, lk.To.ID)
+				continue
+			}
+			n := len(cells)
+			mark(cells[0], cells[1], tf.marks[i][0], endBox(f, tf, lk.From))
+			mark(cells[n-1], cells[n-2], tf.marks[i][1], endBox(f, tf, lk.To))
+			// A cell of line beyond each mark, clear of the label.
+			if lk.Label != "" {
+				for _, c := range [][2]int{cells[2], cells[n-3]} {
+					if tf.labels[i].has(c[0], c[1]) {
+						fault("link %s-%s: its label touches a cardinality mark", lk.From.ID, lk.To.ID)
+					}
+				}
+			}
+			continue
+		}
 		put(cells[0], lk.Start, endBox(f, tf, lk.From))
 		put(cells[len(cells)-1], lk.End, endBox(f, tf, lk.To))
 	}
@@ -496,9 +537,12 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 					fault("link %d: its label leaves the grid", i)
 					continue
 				}
-				own := g.cells[y][x].own
-				if own != textFree && own != ownLine+i {
+				c := g.cells[y][x]
+				if c.own != textFree && c.own != ownLine+i {
 					fault("link %d: its label lies over something else", i)
+				}
+				if c.own == ownLine+i && c.r != strokeGlyph(lk.Stroke, c.dirs) {
+					fault("link %d: its label lies over its head or mark", i)
 				}
 			}
 		}

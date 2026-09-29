@@ -14,7 +14,10 @@ to [Semantic Versioning](https://semver.org/).
   node corners by shape family, dotted and thick strokes, labels breaking
   their line, subgraphs in double-line frames. Character widths come from
   the caller (default: East Asian Width). Every render is checked on the
-  grid. All 22 real flowcharts draw.
+  grid. All 22 real flowcharts draw. ER diagrams too: tables laid out left
+  to right, cardinality in mermaid's notation next to each table, a
+  relationship to itself looping on the table's right face; all 11 real ER
+  diagrams draw.
 
 ### Changed
 
