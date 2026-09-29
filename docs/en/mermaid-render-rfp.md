@@ -753,6 +753,9 @@ same way as pathguard.
     through the circle once slices were many; asked for a choice, the operator moved every
     percentage into a legend column instead of adjusting the leaders, since no placement of many
     thin slices' labels keeps leaders apart without growing the picture. 15 mutants, all caught.
+    A second review of the legend column found that the render-time check did not compare a
+    slice's percentage with its own, nor keep each legend row's swatch, label and percentage on one
+    line, nor keep a single slice's percentage on the circle (v0.2.1; 19 mutants, all caught).
     Left as rare differences: a quoted label over several lines, trimming of NBSP / U+3000, a YAML
     block in the body.
 - **Considered and not taken**: colours matched to the terminal background, and asking the

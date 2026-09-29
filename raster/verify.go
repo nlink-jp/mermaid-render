@@ -811,13 +811,14 @@ func (g *grid) near(r rect, pad float64) []int {
 
 // pieFaults checks a pie chart's layout: the slices are the items over 1%,
 // in order, together a full turn with none empty; the legend names every
-// item in order with its percentage ("<1%" for one with no slice); no text
-// lies over another or outside the picture; a percentage written on a slice
-// lies inside that slice; the legend is clear of the circle.
+// item in order with its percentage ("<1%" for one with no slice), each row
+// on one line below the last; a slice's percentage is its own; no text lies
+// over another or outside the picture; a percentage written on a slice lies
+// inside that slice; the legend is clear of the circle.
 // Every check is about a wrong picture, so there is no strict reading.
 func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 	var out faults
-	kept, angle, _ := pieShares(p)
+	kept, angle, pct := pieShares(p)
 	if len(pl.wedges) != len(kept) {
 		out.add("%d slices drawn, want %d", len(pl.wedges), len(kept))
 		return out
@@ -825,6 +826,9 @@ func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 	for k, w := range pl.wedges {
 		if w.item != kept[k] {
 			out.add("slice %d is item %d, want %d", k, w.item, kept[k])
+		}
+		if w.pct != pct[k] {
+			out.add("slice %d shows %q, want %q", k, w.pct, pct[k])
 		}
 		if !(w.a1 > w.a0) || math.Abs(w.a0-angle[k]) > 1e-9 || math.Abs(w.a1-angle[k+1]) > 1e-9 {
 			out.add("slice %d runs %.4f to %.4f", k, w.a0, w.a1)
@@ -853,11 +857,21 @@ func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 			continue
 		}
 		texts, what = append(texts, w.box), append(what, "the percentage of "+p.Slices[w.item].Label)
-		if len(pl.wedges) > 1 && !inWedge(w.box, pl.c, pieR, w.a0, w.a1) {
+		if len(pl.wedges) > 1 && !inWedge(w.box, pl.c, pieR, w.a0, w.a1) ||
+			len(pl.wedges) == 1 && !rectInCircle(w.box, pl.c, pieR) {
 			out.add("the percentage of %q is not inside its slice", p.Slices[w.item].Label)
 		}
 	}
-	for _, r := range pl.legend {
+	for i, r := range pl.legend {
+		// A row's swatch, label and percentage share one line, below the
+		// row before: a percentage beside another item's label is wrong.
+		y := r.swatch.Center().Y
+		if math.Abs(r.box.Center().Y-y) > eps || r.pct != "" && math.Abs(r.pctBox.Center().Y-y) > eps {
+			out.add("legend row %q is not on one line", r.text)
+		}
+		if i > 0 && !(y > pl.legend[i-1].swatch.Center().Y) {
+			out.add("legend row %q is not below the one before", r.text)
+		}
 		parts := []rect{r.swatch, r.box}
 		texts, what = append(texts, r.box, r.swatch), append(what, "legend "+r.text, "the swatch of "+r.text)
 		if r.pct != "" {
@@ -882,6 +896,17 @@ func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 		}
 	}
 	return out
+}
+
+// rectInCircle reports whether r lies inside the disc of radius rad
+// around c.
+func rectInCircle(r rect, c pt, rad float64) bool {
+	for _, q := range []pt{{r.X0, r.Y0}, {r.X1, r.Y0}, {r.X0, r.Y1}, {r.X1, r.Y1}} {
+		if math.Hypot(q.X-c.X, q.Y-c.Y) > rad+eps {
+			return false
+		}
+	}
+	return true
 }
 
 // rectMeetsCircle reports whether r shares area with the disc of radius

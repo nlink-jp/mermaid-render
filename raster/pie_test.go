@@ -136,12 +136,27 @@ func TestRenderRefusesPieFaults(t *testing.T) {
 		"a legend row missing": func(pl *pieLayout) { pl.legend = pl.legend[1:] },
 		"a label on another":   func(pl *pieLayout) { pl.legend[1].box = pl.legend[0].box },
 		"a wrong percentage":   func(pl *pieLayout) { pl.legend[2].pct = "9%" },
-		"a percentage on another": func(pl *pieLayout) {
-			pl.legend[1].pctBox = pl.legend[0].pctBox
+		"slice percentages swapped": func(pl *pieLayout) {
+			pl.wedges[0].pct, pl.wedges[1].pct = pl.wedges[1].pct, pl.wedges[0].pct
+		},
+		"legend percentages swapped": func(pl *pieLayout) {
+			pl.legend[0].pctBox, pl.legend[2].pctBox = pl.legend[2].pctBox, pl.legend[0].pctBox
+		},
+		"legend rows swapped": func(pl *pieLayout) {
+			a, b := &pl.legend[0], &pl.legend[1]
+			a.swatch, b.swatch, a.box, b.box, a.pctBox, b.pctBox = b.swatch, a.swatch, b.box, a.box, b.pctBox, a.pctBox
+		},
+		"a percentage on its label": func(pl *pieLayout) {
+			// On its own line, slid left over the label.
+			r := &pl.legend[0]
+			w := r.pctBox.X1 - r.pctBox.X0
+			r.pctBox.X0, r.pctBox.X1 = r.box.X0, r.box.X0+w
 		},
 		"a legend over the circle": func(pl *pieLayout) {
-			r := &pl.legend[0].pctBox
-			*r = rect{pl.c.X, pl.c.Y, pl.c.X + r.X1 - r.X0, pl.c.Y + r.Y1 - r.Y0}
+			// The middle row, on its own line, slid left onto the circle.
+			r := &pl.legend[1].pctBox
+			w := r.X1 - r.X0
+			r.X0, r.X1 = pl.c.X, pl.c.X+w
 		},
 		"a label off its slice": func(pl *pieLayout) {
 			// At the centre, on every slice's edge and over no other text.
@@ -156,5 +171,22 @@ func TestRenderRefusesPieFaults(t *testing.T) {
 		if !errors.As(err, &e) || e.Kind != mr.LayoutFault {
 			t.Errorf("%s: %v, want a layout fault", name, err)
 		}
+	}
+}
+
+// A single slice's percentage sits at the centre; moved off the circle,
+// clear of every other text, it is still a fault.
+func TestRenderRefusesSinglePieLabelOffTheCircle(t *testing.T) {
+	fn := systemFont(t)
+	d, _ := mr.Parse("pie\n\"all\" : 1")
+	_, err := render(d, Options{Font: fn}, probe{corruptPie: func(pl *pieLayout) {
+		b := &pl.wedges[0].box
+		dy := pl.c.Y + pieR - b.Y0 // just below the circle
+		b.Y0, b.Y1 = b.Y0+dy, b.Y1+dy
+		pl.H += b.Y1 - b.Y0 // and still inside the picture
+	}})
+	var e *mr.Error
+	if !errors.As(err, &e) || e.Kind != mr.LayoutFault {
+		t.Errorf("%v, want a layout fault", err)
 	}
 }

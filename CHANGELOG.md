@@ -6,6 +6,15 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-29
+
+### Fixed
+
+- **The pie render check missed three wrong pictures**: a slice showing
+  another slice's percentage, a legend percentage beside another item's
+  label (or legend rows out of order), and a single slice's percentage off
+  the circle. Every render now refuses them. What v0.2.0 draws is unchanged.
+
 ## [0.2.0] - 2026-09-29
 
 ### Added
