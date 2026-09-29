@@ -249,6 +249,94 @@ lexical rules are ported from those.
   operator's decision of 2026-09-29; see the Discussion Log).
 - Limits: 100 items; a total that is not finite is an unsupported construct.
 
+**stateDiagram / stateDiagram-v2** (`stateDiagram.jison`, `stateDb.ts`, `dataFetcher.ts`,
+`stateCommon.ts`; both headers are the same diagram, `stateDetector-V2.ts`)
+
+- **Reading.** The lexer rules are ported in their order, as for ER: the first matching rule wins,
+  case-insensitively, with `\b` appended to a rule ending in a word character, and the lexer's
+  states (`STATE`, `struct` for a composite's body, `NOTE`, …) as in the grammar. mermaid parses
+  the source with a line end added (`Diagram.fromText`). Consequences shared with mermaid:
+  - The header is `stateDiagram` or `stateDiagram-v2` (as written: the detector is
+    case-sensitive) followed by whitespace; the header alone is an empty diagram.
+  - A state id (`ID`) is a run of characters other than `:`, `-`, `{` and whitespace — `;` and `}`
+    included, and Japanese ids are ids; an inline `%%` ends it. After `state `, a name runs to
+    whitespace or `{` (`-` and `:` allowed), and after `as` to the line's end or `{` (spaces
+    allowed). `[*]` is the start or the end. `note` and `state` followed by whitespace are always
+    keywords.
+  - A line holding `direction TB|BT|LR|RL` (any case, even inside a word: `mydirection lrx`) is a
+    direction statement from where the lexer stands to the line's end; at the top level this rule
+    comes before comments, `state`, `note` and the header, inside a composite before `note`. Only
+    a multi-line note's text escapes it. `\s+` crosses line ends, so `direction` ending one line
+    and `LR` starting the next join into one. `direction TD` is not a direction but two states.
+  - Only at the top level are `click`, `href`, `default`, `hide empty description`, `scale`,
+    `accTitle` and `accDescr` keywords and a `"…"` string a token: a state named `default` there
+    is a syntax error, and inside a composite `hide empty description` is three states.
+  - A description or transition label is the text after `:` up to the line's end, a `;` or a
+    `::` (a `::` at its start is kept: `A :: y` is described `: y`). A `%%` inside it stays. What
+    follows is lexed on: `A : x; y` also makes the states `;` and `y`.
+  - Outside a composite a line end is a token; inside one it is not, so a statement runs on to
+    the next line there (`A` then `: x` on the next line describes A).
+  - `state` with two ASCII words before a `{` is mermaid's error ("State name must be a single
+    word"), even across a line end (`state a` then `state b {`); non-ASCII words do not count
+    (`state 状態 X {` makes X).
+- **Statements.** `id`; `id : description`; `a --> b` and `a --> b : label`; `state "description"
+  as id`; `state id { … }` and `state "description" as id { … }` (composites, nested to any
+  depth; at the top level the `{` may be on the next line); `state id <<fork>>`, `<<join>>`,
+  `<<choice>>` and the `[[fork]]` forms (the id is all before the marker: `state my fork <<fork>>`
+  is `my fork`); `--` inside a composite (concurrent regions); `note left of id : text` (the text
+  ends at `:`, `;` or the line's end), `note right of id` … `end note`; `direction`. Checked for
+  form and dropped: `classDef` (`classDef default` is mermaid's error), `class`, `style`, `:::`,
+  `click`, `hide empty description`, `scale N width`, `accTitle`, `accDescr`. A floating note
+  (`note "text" as N`) is read and not drawn (mermaid keeps nothing of it). `state id` alone
+  declares nothing (mermaid's grammar keeps the token and no state).
+- **Meaning** (stateDb's `docTranslator`, `dataFetcher`):
+  - `[*]` becomes the start of its scope when it is first in a transition (or alone) and the end
+    when it is second; each scope (the top level, each composite, each concurrent region) has one
+    start and one end, shared by every `[*]` in it.
+  - States are one set across the diagram, by id. A state belongs to the **last** composite (in
+    reading order, depth first) that mentions it; mentions at the top level do not count
+    (`Object.assign` keeps the last `parentId`).
+  - A state's kind (fork, join, choice, start, end) comes from its first mention; a description
+    turns any of them into a plain state, as `dataFetcher` sets the shape. A note statement has
+    no type: a state first met in a note has no shape and mermaid fails to draw it ("No such
+    shape", `nodes.ts`) unless a description follows. The note's side is compared with `left of`
+    as written, so `NOTE LEFT OF` is a right note.
+  - Descriptions accumulate: none shows the id; the first is the label; more make a state with a
+    title (the first) and lines under it. A composite with more than one description is
+    mermaid's error. `state "description" as id:extra` (a colon in the id) is unsupported.
+  - `--` splits a composite into regions, each its own scope with its own start and end. A
+    leading or doubled `--` makes an empty region, and a trailing one leaves the composite
+    unsplit with a stray divider shape in it; all three are unsupported.
+  - Direction: a scope takes the last `direction` in its own statements, else TB — nested scopes
+    do not inherit their parent's (`DEFAULT_NESTED_DOC_DIR`). A composite split into regions has
+    only regions in its document, so a `direction` written in it applies to the region it stands
+    in.
+  - Labels are HTML (`getEffectiveHtmlLabels` defaults to true). Descriptions, transition labels,
+    composite titles, notes and ids shown as labels are markdown (`markdownToHTML`): formatting is
+    refused as for ER, `<br>` and a line end break the line (a line end also in `state "a⏎b"`),
+    each line is trimmed with its runs of spaces one, and empty lines do not show. A state with a
+    title and lines is drawn without markdown (`createLabel`, rectWithTitle): `**x**` is shown as
+    written and a written `\n` breaks the line. HTML other than `<br>` is refused everywhere. A
+    single-line note loses the first two characters after the id, spaces and colon included
+    (`yytext.substr(2)`), as in mermaid.
+- **Decided here** (the operator's decision of 2026-09-29: a composite's inside is laid out first):
+  - Each scope is laid out on its own by the flowchart layout, in its own direction. A composite
+    is a node of its parent scope, sized to hold its title band and its regions side by side
+    across its direction, separated by dashed lines; a transition to or from a composite stops at
+    its frame.
+  - A transition whose ends are in different scopes (into a composite's inner state from outside
+    it, between regions, or between a composite and its own inner state) cannot be drawn this
+    way and is unsupported; so is a state inside itself.
+  - A note is a box in its state's scope, joined to it by a dotted line without a head, in the
+    direction `dataFetcher` gives the note edge (`left of`: note to state; `right of`: state to
+    note), so in TB a right note sits below its state. A note belongs to its state's scope
+    (mermaid attaches notes at the top level).
+  - Shapes: a state is a rounded rectangle (with a title, a rule under it); start a filled
+    circle; end a ring round a filled circle; choice a small diamond; fork and join a bar across
+    the scope's direction; a composite a rounded frame with its title centred in a top band.
+  - Limits: states, notes and composites together as the flowchart's nodes (300), transitions
+    as its links (500), composites 100, nesting 20 deep.
+
 ### Layout specification
 
 - **flowchart and ER**: a layered layout (the Sugiyama method), written in-house.
@@ -282,6 +370,9 @@ lexical rules are ported from those.
   8. Subgraphs: member nodes are kept adjacent within each layer, and an enclosing frame and
      title are drawn. A link whose endpoint is a subgraph stops at the frame's edge.
   9. Direction: layout is done in TD, and LR / RL / BT are obtained by transforming coordinates.
+- **state**: every scope (the top level, each composite, each concurrent region) is laid out by
+  the flowchart layout above, innermost first; a composite enters its parent's layout as a node
+  the size of its laid-out inside, and its inside is moved into that box.
 - **sequence**: participants are lined up across and messages stacked down. A message to self
   folds back to the right.
 
@@ -406,8 +497,9 @@ raises the version and is taken into gem-agent and lagent; each goes through the
 tests, a visual review and an independent review.
 
 - 2a. **pie** — specified under "Syntax supported in phase 2" below
-- 2b. **stateDiagram / stateDiagram-v2** (reusing the flowchart layout) and **nested frames** for
-  composite states (flowchart's nested subgraphs come with the same mechanism)
+- 2b. **stateDiagram / stateDiagram-v2** — specified under "Syntax supported in phase 2" below.
+  Composite states are laid out inside first and placed as boxes (the operator's decision of
+  2026-09-29); flowchart's nested subgraphs are not part of it and stay unsupported
 - 2c. **gantt**
 - 2d. **mindmap** (mermaid places it with a physics simulation whose result is not fixed; here the
   tree is laid out by fixed rules — it looks different, and which node is whose child is the same)
@@ -758,6 +850,23 @@ same way as pathguard.
     line, nor keep a single slice's percentage on the circle (v0.2.1; 19 mutants, all caught).
     Left as rare differences: a quoted label over several lines, trimming of NBSP / U+3000, a YAML
     block in the body.
+  - **2b stateDiagram, how composites are laid out (2026-09-29, the operator's decision)**: the
+    plan was nested frames in the layered layout, giving flowchart's nested subgraphs too. The real
+    data has neither: the 12 flowcharts with subgraphs use one level, and the 2 state diagrams
+    have no transition crossing a composite's frame. Laying each composite's inside out first and
+    placing it as a box leaves the reviewed flowchart layout untouched; its cost — a transition
+    crossing a frame, and flowchart nesting, stay unsupported (the source is shown) — was put to
+    the operator, who chose it.
+  - **2b reading state diagrams (2026-09-29)**: an independent review of the specification ran
+    the real jison 0.4.18 on `stateDiagram.jison` and found eleven claims wrong or loose, all
+    about how the lexer reads (a `;` is an id character at the top level too; the direction rule
+    also beats comments, `state`, `note` and the header; a state with a title and lines is not
+    markdown; a state first met in a note has no shape and mermaid fails to draw it; `NOTE LEFT
+    OF` is a right note; the two-word error crosses a line end). The specification was corrected
+    and the parser checked against that same generated parser: 8,000 generated sources (4,288 it
+    accepts), statement trees compared, no difference — including one the comparison found (the
+    two-word rule had been tried only on lines holding a `{`). 16 mutants of the reading rules,
+    all caught.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText
