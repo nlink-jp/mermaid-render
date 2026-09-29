@@ -106,7 +106,7 @@ func (l *layouter) place() *flowLayout {
 				layer = l.rank[k[1]]
 			} else {
 				c := l.clusters[k[1]]
-				lo, hi = c.L+framePad, c.R-framePad
+				lo, hi = c.L+l.sp.framePad, c.R-l.sp.framePad
 				occ = l.memberColumns(k[1], k[2], portX)
 				layer = c.r1
 				if k[2] == 1 {
@@ -127,9 +127,9 @@ func (l *layouter) place() *flowLayout {
 			for i, p := range ps {
 				want[i] = p.next
 			}
-			xs := alignPorts(lo, hi, want, occ, l.portGap)
+			xs := alignPorts(lo, hi, want, occ, l.portGap, l.sp.trackSep)
 			if xs == nil {
-				xs = pickPorts(lo, hi, len(ps), occ, l.portGap)
+				xs = pickPorts(lo, hi, len(ps), occ, l.portGap, l.sp.trackSep)
 			}
 			// A snap may leave the port range only on a node without
 			// self-links: the range keeps ports clear of loop ends. It
@@ -142,7 +142,7 @@ func (l *layouter) place() *flowLayout {
 				c0, h := l.nodeItem[k[1]].x, 0.9*baseHalf[k[1]]
 				slo, shi = c0-h, c0+h
 			}
-			snapPorts(xs, want, occ, slo, shi, l.portGap)
+			snapPorts(xs, want, occ, slo, shi, l.portGap, l.sp.trackSep)
 			for i, p := range ps {
 				x := xs[i]
 				v := portX[p.ch]
@@ -201,7 +201,7 @@ func (l *layouter) place() *flowLayout {
 	}
 	tracks := make([]int, nl)
 	for k, cs := range gapCross {
-		tracks[k] = assignTracks(cs)
+		tracks[k] = assignTracks(cs, l.sp.trackSep)
 	}
 	// A link turning in the gap right after its low end, with a head
 	// there (a link drawn against the layer order, or one with a head at
@@ -241,7 +241,7 @@ func (l *layouter) place() *flowLayout {
 		if c.titleH == 0 {
 			return 0
 		}
-		return c.titleH + titleGap
+		return c.titleH + l.sp.titleGap
 	}
 	// Gaps between layers make room for frame edges, titles and tracks,
 	// computed in layer order so that a horizontal layout's frame, which
@@ -257,13 +257,13 @@ func (l *layouter) place() *flowLayout {
 		below, above := 0.0, 0.0
 		for ci, c := range l.clusters {
 			if c.r1 == k {
-				e := framePad
+				e := l.sp.framePad
 				if titleHigh {
 					e += tspace(c)
 				}
 				if l.horiz {
-					span := start[k] + band[k] - start[c.r0] + 2*framePad
-					if need := c.titleW + 2*framePad; need > span {
+					span := start[k] + band[k] - start[c.r0] + 2*l.sp.framePad
+					if need := c.titleW + 2*l.sp.framePad; need > span {
 						extra[ci] = need - span
 						e += extra[ci]
 					}
@@ -271,7 +271,7 @@ func (l *layouter) place() *flowLayout {
 				below = math.Max(below, e)
 			}
 			if c.r0 == k+1 {
-				e := framePad
+				e := l.sp.framePad
 				if titleLow {
 					e += tspace(c)
 				}
@@ -280,9 +280,9 @@ func (l *layouter) place() *flowLayout {
 		}
 		margin := 0.0
 		if below > 0 || above > 0 {
-			margin = frameSep / 2
+			margin = l.sp.frameSep / 2
 		}
-		in := trackIn
+		in := l.sp.trackIn
 		if headTop[k] {
 			in = l.endRoom
 		}
@@ -292,21 +292,21 @@ func (l *layouter) place() *flowLayout {
 		trackTop[k] = below + margin + in
 		need := l.rankGap
 		if below > 0 || above > 0 {
-			need = math.Max(need, below+above+frameSep)
+			need = math.Max(need, below+above+l.sp.frameSep)
 		}
 		if tracks[k] > 0 {
-			need = math.Max(need, below+above+2*margin+in+float64(tracks[k]-1)*trackSep+l.endRoom)
+			need = math.Max(need, below+above+2*margin+in+float64(tracks[k]-1)*l.sp.trackSep+l.endRoom)
 		}
 		gapAfter[k] = need
 		v += band[k] + need
 	}
 	center := func(k int) float64 { return start[k] + band[k]/2 }
-	trackY := func(k, t int) float64 { return start[k] + band[k] + trackTop[k] + float64(t)*trackSep }
+	trackY := func(k, t int) float64 { return start[k] + band[k] + trackTop[k] + float64(t)*l.sp.trackSep }
 
 	// Frames, in abstract coordinates (cross = x, rank = y).
 	frameRect := make([]rect, len(l.clusters))
 	for ci, c := range l.clusters {
-		r := rect{X0: c.L, X1: c.R, Y0: start[c.r0] - framePad, Y1: start[c.r1] + band[c.r1] + framePad}
+		r := rect{X0: c.L, X1: c.R, Y0: start[c.r0] - l.sp.framePad, Y1: start[c.r1] + band[c.r1] + l.sp.framePad}
 		if titleLow {
 			r.Y0 -= tspace(c)
 		}
@@ -351,7 +351,7 @@ func (l *layouter) place() *flowLayout {
 			used := loops[n]
 			face := l.nodeItem[n].x + baseHalf[n]
 			edge := face + used
-			reach := loopReach
+			reach := l.sp.loopReach
 			y0, y1 := r.Center().Y-ch.loopOff, r.Center().Y+ch.loopOff
 			p := &path{link: lk, clipLow: -1, clipHigh: -1, loopOfNode: n}
 			p.pts = []pt{{face, y0}, {edge + reach, y0}, {edge + reach, y1}, {face, y1}}
@@ -449,8 +449,8 @@ func (l *layouter) place() *flowLayout {
 		fr := tr(frameRect[ci])
 		fb := frameBox{ID: c.sg.ID, Title: c.sg.Title, Box: fr}
 		if c.titleH > 0 {
-			x0 := fr.X0 + framePad*0.7
-			y0 := fr.Y0 + titleGap
+			x0 := fr.X0 + l.sp.framePad*0.7
+			y0 := fr.Y0 + l.sp.titleGap
 			fb.TitleBox = rect{x0, y0, x0 + c.titleW, y0 + c.titleH}
 		}
 		out.Frames = append(out.Frames, fb)
@@ -757,7 +757,7 @@ func (l *layouter) itemAt(v int) *item {
 // snapPorts closes steps too small to see as a step: a port within 0.2 em
 // of the column its link goes on in moves onto it, when that keeps portGap
 // from its neighbours on the face and clear of occupied columns.
-func snapPorts(xs, want, occ []float64, lo, hi, portGap float64) {
+func snapPorts(xs, want, occ []float64, lo, hi, portGap, trackSep float64) {
 	for i := range xs {
 		w := want[i]
 		if d := math.Abs(xs[i] - w); d == 0 || d >= 0.2 || w < lo || w > hi {
@@ -991,7 +991,7 @@ func (l *layouter) columnsLeaving(k int, portX map[*chain][2]float64, skip map[*
 // in, so the link runs straight instead of stepping aside: the wanted
 // columns, clamped to the face, pushed portGap apart in order, and moved
 // off occupied columns. nil when that cannot be done; pickPorts decides.
-func alignPorts(lo, hi float64, want, occ []float64, portGap float64) []float64 {
+func alignPorts(lo, hi float64, want, occ []float64, portGap, trackSep float64) []float64 {
 	n := len(want)
 	if n == 0 || hi-lo < float64(n-1)*portGap-1e-9 {
 		return nil
@@ -1047,7 +1047,7 @@ func alignPorts(lo, hi float64, want, occ []float64, portGap float64) []float64 
 // pickPorts places n ports between lo and hi, portGap apart where the room
 // allows, keeping trackSep from the occupied columns; when that is not
 // possible it spreads them evenly.
-func pickPorts(lo, hi float64, n int, occ []float64, portGap float64) []float64 {
+func pickPorts(lo, hi float64, n int, occ []float64, portGap, trackSep float64) []float64 {
 	c0, width := (lo+hi)/2, hi-lo
 	even := spread(c0, width, n)
 	if len(occ) == 0 {
@@ -1120,7 +1120,7 @@ type crossing struct {
 // (quadratic pairs, each checked for a cycle).
 const maxSoftParts = 60
 
-func assignTracks(cs []*crossing) int {
+func assignTracks(cs []*crossing, trackSep float64) int {
 	type part struct {
 		c        *crossing
 		half     int // 0 whole, 1 upper, 2 lower
@@ -1252,7 +1252,7 @@ func assignTracks(cs []*crossing) int {
 		}
 		if len(order) < len(ps) && stuck >= 0 && attempt < len(cs) {
 			c := ps[stuck].c
-			c.split, c.mid = true, freeColumn((c.top+c.bot)/2, occupied)
+			c.split, c.mid = true, freeColumn((c.top+c.bot)/2, occupied, trackSep)
 			occupied = append(occupied, c.mid)
 			continue
 		}
@@ -1302,7 +1302,7 @@ func assignTracks(cs []*crossing) int {
 
 // freeColumn is the position nearest to x that keeps trackSep from every
 // occupied column.
-func freeColumn(x float64, occupied []float64) float64 {
+func freeColumn(x float64, occupied []float64, trackSep float64) float64 {
 	for d := 0.0; d < 1000; d += 0.05 {
 		for _, c := range []float64{x + d, x - d} {
 			ok := true

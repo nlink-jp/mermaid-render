@@ -105,6 +105,17 @@ const (
 	trackOut   = 0.9     // its last track to its end: room for an arrowhead
 )
 
+// spacing is what the layered layout keeps between things, per layout: a
+// picture's in em (emSpacing), text art's in grid units.
+type spacing struct {
+	sepItem, sepDummy, framePad, frameSep, titleGap, labelPad float64
+	loopReach, portSpread, trackSep, trackIn                  float64
+}
+
+var emSpacing = spacing{sepItem: sepItem, sepDummy: sepDummy, framePad: framePad, frameSep: frameSep,
+	titleGap: titleGap, labelPad: labelPad, loopReach: loopReach, portSpread: portSpread,
+	trackSep: trackSep, trackIn: trackIn}
+
 type itemKind int
 
 const (
@@ -158,6 +169,8 @@ type chain struct {
 }
 
 type layouter struct {
+	// sp is the spacing: emSpacing for a picture.
+	sp     *spacing
 	f      *mr.Flowchart
 	m      measurer
 	horiz  bool // LR or RL: the rank axis is horizontal
@@ -211,6 +224,9 @@ func layoutFlowchart(f *mr.Flowchart, m measurer) (*flowLayout, error) {
 
 // layoutGraph lays out f with the spacing (and node sizes) set in l.
 func layoutGraph(f *mr.Flowchart, m measurer, l *layouter) (*flowLayout, error) {
+	if l.sp == nil {
+		l.sp = &emSpacing
+	}
 	// Empty subgraphs become nodes of their own, so they count as nodes.
 	if len(f.Nodes)+len(f.Subgraphs) > MaxNodes || len(f.Subgraphs) > MaxSubgraphs || len(f.Links) > MaxLinks {
 		return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf(
@@ -367,7 +383,7 @@ func (l *layouter) buildChains() error {
 			if err != nil {
 				return glyphErr(err, lk.Line)
 			}
-			ch.lw, ch.lh = w+2*labelPad, h+2*labelPad
+			ch.lw, ch.lh = w+2*l.sp.labelPad, h+2*l.sp.labelPad
 		}
 		if ch.from == ch.to {
 			if ch.from.cluster >= 0 {
@@ -777,7 +793,7 @@ func (l *layouter) makeItems() error {
 		if ch.self {
 			// Reserve the loop and its label beside the node.
 			it := l.nodeItem[ch.from.node]
-			reach := loopReach
+			reach := l.sp.loopReach
 			if ch.lw > 0 {
 				// The label sits beyond the loop: its cross size widens the
 				// node's reservation, its rank size its layer.

@@ -222,9 +222,9 @@ func (l *layouter) solve(cuts []cut) error {
 
 	gap := func(a, b *item) float64 {
 		if a.kind == kDummy || b.kind == kDummy || a.kind == kHolder || b.kind == kHolder {
-			return sepDummy
+			return l.sp.sepDummy
 		}
-		return sepItem
+		return l.sp.sepItem
 	}
 	for _, layer := range l.layers {
 		for i := 0; i+1 < len(layer); i++ {
@@ -248,17 +248,17 @@ func (l *layouter) solve(cuts []cut) error {
 			for i, it := range layer {
 				switch {
 				case it.cluster == ci:
-					low := framePad
+					low := l.sp.framePad
 					if l.horiz && l.clusters[ci].titleH > 0 {
 						// The title runs across the top: the cross axis.
-						low += l.clusters[ci].titleH + titleGap
+						low += l.clusters[ci].titleH + l.sp.titleGap
 					}
 					s.add(Lv(ci), id[it], low+it.lw)
-					s.add(id[it], Rv(ci), framePad+it.rw)
+					s.add(id[it], Rv(ci), l.sp.framePad+it.rw)
 				case i < first:
-					s.add(id[it], Lv(ci), it.rw+frameSep)
+					s.add(id[it], Lv(ci), it.rw+l.sp.frameSep)
 				case i > last:
-					s.add(Rv(ci), id[it], it.lw+frameSep)
+					s.add(Rv(ci), id[it], it.lw+l.sp.frameSep)
 				}
 			}
 		}
@@ -292,14 +292,14 @@ func (l *layouter) solve(cuts []cut) error {
 		}
 		for i, it := range free {
 			if i < split {
-				s.add(id[it], Lv(ct.cluster), it.rw+frameSep)
+				s.add(id[it], Lv(ct.cluster), it.rw+l.sp.frameSep)
 			} else {
-				s.add(Rv(ct.cluster), id[it], it.lw+frameSep)
+				s.add(Rv(ct.cluster), id[it], it.lw+l.sp.frameSep)
 			}
 		}
 	}
 	for ci, c := range l.clusters {
-		minW := 2 * framePad
+		minW := 2 * l.sp.framePad
 		// A face holding ports must also leave room around the columns
 		// links to its members cross it in.
 		for side := range 2 {
@@ -308,18 +308,18 @@ func (l *layouter) solve(cuts []cut) error {
 				continue
 			}
 			through := l.faceThrough[[2]int{ci, side}]
-			minW = math.Max(minW, float64(k)*l.portGap/portSpread)
+			minW = math.Max(minW, float64(k)*l.portGap/l.sp.portSpread)
 			// Each link through the face occupies its column there and the
 			// column it comes down in from the layer beyond.
-			minW = math.Max(minW, 2*framePad+float64(k+1)*l.portGap+float64(2*through)*2*trackSep)
+			minW = math.Max(minW, 2*l.sp.framePad+float64(k+1)*l.portGap+float64(2*through)*2*l.sp.trackSep)
 		}
 		if !l.horiz {
-			minW = math.Max(minW, c.titleW+2*framePad)
+			minW = math.Max(minW, c.titleW+2*l.sp.framePad)
 		}
 		s.add(Lv(ci), Rv(ci), minW)
 		for cj, d := range l.clusters {
 			if c.order < d.order && c.r0 <= d.r1 && d.r0 <= c.r1 {
-				s.add(Rv(ci), Lv(cj), frameSep)
+				s.add(Rv(ci), Lv(cj), l.sp.frameSep)
 			}
 		}
 	}
