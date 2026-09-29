@@ -344,6 +344,80 @@ lexical rules are ported from those.
   - Limits: states, notes and composites together as the flowchart's nodes (300), transitions
     as its links (500), composites 100, nesting 20 deep.
 
+**gantt** (`gantt.jison`, `ganttDb.js`, `ganttRenderer.js`; dayjs 1.11.21 with customParseFormat,
+isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeFormat`)
+
+- **Reading.** The lexer rules are ported in their order as for ER and state (first match,
+  case-insensitive, `\b` after a rule ending in a word character). Consequences shared with
+  mermaid: a keyword at a token's start wins over a task's text (`call mom : 1d` is an error); a
+  line starting with a date (`2026-01-01 kickoff : …`) is an error; one starting with a character
+  and `%` is skipped as a comment; `section` or `title` alone swallows the next line. The values
+  of `dateFormat`, `axisFormat`, `tickInterval`, `includes`, `excludes` end at `#`, `;` or the
+  line's end, trailing spaces kept (`tickInterval 1day ` is ignored); what follows a `#` or `;` is
+  lexed on — a task's text, mostly an error.
+- **Statements.** `title`; `dateFormat` (none: every start goes to the browser's `Date`, no end
+  date is read — the documentation's default `YYYY-MM-DD` is not the code's); `axisFormat`
+  (default `%Y-%m-%d`, `%d` when `dateFormat` is exactly `D`); `tickInterval`
+  (`^[1-9]\d*(millisecond|second|minute|hour|day|week|month)$`, else ignored); `excludes` and
+  `includes` (lower-cased tokens split at spaces and commas, accumulated); `weekday` (the first day
+  of `week` tick intervals only); `weekend friday|saturday`; `inclusiveEndDates`; `section`; tasks
+  `text : data`. `topAxis` is mermaid 12.0.0's error (the grammar calls `yy.TopAxis`, which ganttDb
+  does not have). Read and dropped: `todayMarker`, `click` / `href` / `call`, `accTitle`,
+  `accDescr`.
+- **Tasks** (ganttDb): leading tags `active`, `done`, `crit`, `milestone`, `vert` (as written,
+  case-sensitive); then one to three items — end; start, end; id, start, end. Tags alone, or more
+  than three items, are mermaid's crash. A start is a date in `dateFormat`; `after id…` (lower
+  case; ids ASCII `[\d\w- ]`, split at single spaces); for `x` or `X` a run of digits read as
+  milliseconds (for `X` too — ends read `X` as seconds); or, one item, the previous task's end (by
+  its id: the last task with that id, `vert` tasks counted). An end is a date in `dateFormat` (a
+  day later with `inclusiveEndDates`), `until id…`, or a duration `N(ms|s|m|h|d|w|M|y)` —
+  decimals in days and weeks rounded to whole days, in months and years truncated, a month's end
+  clamped; anything else ends the task where it starts. `after` takes the latest end and `until`
+  the earliest start of the named tasks as ganttDb compares them: a task not placed yet has no
+  time, compares false, and the first named is kept, so the order of the ids matters; ganttDb
+  compiles in up to 11 passes and stops once every task is placed. Excluded days (`weekends` per
+  `weekend`, weekday names, dates as `dateFormat` or `YYYY-MM-DD` formats them, less `includes`),
+  counted from the day after the start, push a task's end later unless its end is written as a
+  `YYYY-MM-DD` date (literally, whatever `dateFormat` is); the bar stops at the end before the
+  push. Rows are the tasks in source order, `vert` tasks taking none; a repeated id is the last.
+- **Dates** follow dayjs's strict parse: the format's tokens (`YYYY YY Y Q M MM MMM MMMM D DD Do
+  H HH h hh m mm s ss S SS SSS A a Z ZZ`, `[literal]`) read the input, then the date formatted
+  back must equal it — so `S`, `SS`, `Y`, week and `L…` tokens never parse, `Z` only as `+00:00`,
+  and `D` does not read `05`. A missing year comes from today; a missing month is January when
+  the year is given, else today's; a missing day is the 1st when the year or month is given,
+  else today's.
+- **Decided here** — output must not depend on the day it is drawn, or on the browser:
+  - Times are computed as a browser set to UTC computes them (no daylight saving).
+  - Unsupported: an `after` or `until` naming no task (mermaid: today); a task never placed (a
+    cycle); a start dayjs cannot parse — mermaid hands it to the browser's own `Date`, which
+    differs between browsers — unless it is in the ECMAScript date-time string format (`YYYY`,
+    `YYYY-MM`, `YYYY-MM-DD`, with `THH:mm[:ss[.sss]]` and `Z` / `±HH:mm`), which all read alike; a
+    `dateFormat` without a year that has a month or day; and one of times alone unless nothing
+    shows the day: no `excludes` or `includes`, no duration in months or years, an axis format
+    printing only `%H %I %M %S %L %f %p %X`, no `week` or `month` tick interval, and a chart
+    spanning less than two days (d3 then picks ticks of hours or less).
+  - A first task with no start, tags alone and more than three items are mermaid's crashes:
+    errors.
+  - The today marker is never drawn. `displayMode: compact` and `topAxis` configuration (front
+    matter) are presentation and ignored: every task has its own row, one axis at the bottom.
+  - Layout: section titles in a column on the left, centred on their run of rows (a repeated
+    section's runs each titled — mermaid merges them and misplaces the titles); a row per task on
+    its section's stripe; the time scale spans the earliest start to the latest end; bars in that
+    scale, a milestone a diamond at its start plus half its length; a task's text inside its bar
+    when it fits, else to its right (the picture widens; mermaid moves it left at the edge, over
+    the section titles); excluded days shaded when the span is at most 5 whole years — every run,
+    where mermaid drops one still open at the last day; `vert` markers a line across the rows
+    with their text below the axis, in lanes so none overlap; ticks as d3's time scale gives
+    them (10 by default; `tickInterval` unless it would make more than 10,000, then the default),
+    labels by `axisFormat` (d3-time-format's directives, English).
+  - The time scale's width is this engine's: the axis labels side by side with room between
+    them, at least 36 em — mermaid fills its container's width. Past 120 em (dense ticks, as
+    `tickInterval 1day` over months), every k-th tick is labelled, the least k that fits; every
+    tick keeps its grid line. mermaid draws every label, over one another.
+  - Texts are drawn as SVG text shows them: a task's text as written (`<br>` too), trimmed; a
+    section title broken at `<br>`; entity codes decoded.
+  - Limits: 500 tasks, as the flowchart's links.
+
 ### Layout specification
 
 - **flowchart and ER**: a layered layout (the Sugiyama method), written in-house.
@@ -507,7 +581,7 @@ tests, a visual review and an independent review.
 - 2b. **stateDiagram / stateDiagram-v2** — specified under "Syntax supported in phase 2" below.
   Composite states are laid out inside first and placed as boxes (the operator's decision of
   2026-09-29); flowchart's nested subgraphs are not part of it and stay unsupported
-- 2c. **gantt**
+- 2c. **gantt** — specified under "Syntax supported in phase 2" below
 - 2d. **mindmap** (mermaid places it with a physics simulation whose result is not fixed; here the
   tree is laid out by fixed rules — it looks different, and which node is whose child is the same)
 - 2e. Replace the text-art renderer with an in-house one and remove `mermaid-ascii` from gem-agent
@@ -902,6 +976,19 @@ same way as pathguard.
     internal id; a map walk ordering faults; untested checks (notes stacked on one side, a
     state's part outside its node, a label outside its scope — new). A regression seed was
     re-found for the generator's new output (8960). 48 mutants over the whole feature, all caught.
+  - **2c gantt (2026-09-29)**: dates, durations, excluded days and ticks are not fixed by the
+    documentation (whose default `dateFormat` the code does not have), so the port was checked
+    against the real thing under node: dayjs 1.11.21's strict parse and format on 29,160
+    format/input pairs, ganttDb itself (a fresh module per chart: its `taskDb` outlives
+    `clear()`) on 3,000 generated charts, d3 7.9.0's ticks, interval ticks and 11 formats on 1,500
+    domains — no difference. An independent review of the specification ran the same oracle and
+    found eleven claims wrong or loose (`topAxis` is mermaid's error; `after` keeps a first-named
+    task not placed yet; `X` starts are milliseconds; `#` and `;` do not start comments; the
+    fields dayjs takes from today). The render-time check caught two defects during the work: a
+    milestone at the scale's edge outside the picture and over a section title. Axis labels were
+    first always laid side by side; dense tick intervals made pictures past the pixel limit (6%
+    of random charts), so they are thinned past 120 em. 20,000 random charts with the check, none
+    refused; 3,000 with the real font, none refused; 31 mutants, all caught.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText
