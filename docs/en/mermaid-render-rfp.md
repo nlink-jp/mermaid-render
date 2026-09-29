@@ -888,6 +888,8 @@ same way as pathguard.
     the side they name, beside their state in TB and BT (specified above); the render check holds
     that a note is on its side, beside and clear of its state, holding its text, and that no
     transition meets such a state off its own part. 10 mutants, all caught.
+  - **Round 2 (reviews-state2, 2026-09-29)**: the 14 sheets again and 2 more for notes (sides,
+    several lines, a note on a composite; LR) — all 16 ○ on all four items.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText
