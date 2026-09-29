@@ -220,6 +220,33 @@ accTitle / accDescr.
 create / destroy and half or central arrows, ER subgraphs, and every other line not listed
 above.
 
+### Syntax supported in phase 2
+
+The reference is mermaid 12.0.0, as in phase 1. Since mermaid 11 the grammars of pie and some
+others are written in Langium (`packages/parser/src/language/*/*.langium`) rather than jison; the
+lexical rules are ported from those.
+
+**pie** (`pie.langium`, `common.langium`, `pieDb.ts`, `pieRenderer.ts`)
+
+- The header `pie`, optionally followed by `showData`; either followed by anything but a space,
+  a line end or `%%` is a syntax error (Langium's keyword rule). `title`, `accTitle` and `accDescr`
+  (including the multi-line `{ … }`) may share the header's line. `title` is drawn as the heading;
+  `accTitle` / `accDescr` are ignored.
+- Lines `"label" : number`. A label is `"…"` or `'…'`, with `\` escapes undone by Langium's
+  rule. A number is `-?[0-9]+\.[0-9]+` or `-?(0|[1-9][0-9]*)` not followed by `.`; anything else is
+  a syntax error.
+- A negative value is an error (pieDb). A label repeated is ignored after its first value.
+- What is drawn (pieRenderer): slices in the order written, clockwise from twelve o'clock. An item
+  under 1% of the whole gets no slice, and slice angles are shares of the drawn items' total. The
+  percentage in a slice is of the **whole** total, rounded by `toFixed(0)`. The legend lists every
+  item in order, as `label [value]` with `showData` (the value as JavaScript prints a number). Twelve
+  colours are assigned in item order and repeat (the colours themselves chosen for this engine's
+  white card).
+- **Decided here**: mermaid lets the percentages of thin slices overlap their neighbours until they
+  cannot be read. This engine treats overlapping text as wrong, so a percentage that does not fit
+  inside its slice is placed outside the circle, spaced so none overlap.
+- Limits: 100 items; a total that is not finite is an unsupported construct.
+
 ### Layout specification
 
 - **flowchart and ER**: a layered layout (the Sugiyama method), written in-house.
@@ -371,11 +398,19 @@ Tests:
 
 ### Phase 2: Features
 
-- stateDiagram (reusing the flowchart layout)
-- Nested subgraphs
-- Replace the text-art renderer with an in-house one and remove `mermaid-ascii` from gem-agent
-  (the binary shrinks by about 4.3MB net)
-- An independent review after phase 2 as well.
+By the operator's decision (2026-09-29), four diagram types are added, smallest first. Each
+raises the version and is taken into gem-agent and lagent; each goes through the grammar port,
+tests, a visual review and an independent review.
+
+- 2a. **pie** — specified under "Syntax supported in phase 2" below
+- 2b. **stateDiagram / stateDiagram-v2** (reusing the flowchart layout) and **nested frames** for
+  composite states (flowchart's nested subgraphs come with the same mechanism)
+- 2c. **gantt**
+- 2d. **mindmap** (mermaid places it with a physics simulation whose result is not fixed; here the
+  tree is laid out by fixed rules — it looks different, and which node is whose child is the same)
+- 2e. Replace the text-art renderer with an in-house one and remove `mermaid-ascii` from gem-agent
+  (the binary shrinks by about 4.3MB net), after the four types — terminals that draw pictures
+  do not use the art, so it is not urgent
 
 ### Phase 3: Release
 
@@ -698,6 +733,10 @@ same way as pathguard.
   - **Known difference from mermaid (recorded only)**: for `A -- go--> B` mermaid takes the `o`
     before the closing symbol as a start mark and reads label "g", length 2; this engine reads label
     "go", length 1. That is closer to what the author meant, so it is not matched.
+- **Phase 2 reorganized (2026-09-29, the operator's decision)**: after the integration the operator
+  asked for state diagrams, Gantt charts, mind maps and pie charts; the real data holds 2 state
+  diagrams and one each of pie, mindmap and gantt. The four are done smallest first (pie →
+  stateDiagram with nested frames → gantt → mindmap), and replacing the text art comes after them.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText
