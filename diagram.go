@@ -4,7 +4,7 @@ import "fmt"
 
 // Diagram is the parsed form of one mermaid diagram. It says what the
 // diagram means, never how it is drawn. The concrete types are *Flowchart,
-// *ER, *Sequence and *Pie.
+// *ER, *Sequence, *Pie and *StateDiagram.
 type Diagram interface {
 	// Title is the front-matter title, or "".
 	Title() string

@@ -4,11 +4,10 @@ import "testing"
 
 func TestDiagramTypes(t *testing.T) {
 	for src, kind := range map[string]ErrorKind{
-		"stateDiagram-v2\n [*] --> A": UnsupportedType,
-		"classDiagram\n A <|-- B":     UnsupportedType,
-		"gantt\n title x":             UnsupportedType,
-		"journey\n title x":           UnsupportedType,
-		"hello world":                 SyntaxError,
+		"classDiagram\n A <|-- B": UnsupportedType,
+		"gantt\n title x":         UnsupportedType,
+		"journey\n title x":       UnsupportedType,
+		"hello world":             SyntaxError,
 	} {
 		wantErr(t, src, kind, 0)
 	}

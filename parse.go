@@ -33,6 +33,13 @@ func Parse(src string) (Diagram, error) {
 		return parseER(lines, title)
 	case "sequenceDiagram":
 		return parseSequence(lines, title)
+	case "stateDiagram", "stateDiagram-v2":
+		// The state lexer reads accDescr { … } itself: inside a composite
+		// it is not a keyword.
+		if lines, title, err = prepareLines(src, true); err != nil {
+			return nil, err
+		}
+		return parseState(lines, title)
 	case "pie":
 		// pie reads its accDescr blocks itself.
 		if lines, title, err = prepareLines(src, true); err != nil {
@@ -49,7 +56,7 @@ func Parse(src string) (Diagram, error) {
 // unsupportedTypes are the diagram keywords of mermaid 12.0.0 that this
 // engine does not draw.
 var unsupportedTypes = map[string]bool{
-	"stateDiagram": true, "stateDiagram-v2": true, "classDiagram": true, "classDiagram-v2": true,
+	"classDiagram": true, "classDiagram-v2": true,
 	"gantt": true, "mindmap": true, "journey": true, "gitGraph": true,
 	"timeline": true, "quadrantChart": true, "requirementDiagram": true,
 	"C4Context": true, "C4Container": true, "C4Component": true, "C4Dynamic": true, "C4Deployment": true,

@@ -31,6 +31,8 @@ func outcome(src string) string {
 		return dumpSeq(d)
 	case *Pie:
 		return dumpPie(d)
+	case *StateDiagram:
+		return dumpState(d)
 	default:
 		return dump(d.(*Flowchart))
 	}

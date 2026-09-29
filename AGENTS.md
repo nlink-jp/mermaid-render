@@ -35,6 +35,9 @@ mermaid-render/
 ├── sequence.go       # Sequence, Participant, Box, Event
 ├── seqlex.go         # the sequenceDiagram.jison lexer (on erlex.go's runLexer)
 ├── seqparse.go       # the sequenceDiagram grammar and sequenceDb's rules
+├── state.go          # StateDiagram, StateScope, StateNode, Transition, StateNote
+├── statelex.go       # the stateDiagram.jison lexer (on erlex.go's runLexer)
+├── stateparse.go     # its grammar, stateDb.docTranslator and dataFetcher's rules
 ├── pie.go            # Pie, Slice
 ├── pieparse.go       # the pie grammar: pie.langium lexed as Chevrotain does, pieDb's rules
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
@@ -71,6 +74,13 @@ mermaid-render/
   12.0.0: `convertString` undoes `\b \f \n \r \t \v \0` and keeps any
   other escaped character; numbers are `Number()`). Read the grammar, the
   common grammar and the value converters, never only the docs.
+- **Check a jison port against jison itself.** The stateDiagram parser was
+  compared statement tree by statement tree with a parser generated from
+  `stateDiagram.jison` by jison 0.4.18 (node, outside the repo): 8,000
+  generated sources, both sides printed in one canonical form. Reading the
+  grammar found eleven wrong claims; the comparison found one more. A rule's
+  `need` prefilter looks at the current line only: never give it to a rule
+  whose match can cross a line end (`\s+` does).
 - **A pie's percentages are of the whole, its angles of the drawn slices**
   (`pieShares`): items under 1% are removed before d3's pie, but the label
   still divides by the full sum. Keep both; a test picks values where they

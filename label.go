@@ -29,7 +29,18 @@ func decodeLabel(s string) (string, bool) {
 	if reTag.MatchString(s) {
 		return "", false
 	}
-	s = reEntity.ReplaceAllStringFunc(s, func(m string) string {
+	s = decodeEntityCodes(s)
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimSpace(l)
+	}
+	return strings.Join(lines, "\n"), true
+}
+
+// decodeEntityCodes decodes mermaid's entity codes; an unknown name stays
+// as written.
+func decodeEntityCodes(s string) string {
+	return reEntity.ReplaceAllStringFunc(s, func(m string) string {
 		name := m[1 : len(m)-1]
 		var ref string
 		if name[0] >= '0' && name[0] <= '9' {
@@ -40,11 +51,6 @@ func decodeLabel(s string) (string, bool) {
 		if out := html.UnescapeString(ref); out != ref {
 			return out
 		}
-		return m // an unknown name stays as written
+		return m
 	})
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		lines[i] = strings.TrimSpace(l)
-	}
-	return strings.Join(lines, "\n"), true
 }

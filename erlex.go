@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // The erDiagram lexer follows erDiagram.jison (mermaid 12.0.0) rule by
@@ -46,6 +47,10 @@ type lexRule struct {
 	pop  int
 	push string
 	trim bool // the token's text is trimmed (yytext.trim())
+	// cut drops that many bytes from the text's end (yytext.slice(0,-n)),
+	// drop that many characters from its start (yytext.substr(n)), both
+	// before trim.
+	cut, drop int
 	// fresh, when set, makes the rule's matcher for one run: a matcher
 	// that caches what it learns about a line (see lineMatchers).
 	fresh func() func(rest string) int
@@ -273,6 +278,11 @@ func runLexer(lines []srcLine, rules map[string][]lexRule, eofKind string) ([]er
 					kind = text
 				}
 				t := text
+				for range rl.drop {
+					_, size := utf8.DecodeRuneInString(t)
+					t = t[size:]
+				}
+				t = t[:len(t)-min(rl.cut, len(t))]
 				if rl.trim {
 					t = strings.TrimSpace(t)
 				}
