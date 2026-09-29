@@ -134,7 +134,7 @@ files (gem-agent ADR-0089 §5 / ADR-0090 §5).
   case. The kinds are separated because the existing display already treats them differently
   (gem-agent ADR-0063 §4: an unsupported diagram type passes through silently as source; a
   diagram that was attempted and failed gets the source plus a one-line note).
-  - **Unsupported diagram type** — state, class, gantt and so on.
+  - **Unsupported diagram type** — class, journey, gitGraph and so on.
   - **Unsupported construct** — a construct this engine does not draw, inside a supported type.
   - **Syntax error** — not valid mermaid.
 - Resource limits bound time and memory; exceeding one is treated like an unsupported construct:
@@ -424,6 +424,86 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     section title broken at `<br>`; entity codes decoded.
   - Limits: 500 tasks, as the flowchart's links.
 
+**mindmap** (`mindmap.jison`, `mindmapDb.ts`, `mindmapRenderer.ts`; labels through
+`rendering-util/createText.ts` and `handle-markdown-text.ts`; the tidy-tree layout of
+`mermaid-layout-tidy-tree` for the sides)
+
+- **Reading.** The lexer rules are ported in their order as for ER, state and gantt (first match,
+  case-insensitive, `\b` after a rule ending in a word character, the exclusive states `NODE`,
+  `NSTR`, `NSTR2`, `ICON`, `CLASS`), with mermaid's added line end. The header is `mindmap`
+  (the detector is case-sensitive; the lexer's `mindmap` is not, so a node whose text starts
+  with the word `mindmap`, any case, is mermaid's syntax error). A node may share the header's
+  line (`mindmap root`). Consequences shared with mermaid:
+  - A node is a line's text: its indentation is the count of whitespace characters before it (a
+    tab counts one), and it is either a bare text (`[^([\n){}]+`, the id and the label both) or
+    an optional id followed by a delimited label. A bare text runs to the first `(`, `[`, `)`,
+    `{` or `}`, so `言語 (Go)` is a rounded node labelled `Go`, and text after a delimited label
+    is a syntax error. `:::` and `%%` inside a bare text are text (`A:::x` is the node `A:::x`,
+    `A %% c` the node `A %% c`); a line starting with `%%` (after spaces) is a comment.
+  - The shape comes from the opening delimiter alone (`getType`): `[` rectangle, `(` rounded
+    rectangle when closed by `)` and cloud otherwise, `((` circle, `)` cloud, `))` bang, `{{`
+    hexagon; `(-` and `-)` open the default shape. A label ends at the first `)`, `]`, `}}`, `(`,
+    `((`, `(-` or `-)`, whichever the delimiter was (`{{h]` is a hexagon labelled `h`); a `}` alone
+    or `{x}` is a syntax error. `"…"` and `` "`…`" `` inside the delimiters quote the label
+    (brackets allowed inside); a label may span lines.
+  - A line of `:::` followed by classes and a line of `::icon(…)` (the icon text may span lines)
+    decorate the last node; before any node they are mermaid's crash, an error here.
+  - Blank lines, whitespace-only lines and comment lines separate nothing.
+- **Tree** (`MindmapDB.addNode`): the first node is the root; its indentation is the base, and a
+  node's level is its indentation less the base. A node's parent is the last node before it with a
+  smaller level — so a node indented between two earlier levels (the documentation's "unclear
+  indentation") joins the nearest shallower one. A later node at the root's level or shallower is
+  mermaid's error ("There can be only one root"). No node at all (`mindmap` with an empty line
+  after it) is an empty diagram; `mindmap` alone is mermaid's syntax error.
+- **Labels.** Every label is markdown (mermaid 12.0.0 gives every node `labelType: 'markdown'`) and
+  HTML (`htmlLabels` defaults to true), drawn by `markdownToHTML`, which renders only emphasis
+  (`strong`, `em`) as formatting and shows every other markdown token as written. So:
+  - Emphasis (`*x*`, `**x**`, `_x_`, `__x__`, as ER's rule finds it) is unsupported (the
+    operator's decision of 2026-09-29: as in ER and state). Headings, lists, quotes and code
+    spans on one line are drawn as written, as mermaid shows them.
+  - A label spanning lines breaks at each line end, each line trimmed; empty lines do not show.
+    A label spanning lines with a line that starts a markdown block (a list item, heading, quote,
+    fence, or a `---` / `===` underline) is unsupported: mermaid shows the block's raw text with
+    its line ends collapsed into spaces.
+  - A backslash before ASCII punctuation (a markdown escape, which mermaid drops) is unsupported.
+  - `<br>` breaks the line; any other HTML is unsupported; entity codes are decoded; runs of
+    spaces show as one.
+  - **Wrapping**: mermaid lets a label grow to 200 px at its 16 px text and then wraps it
+    (`addHtmlSpan`: `white-space: break-spaces` in a 200 px box, lines centred). Here a line wider
+    than 12.5 em wraps: at spaces, and between characters where either is CJK (Han, kana,
+    full-width forms), never before closing punctuation (`、。，．）」』】〉》〕｝！？ー` and small
+    kana) or after opening brackets. A run with no break wider than 12.5 em stays on its line,
+    widening the node, as in mermaid.
+- **Read and dropped**: `:::` classes (the site's stylesheet, as in flowchart) and `::icon(…)`
+  (drawn only when the page supplies an icon font; the operator's decision of 2026-09-29).
+  `config` in front matter, `layout: tidy-tree` included, is ignored.
+- **Decided here** — mermaid places a mindmap with a physics simulation (`cose-bilkent`) whose
+  result is not fixed; here it is laid out by fixed rules, as mermaid's own `tidy-tree` option
+  does it in outline: which node is whose child is the same, positions are not.
+  - **Two sides**: the root's children alternate, the first on the left, the second on the right
+    and so on (`convertToDualTreeFormat`); each side grows outward from the root, and its
+    first-level stack is centred on the root.
+  - **Bands**: every subtree has a horizontal band of its own; siblings' bands are stacked in
+    source order, top to bottom, apart by a gap. A parent sits beside its children, centred
+    between its first and last child's middles, and its children stand one gap out from its
+    outer side (right side: left-aligned there; left side: right-aligned). So nothing but its
+    own subtree lies in a band, and nothing but lines lies between a parent and its children.
+  - **Lines**: from the middle of a parent's outer side to the middle of a child's inner side, a
+    smooth curve (horizontal at both ends), under the nodes; its width falls with depth
+    (`edge-depth-N` in mermaid), its colour the child's section.
+  - **Shapes**: the default a rounded rectangle; `[ ]` a rectangle; `( )` a rectangle with large
+    rounded corners; `(( ))` a circle round the label; `) (` a cloud; `)) ((` a bang; `{{ }}` a
+    hexagon — each filled with its section's colour, the label inside.
+  - **Colours**: the root has a colour of its own; each child of the root starts a section, the
+    `i`-th one colour `i mod 11` (mermaid's `MAX_SECTIONS - 1`), and its descendants inherit it.
+    Eleven colours are chosen for the white card; the text is dark or white, whichever reads.
+  - Limits: 300 nodes, as the flowchart's.
+- **Checked on every render**: every node placed once, inside the picture, no two nodes'
+  shapes overlapping; each label inside its shape; each child on its parent's outer side, one
+  gap out, siblings in source order; each band holding only its subtree; each line starting and
+  ending on its two nodes' sides and staying between them; every wrapped line within 12.5 em or
+  a run with no break.
+
 ### Layout specification
 
 - **flowchart and ER**: a layered layout (the Sugiyama method), written in-house.
@@ -460,6 +540,7 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
 - **state**: every scope (the top level, each composite, each concurrent region) is laid out by
   the flowchart layout above, innermost first; a composite enters its parent's layout as a node
   the size of its laid-out inside, and its inside is moved into that box.
+- **mindmap**: a tree in bands on two sides of the root (above).
 - **sequence**: participants are lined up across and messages stacked down. A message to self
   folds back to the right.
 
@@ -588,8 +669,9 @@ tests, a visual review and an independent review.
   Composite states are laid out inside first and placed as boxes (the operator's decision of
   2026-09-29); flowchart's nested subgraphs are not part of it and stay unsupported
 - 2c. **gantt** — specified under "Syntax supported in phase 2" below
-- 2d. **mindmap** (mermaid places it with a physics simulation whose result is not fixed; here the
-  tree is laid out by fixed rules — it looks different, and which node is whose child is the same)
+- 2d. **mindmap** — specified under "Syntax supported in phase 2" below (mermaid places it with a
+  physics simulation whose result is not fixed; here the tree is laid out by fixed rules — it
+  looks different, and which node is whose child is the same)
 - 2e. Replace the text-art renderer with an in-house one and remove `mermaid-ascii` from gem-agent
   (the binary shrinks by about 4.3MB net), after the four types — terminals that draw pictures
   do not use the art, so it is not urgent
