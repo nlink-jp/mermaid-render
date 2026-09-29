@@ -28,9 +28,16 @@ const (
 )
 
 // mmPalette is eleven section colours for a white card (mermaid's
-// MAX_SECTIONS - 1); the root has its own.
+// MAX_SECTIONS - 1); the root has its own. They are the pie's first ten
+// and an indigo: the pie's eleventh is the fifth's teal again, and here a
+// colour is all that tells two branches apart (the operator's choice of
+// 2026-09-30).
 var (
-	mmPalette   = piePalette[:mr.MindmapSections]
+	mmPalette = []color.RGBA{
+		piePalette[0], piePalette[1], piePalette[2], piePalette[3], piePalette[4],
+		piePalette[5], piePalette[6], piePalette[7], piePalette[8], piePalette[9],
+		{0x6b, 0x6e, 0xcf, 0xff},
+	}
 	mmRootColor = color.RGBA{0x3d, 0x4a, 0x5c, 0xff}
 )
 

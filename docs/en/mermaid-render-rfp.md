@@ -528,7 +528,9 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     hexagon — each filled with its section's colour, the label inside.
   - **Colours**: the root has a colour of its own; each child of the root starts a section, the
     `i`-th one colour `i mod 11` (mermaid's `MAX_SECTIONS - 1`), and its descendants inherit it.
-    Eleven colours are chosen for the white card; the text is dark or white, whichever reads.
+    Eleven colours are chosen for the white card, no two alike (the pie's first ten and an indigo:
+    the operator's choice of 2026-09-30, the pie's eleventh being the fifth's teal again); the
+    text is dark or white, whichever reads.
   - Limits: 300 nodes, as the flowchart's.
 - **Checked on every render**: every node placed once, inside the picture, no two nodes'
   shapes overlapping; each label inside its shape (exactly: no edge of a cloud or a bang enters

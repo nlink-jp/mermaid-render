@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- A mind map's eleventh branch colour is an indigo (`#6b6ecf`) instead of
+  a teal the fifth branch nearly shares: a colour is all that tells two
+  branches apart.
+
 ## [0.5.0] - 2026-09-30
 
 ### Added

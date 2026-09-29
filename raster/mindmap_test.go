@@ -148,6 +148,24 @@ func TestMindmapLabelLimit(t *testing.T) {
 	}
 }
 
+// Each branch has a colour of its own: no two section colours, nor one
+// and the root's, are near each other.
+func TestMindmapColoursApart(t *testing.T) {
+	if len(mmPalette) != mr.MindmapSections {
+		t.Fatalf("%d colours, want %d", len(mmPalette), mr.MindmapSections)
+	}
+	all := append(append([]color.RGBA(nil), mmPalette...), mmRootColor)
+	for i := range all {
+		for j := i + 1; j < len(all); j++ {
+			a, b := all[i], all[j]
+			d := math.Sqrt(math.Pow(float64(a.R)-float64(b.R), 2) + math.Pow(float64(a.G)-float64(b.G), 2) + math.Pow(float64(a.B)-float64(b.B), 2))
+			if d < 40 {
+				t.Errorf("colours %d %s and %d %s are %.0f apart", i, hexColor(a), j, hexColor(b), d)
+			}
+		}
+	}
+}
+
 // Wrapping breaks at spaces and between CJK characters, never before
 // closing punctuation, and keeps an unbreakable run whole.
 func TestWrapLabel(t *testing.T) {
