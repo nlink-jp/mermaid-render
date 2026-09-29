@@ -447,3 +447,44 @@ func TestSnapperIdentity(t *testing.T) {
 		t.Errorf("columns %d and %d for one coordinate", a, b)
 	}
 }
+
+// A labelled link bends twice where two bends reach its target, the label
+// on the straight run (the operator's check, round 1: Reject and No bent
+// four times).
+func TestTextArtStraighten(t *testing.T) {
+	for id, label := range map[string]string{"beebfdda4d": "Reject", "f3f8dd01f6": "No"} {
+		ms, _ := filepath.Glob("../testdata/real/*/" + id + ".mmd")
+		b, _ := os.ReadFile(ms[0])
+		d, _ := mr.Parse(string(b))
+		f := d.(*mr.Flowchart)
+		tm := &textMeasure{width: eastAsianWidth}
+		sizes := make([][2]float64, len(f.Nodes))
+		for i, n := range f.Nodes {
+			w, h := tm.size(n.Label)
+			cols := w + 4
+			cols += cols % 2
+			sizes[i] = [2]float64{float64(cols) / 2, float64(h + 2)}
+		}
+		measure := func(text string, bold bool) (float64, float64, error) {
+			if text == "" {
+				return 0, 0, nil
+			}
+			w, h := tm.size(text)
+			return float64(w+w%2) / 2, float64(h), nil
+		}
+		lay, err := layoutGraph(f, measure, &layouter{sp: &gridSpacing, boxes: true, sizes: sizes,
+			portGap: gridPortGap, rankGap: gridRankGap, endRoom: gridEndRoom, labelRoom: gridSpacing.trackIn})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tf := flowGrid(f, lay, tm)
+		for i, lk := range f.Links {
+			if lk.Label == label && len(tf.paths[i]) > 4 {
+				t.Errorf("%s: %s bends %d times", id, label, len(tf.paths[i])-2)
+			}
+		}
+		if _, err := RenderText(d, TextOptions{}); err != nil {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+}

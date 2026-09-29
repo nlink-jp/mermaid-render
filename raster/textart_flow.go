@@ -74,7 +74,15 @@ func flowText(f *mr.Flowchart, tm *textMeasure) (*tgrid, error) {
 	if err != nil {
 		return nil, err
 	}
-	return drawFlowText(f, snapFlow(f, lay), tm)
+	return drawFlowText(f, flowGrid(f, lay, tm), tm)
+}
+
+// flowGrid is a flowchart's layout on the grid: snapped, labelled links
+// straightened.
+func flowGrid(f *mr.Flowchart, lay *flowLayout, tm *textMeasure) *textFlow {
+	tf := snapFlow(f, lay)
+	straighten(f, tf, tm)
+	return tf
 }
 
 // textFlow is a flowchart's layout on the grid.
@@ -751,4 +759,177 @@ func abs(v float64) float64 {
 
 func clamp(v, lo, hi int) int {
 	return max(lo, min(v, hi))
+}
+
+// straighten re-routes a link that bends four times or more around its
+// label (the label's layer sits between its ends, so the link steps to
+// the label's column and on to its target's) onto two bends: down its
+// source's column and across once, or across once and down its target's —
+// the label moved onto the long straight run — when the route is clear of
+// every box, title, label and link but for right-angled crossings (the
+// operator's check of the text art, round 1).
+func straighten(f *mr.Flowchart, tf *textFlow, tm *textMeasure) {
+	type use struct {
+		link int
+		dirs uint8
+	}
+	occ := map[[2]int][]use{}
+	add := func(i int, pts [][2]int, sign int) {
+		cells, dirs, ok := walk(pts)
+		if !ok {
+			return
+		}
+		for k, c := range cells {
+			if sign > 0 {
+				occ[c] = append(occ[c], use{i, dirs[k]})
+				continue
+			}
+			us := occ[c][:0]
+			for _, u := range occ[c] {
+				if u.link != i {
+					us = append(us, u)
+				}
+			}
+			occ[c] = us
+		}
+	}
+	for i, p := range tf.paths {
+		if len(p) > 0 {
+			add(i, p, 1)
+		}
+	}
+	solid := func(x, y, link int) bool {
+		for _, b := range tf.boxes {
+			if b.has(x, y) {
+				return true
+			}
+		}
+		for _, t := range tf.titles {
+			if t.has(x, y) {
+				return true
+			}
+		}
+		for j, r := range tf.labels {
+			if j != link && f.Links[j].Label != "" && r.has(x, y) {
+				return true
+			}
+		}
+		return false
+	}
+	for i, pts := range tf.paths {
+		lk := f.Links[i]
+		if lk.Label == "" || lk.From == lk.To || len(pts) < 6 {
+			continue
+		}
+		p0, pn := pts[0], pts[len(pts)-1]
+		vertical := p0[0] == pts[1][0] && pn[0] == pts[len(pts)-2][0]
+		horizontal := p0[1] == pts[1][1] && pn[1] == pts[len(pts)-2][1]
+		if !vertical && !horizontal {
+			continue
+		}
+		lr := tf.labels[i]
+		lw, lh := lr.x1-lr.x0+1, lr.y1-lr.y0+1
+		var cands [][][2]int
+		var labs []iRect
+		if vertical {
+			first, last := pts[1][1], pts[len(pts)-2][1]
+			// Across at the first corner's row, then down the target's column.
+			cands = append(cands, [][2]int{p0, {p0[0], first}, {pn[0], first}, pn})
+			labs = append(labs, iRect{pn[0] - lw/2, lr.y0, pn[0] - lw/2 + lw - 1, lr.y1})
+			// Down the source's column to the last corner's row, then across.
+			cands = append(cands, [][2]int{p0, {p0[0], last}, {pn[0], last}, pn})
+			labs = append(labs, iRect{p0[0] - lw/2, lr.y0, p0[0] - lw/2 + lw - 1, lr.y1})
+		} else {
+			first, last := pts[1][0], pts[len(pts)-2][0]
+			cands = append(cands, [][2]int{p0, {first, p0[1]}, {first, pn[1]}, pn})
+			labs = append(labs, iRect{lr.x0, pn[1] - lh/2, lr.x1, pn[1] - lh/2 + lh - 1})
+			cands = append(cands, [][2]int{p0, {last, p0[1]}, {last, pn[1]}, pn})
+			labs = append(labs, iRect{lr.x0, p0[1] - lh/2, lr.x1, p0[1] - lh/2 + lh - 1})
+		}
+		add(i, pts, -1)
+		chosen := false
+		for k, c := range cands {
+			cells, dirs, ok := walk(dedupePts(c))
+			if !ok || len(cells) < 3 {
+				continue
+			}
+			// A head ends a straight run: the cell before it is no corner.
+			if (lk.End != mr.NoHead && isCorner(dirs[len(dirs)-2])) || (lk.Start != mr.NoHead && isCorner(dirs[1])) {
+				continue
+			}
+			clear := true
+			for n, cl := range cells {
+				if solid(cl[0], cl[1], i) {
+					clear = false
+					break
+				}
+				for _, u := range occ[cl] {
+					straight := func(d uint8) bool { return d == dUp|dDown || d == dLeft|dRight }
+					if !(straight(u.dirs) && straight(dirs[n]) && u.dirs != dirs[n]) {
+						clear = false
+					}
+				}
+			}
+			// The label on its new run: over this link's own cells only, and
+			// the run it sits on straight through it.
+			own := map[[2]int]bool{}
+			for _, cl := range cells {
+				own[cl] = true
+			}
+			l := labs[k]
+			for y := l.y0; clear && y <= l.y1; y++ {
+				for x := l.x0; x <= l.x1; x++ {
+					if solid(x, y, i) || len(occ[[2]int{x, y}]) > 0 {
+						clear = false
+						break
+					}
+				}
+			}
+			if vertical && clear {
+				// The label's rows lie on the new vertical run.
+				col := c[3][0]
+				if k == 1 {
+					col = c[0][0]
+				}
+				clear = own[[2]int{col, l.y0}] && own[[2]int{col, l.y1}]
+			}
+			if !vertical && clear {
+				row := c[3][1]
+				if k == 1 {
+					row = c[0][1]
+				}
+				clear = own[[2]int{l.x0, row}] && own[[2]int{l.x1, row}]
+			}
+			if clear {
+				tf.paths[i], tf.labels[i] = dedupePts(c), l
+				chosen = true
+				break
+			}
+		}
+		if chosen {
+			add(i, tf.paths[i], 1)
+		} else {
+			add(i, pts, 1)
+		}
+	}
+	_ = tm
+}
+
+// dedupePts drops repeated corners and corners in the middle of a run.
+func dedupePts(pts [][2]int) [][2]int {
+	var out [][2]int
+	for _, p := range pts {
+		if len(out) > 0 && out[len(out)-1] == p {
+			continue
+		}
+		if n := len(out); n >= 2 {
+			a, b := out[n-2], out[n-1]
+			if (a[0] == b[0] && b[0] == p[0]) || (a[1] == b[1] && b[1] == p[1]) {
+				out[n-1] = p
+				continue
+			}
+		}
+		out = append(out, p)
+	}
+	return out
 }

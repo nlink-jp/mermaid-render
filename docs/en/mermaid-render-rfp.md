@@ -639,7 +639,10 @@ it (the operator's decisions of 2026-09-30):
   arithmetic — never point by point, which breaks right angles at half-cell ties (measured). Link
   ends and loop ends only use a face's interior cells, never a corner; a self-link is a loop on
   the node's side over two interior rows. A straight link whose two ends' interiors share no row
-  (column) steps across halfway. The spacing was measured on random flowcharts: link ends two
+  (column) steps across halfway. A labelled link that bends four times or more around its label's
+  layer is re-routed onto two bends — down its source's column and across once, or across once and
+  down its target's — with the label on the long straight run, when that route is clear (the
+  operator's check of the text art, round 1: two links bent four times where two bends reached). The spacing was measured on random flowcharts: link ends two
   units apart on a face (one apart collided in 60% of them), a row between layers, two units
   before a head. The 22 real flowcharts draw; of 4,000 random ones 99.6% (the rest are refused). ER is always laid out left to right (right to left when
   written RL): cardinality reads along a horizontal line; a TB diagram is drawn as LR — a stated
