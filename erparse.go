@@ -368,7 +368,7 @@ func (p *erParser) finishEntity(e *Entity) error {
 // markdown formatting is refused rather than shown as marks.
 func (p *erParser) text(s string, line int, markdown bool) (string, error) {
 	s = restoreEntities(s)
-	if markdown && reMarkdown.MatchString(s) {
+	if markdown && mdMarkup(s) {
 		return "", errf(UnsupportedConstruct, line, "markdown formatting in %q", s)
 	}
 	if !markdown {
@@ -381,15 +381,13 @@ func (p *erParser) text(s string, line int, markdown bool) (string, error) {
 	return out, nil
 }
 
-// reMarkdown finds what mermaid's markdown labels would draw as formatting
+// mdMarkup finds what mermaid's markdown labels might draw as formatting
 // (entity names and relationship labels are markdown in erDb): emphasis
-// with * (inside a word too) or with _ or __ (at word edges only), code
-// spans, and a line that starts a heading, quote or list.
-var reMarkdown = regexp.MustCompile("\\*[^\\s*](?:[^*]*[^\\s*])?\\*" +
-	`|(?:^|[^\p{L}\p{N}_])_[^\s_](?:[^_]*[^\s_])?_(?:$|[^\p{L}\p{N}_])` +
-	`|(?:^|[^\p{L}\p{N}_])__[^\s_](?:[^_]*[^\s_])?__(?:$|[^\p{L}\p{N}_])` +
-	"|`[^`]+`" +
-	`|^\s*(?:#{1,6}\s|>|[-+*]\s|\d+[.)]\s)`)
+// (hasMdEmphasis), code spans, and a line that starts a heading, quote or
+// list.
+func mdMarkup(s string) bool { return hasMdEmphasis(s) || reMarkdown.MatchString(s) }
+
+var reMarkdown = regexp.MustCompile("`[^`]+`" + `|^\s*(?:#{1,6}\s|>|[-+*]\s|\d+[.)]\s)`)
 
 func decodeEntitiesOnly(s string) string {
 	return reEntity.ReplaceAllStringFunc(s, func(m string) string {

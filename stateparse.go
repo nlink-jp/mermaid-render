@@ -638,7 +638,7 @@ func statePlainText(s string, line int) (string, error) {
 func stateText(s string, line int) (string, error) {
 	s = restoreEntities(s)
 	for _, l := range strings.Split(s, "\n") {
-		if reMarkdown.MatchString(l) {
+		if mdMarkup(l) {
 			return "", errf(UnsupportedConstruct, line, "markdown formatting in %q", s)
 		}
 	}

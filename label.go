@@ -4,6 +4,7 @@ import (
 	"html"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -54,3 +55,52 @@ func decodeEntityCodes(s string) string {
 		return m
 	})
 }
+
+// hasMdEmphasis reports whether markdown (marked, as CommonMark delimiter
+// runs are read) might draw emphasis in s: a run of * or _ that can open
+// followed by one of the same character that can close. It errs toward
+// yes — the pairing rules that would still leave the pair as text (the
+// rule of three, code spans taking precedence) are not applied — since a
+// label wrongly refused shows its source, and one wrongly drawn shows
+// asterisks where mermaid draws italics.
+func hasMdEmphasis(s string) bool {
+	rs := []rune(s)
+	var open [2]bool // * and _
+	for i := 0; i < len(rs); {
+		c := rs[i]
+		if c != '*' && c != '_' {
+			i++
+			continue
+		}
+		j := i
+		for j < len(rs) && rs[j] == c {
+			j++
+		}
+		before, after := ' ', ' ' // the text's ends count as whitespace
+		if i > 0 {
+			before = rs[i-1]
+		}
+		if j < len(rs) {
+			after = rs[j]
+		}
+		lf := !unicode.IsSpace(after) && (!mdPunct(after) || unicode.IsSpace(before) || mdPunct(before))
+		rf := !unicode.IsSpace(before) && (!mdPunct(before) || unicode.IsSpace(after) || mdPunct(after))
+		canOpen, canClose, k := lf, rf, 0
+		if c == '_' {
+			canOpen = lf && (!rf || mdPunct(before))
+			canClose = rf && (!lf || mdPunct(after))
+			k = 1
+		}
+		if canClose && open[k] {
+			return true
+		}
+		if canOpen {
+			open[k] = true
+		}
+		i = j
+	}
+	return false
+}
+
+// mdPunct is CommonMark's punctuation: Unicode punctuation and symbols.
+func mdPunct(r rune) bool { return unicode.IsPunct(r) || unicode.IsSymbol(r) }

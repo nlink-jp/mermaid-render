@@ -393,6 +393,10 @@ func TestERRefusals(t *testing.T) {
     "This **is** _Markdown_"`, UnsupportedConstruct, 2},
 		{"markdown in a label", `erDiagram
     A ||--o{ B : "*very* many"`, UnsupportedConstruct, 2},
+		// The regular expression once used missed an underscore inside the
+		// span (the mindmap specification's review, 2026-09-30).
+		{"emphasis around snake case", `erDiagram
+    A ||--o{ B : "_snake_case_"`, UnsupportedConstruct, 2},
 		{"subgraphs", `erDiagram
     subgraph title1
         CUSTOMER

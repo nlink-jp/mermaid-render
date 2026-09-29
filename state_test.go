@@ -393,6 +393,7 @@ func TestParseStateErrors(t *testing.T) {
 		{"a composite ending with --", "stateDiagram-v2\n  state X {\n    a\n    --\n  }", UnsupportedConstruct, 2},
 		{"a leading --", "stateDiagram-v2\n  state X {\n    --\n    a\n  }", UnsupportedConstruct, 3},
 		{"markdown in a description", "stateDiagram-v2\n  A : **bold**", UnsupportedConstruct, 2},
+		{"strong emphasis around snake case", "stateDiagram-v2\n  A : __init_db__", UnsupportedConstruct, 2},
 		{"markdown in a note line", "stateDiagram-v2\n  A\n  note right of A\n    text\n    - item\n  end note", UnsupportedConstruct, 3},
 		{"a state first met in a note", "stateDiagram-v2\n  note right of A : n\n  A --> B", SyntaxError, 2},
 		{"HTML in a label", "stateDiagram-v2\n  A --> B : <b>x</b>", UnsupportedConstruct, 2},
