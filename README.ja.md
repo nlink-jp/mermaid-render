@@ -15,9 +15,9 @@ kitty の画像方式に対応した端末で、トランスクリプトの merm
 
 ## 対応する図
 
-`flowchart` / `graph`、`sequenceDiagram`、`erDiagram`、`pie`、`stateDiagram` / `stateDiagram-v2`。
+`flowchart` / `graph`、`sequenceDiagram`、`erDiagram`、`pie`、`stateDiagram` / `stateDiagram-v2`、`gantt`。
 範囲は RFP に定める（基準は mermaid の公式ドキュメント、12.0.0）。第 2 段階でこの順に `pie`（済み）、
-`stateDiagram`（済み）、`gantt`、`mindmap` を加える。それ以外の種類は「図の種類が未対応」として返す。
+`stateDiagram`（済み）、`gantt`（済み）、`mindmap` を加える。それ以外の種類は「図の種類が未対応」として返す。
 
 円グラフは mermaid と同じように描く — 扇形は書いた順に 12 時から時計回り。全体の 1% 未満の項目は
 扇形を描かないが凡例には残す。扇形には全体に対する割合を `toFixed(0)` で丸めて書く。`showData` なら
@@ -30,6 +30,13 @@ kitty の画像方式に対応した端末で、トランスクリプトの merm
 状態へ、領域どうし）は未対応で、ソースを表示する。注記は書いた側に置き（上下向きの図では状態の横）、
 点線でつなぐ。上下向きの図の開始・終了・choice・fork・join への注記と、自分への遷移がある状態への注記は、
 書いた側に置けないので未対応。
+
+ガントチャートのタスクは mermaid と同じ位置に置く — `dateFormat` での dayjs と同じ日付の読み方、`after` /
+`until`、期間、除外日、タグ、マイルストーン、`vert` の線 — UTC に設定したブラウザと同じ計算で。軸の目盛りと
+ラベルは d3 のもの。描いた日やブラウザで変わるものは未対応としてソースを表示する: どのタスクも指さない
+`after` / `until`（mermaid は今日を使う）、mermaid がブラウザ自身の日付の読み取りに渡す開始（ISO なら受け
+付ける）、日付を今日から取る `dateFormat`。今日の線は描かない。節の見出しは左の列、タスク名は棒の中か右、
+密な軸ラベルは間引く。
 
 ## API
 
@@ -46,6 +53,7 @@ case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities（属性つき）, Relationships, Direction
 case *mermaidrender.Sequence:  // Participants, Boxes, Events（メッセージ・注記・枠）
 case *mermaidrender.Pie:       // Slices（ラベルと値）, ShowData
+case *mermaidrender.Gantt:        // Tasks（時刻は ms、UTC）, AxisFormat, 目盛り, 除外日
 case *mermaidrender.StateDiagram: // Root: States・Transitions・Notes を持つ範囲。複合状態は Regions を持つ
 }
 
@@ -67,7 +75,7 @@ sequence 図は専用の配置で、白地のカードに描く。PNG への変�
 端末での枠の大きさは呼び出し側が決める。描画が止まらないよう、次を上限とする: ソース 5 万文字（mermaid 自身の maxTextSize）、ノードと
 subgraph を合わせて 300（subgraph は 100 まで）、線と関係 500（mermaid 自身の上限で、構文を読む
 段階で判定）、ER の実体 300・属性は実体ごとに 200、sequence の参加者 300・イベント 2000・枠の入れ子
-50、円グラフの項目 100（値の合計が有限であること）、複合状態の入れ子 20 段、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
+50、円グラフの項目 100（値の合計が有限であること）、複合状態の入れ子 20 段、ガントのタスク 500、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
 メモリのため）。配置の要素が 2 万を超える flowchart（多くの段をまたぐ長い線）も拒む。PNG の大きさ（1 画素あたり 0.10〜0.67 バイトと幅がある）は呼び出し側が自分の
 上限（termimg の 2MiB）で確かめ、超えたらソースを表示する。上限を超えたときは、どのフォントにも無い文字と
 同じく `UnsupportedConstruct` のエラーになる。

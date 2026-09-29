@@ -272,6 +272,6 @@ const jsSpaceNoNL = `\t\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{
 // newline, as a source file ends in one: NUM needs a space or newline after
 // it, and "autonumber 1 2" is often the last word on its line.
 func lexSequence(lines []srcLine) ([]erToken, error) {
-	lines = append(append([]srcLine(nil), lines...), srcLine{"", lines[len(lines)-1].no})
+	lines = append(append([]srcLine(nil), lines...), srcLine{text: "", no: lines[len(lines)-1].no})
 	return runLexer(lines, seqRules, "NEWLINE")
 }

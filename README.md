@@ -17,11 +17,11 @@ support the iTerm2 or kitty image protocol.
 
 ## Diagrams
 
-`flowchart` / `graph`, `sequenceDiagram`, `erDiagram`, `pie` and
-`stateDiagram` / `stateDiagram-v2`, as specified in the RFP (the reference is
+`flowchart` / `graph`, `sequenceDiagram`, `erDiagram`, `pie`,
+`stateDiagram` / `stateDiagram-v2` and `gantt`, as specified in the RFP (the reference is
 the official mermaid documentation, 12.0.0). Phase 2 adds, in this order,
-`pie` (done), `stateDiagram` (done), `gantt` and `mindmap`. Other diagram
-types are returned as "unsupported diagram type".
+`pie` (done), `stateDiagram` (done), `gantt` (done) and `mindmap`. Other
+diagram types are returned as "unsupported diagram type".
 
 A pie chart is drawn as mermaid draws it — slices in the order written,
 clockwise from twelve o'clock; an item under 1% of the whole gets no slice
@@ -43,6 +43,17 @@ unsupported, and the source is shown. A note stands on the side it names
 top-down diagram a note on a start, end, choice, fork or join, or on a state
 with a transition to itself, cannot stand there and is unsupported.
 
+A gantt chart's tasks are placed as mermaid places them — dates read as
+dayjs reads them in `dateFormat`, `after` / `until`, durations, excluded
+days, tags, milestones and `vert` markers — computed as in a browser set to
+UTC; the axis ticks and labels are d3's. What would depend on the day it is
+drawn or on the browser is unsupported and the source is shown: an `after`
+or `until` naming no task (mermaid uses today), a start mermaid hands to the
+browser's own date parser (unless it is ISO), a `dateFormat` whose date comes
+from today. The today marker is never drawn. Section titles stand in a column
+on the left; a task's text sits in its bar or to its right; dense axis labels
+are thinned.
+
 ## API
 
 ```go
@@ -58,6 +69,7 @@ case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities (attributes), Relationships, Direction
 case *mermaidrender.Sequence:  // Participants, Boxes, Events (messages, notes, blocks)
 case *mermaidrender.Pie:       // Slices (label, value), ShowData
+case *mermaidrender.Gantt:        // Tasks (times in ms, UTC), AxisFormat, ticks, excluded days
 case *mermaidrender.StateDiagram: // Root: a scope of States, Transitions, Notes; composites hold Regions
 }
 
@@ -82,7 +94,8 @@ maxTextSize), 300 nodes and subgraphs (at most
 100 subgraphs), 500 links or relationships (mermaid's own limit, checked while
 parsing), 300 ER entities with at most 200 attributes each, 300 sequence
 participants with at most 2000 events and blocks nested 50 deep, 100 pie
-items whose total is a finite number, composite states nested 20 deep, 1000
+items whose total is a finite number, composite states nested 20 deep, 500
+gantt tasks, 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
 per image (for time and memory). A flowchart whose links would need more than
 20,000 layout items (very long links through many layers) is refused too. The PNG's size is the caller's to check — it

@@ -6,6 +6,18 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `gantt` (mermaid 12.0.0, `gantt.jison`, `ganttDb.js`): tasks placed as
+  ganttDb places them — dates read as dayjs 1.11.21 reads them in
+  `dateFormat`, `after` / `until`, durations, excluded days and `weekend`,
+  `inclusiveEndDates`, tags, milestones, `vert` markers, sections — in a
+  browser set to UTC; the axis as d3 7.9.0 ticks and formats it
+  (`axisFormat`, `tickInterval`, `weekday`). Each part was checked against
+  the real library under node. What depends on the day it is drawn or on
+  the browser is unsupported; the today marker is never drawn. Every render
+  checks bars, texts, section titles, markers and axis labels.
+
 ## [0.3.0] - 2026-09-29
 
 ### Added

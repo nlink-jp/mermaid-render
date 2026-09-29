@@ -7,7 +7,7 @@ for gem-agent and lagent to show diagrams in the terminal through their
 `internal/termimg`. Module `github.com/nlink-jp/mermaid-render`. Two packages:
 `mermaidrender` (parse into drawing-independent diagram data) and `raster`
 (layout and drawing). Phase 1 covers flowchart / graph, sequenceDiagram and
-erDiagram; phase 2 adds pie (done), stateDiagram, gantt and mindmap. Dependency: `golang.org/x/image` only (declared exception to the
+erDiagram; phase 2 adds pie, stateDiagram, gantt (done) and mindmap. Dependency: `golang.org/x/image` only (declared exception to the
 lib-series standard-library rule). The specification is
 `docs/en/mermaid-render-rfp.md` (ja: `docs/ja/mermaid-render-rfp.ja.md`).
 
@@ -38,6 +38,10 @@ mermaid-render/
 ├── state.go          # StateDiagram, StateScope, StateNode, Transition, StateNote
 ├── statelex.go       # the stateDiagram.jison lexer (on erlex.go's runLexer)
 ├── stateparse.go     # its grammar, stateDb.docTranslator and dataFetcher's rules
+├── gantt.go          # Gantt, GanttTask
+├── ganttlex.go       # the gantt.jison lexer (on runLexer)
+├── ganttparse.go     # its grammar and ganttDb's placing of tasks
+├── dayjs.go          # dayjs 1.11.21's strict parse, format and add (UTC)
 ├── pie.go            # Pie, Slice
 ├── pieparse.go       # the pie grammar: pie.langium lexed as Chevrotain does, pieDb's rules
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
@@ -45,6 +49,8 @@ mermaid-render/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
 │   ├── seq.go        # sequence: columns from pairwise needs, events stacked, drawing
 │   ├── pie.go        # pie: pieRenderer's shares, labels inside when they fit, legend with a % column, drawing
+│   ├── gantt.go      # gantt: rows, section column, bars, texts, axis, markers, drawing
+│   ├── d3time.go     # d3 7.9.0's time scale ticks and d3-time-format (en-US, UTC)
 │   ├── state.go      # state: scopes laid out innermost first on layoutGraph, composites as frames, drawing
 │   ├── doc.go        # package raster
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, missingGlyphError
@@ -89,13 +95,21 @@ mermaid-render/
   ends on its two faces must be that far apart; and a port snap now stays
   within 0.9 of its node's half-width (seed 3987: the snap missed a 1.15 em
   circle). Run `-staterandom 20000` after any change to either layout.
+- **gantt is a port of libraries, checked against them.** dayjs's strict
+  parse, ganttDb and d3's ticks and formats were each compared with the
+  real code under node (mermaid 12.0.0's locked versions, `TZ=UTC`),
+  outside the repo. ganttDb's `taskDb` survives `clear()`: load the module
+  afresh per chart, or ids from an earlier chart leak into the next.
+  Anything that reads today (missing `after` target, year-less formats,
+  today marker) or the browser's `Date` (non-ISO starts) is refused, not
+  imitated.
 - **A pie's percentages are of the whole, its angles of the drawn slices**
   (`pieShares`): items under 1% are removed before d3's pie, but the label
   still divides by the full sum. Keep both; a test picks values where they
   round differently.
 - **Layout properties are the correctness gate** (they replace the text-art
   faithfulness checks of gem-agent ADR-0042). `flowFaults`, `erFaults`,
-  `seqFaults`, `pieFaults` and `stateFaults` in `raster/verify.go` are the list, run on every render
+  `seqFaults`, `pieFaults`, `stateFaults` and `ganttFaults` in `raster/verify.go` are the list, run on every render
   (`LayoutFault`) and strictly by the tests. `strict` adds what is only a
   matter of looks (0.6 em spacing, 20° crossings, centring, frame
   crossings, label-to-bend room); a render must never refuse for those, and

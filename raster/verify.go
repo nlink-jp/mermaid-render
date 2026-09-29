@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -1038,6 +1039,113 @@ func stateFaults(d *mr.StateDiagram, sl *stateLayout, m measurer, strict bool, f
 					out.add("composite %s's regions overlap", c.node.ID)
 				}
 			}
+		}
+	}
+	return out
+}
+
+// ganttFaults checks a gantt chart: one bar per task in its row, in source
+// order, where the time scale puts it; a task's text inside its bar or to
+// its right in its row; section titles in the section column, within their
+// run; no text over another text or another task's bar; axis labels in
+// order; everything inside the picture.
+func ganttFaults(g *mr.Gantt, gl *ganttLayout, m measurer) []string {
+	var out faults
+	var rows, verts []*mr.GanttTask
+	for _, t := range g.Tasks {
+		if t.Vert {
+			verts = append(verts, t)
+		} else {
+			rows = append(rows, t)
+		}
+	}
+	if len(gl.bars) != len(rows) || len(gl.verts) != len(verts) {
+		out.add("placed %d bars and %d markers, want %d and %d", len(gl.bars), len(gl.verts), len(rows), len(verts))
+		return out
+	}
+	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-6 }
+	all := rect{-eps, -eps, gl.W + eps, gl.H + eps}
+	type labelled struct {
+		r    rect
+		what string
+		own  int // the bar a task's text may lie on, or -1
+	}
+	var texts []labelled
+	prevY := math.Inf(-1)
+	for i, b := range gl.bars {
+		t := b.task
+		if i > 0 && b.task.Row <= gl.bars[i-1].task.Row {
+			out.add("task %s is not below the task before it in the source", t.ID)
+		}
+		if !(b.box.Y0 > prevY) {
+			out.add("task %s's bar is not below the bar before it", t.ID)
+		}
+		prevY = b.box.Y0
+		x0 := gl.x(float64(t.Start))
+		if t.Milestone {
+			c := x0 + (gl.x(float64(t.End))-x0)/2
+			if !near(b.box.Center().X, c) || !near(b.box.W(), gtBar) {
+				out.add("milestone %s is not at its time", t.ID)
+			}
+		} else if !near(b.box.X0, x0) || !near(b.box.X1, math.Max(gl.x(float64(t.Bar)), x0)) {
+			out.add("task %s's bar is not at its times", t.ID)
+		}
+		if t.Text == "" {
+			continue
+		}
+		tw, th, err := m(t.Text, false)
+		if err == nil && (b.text.W() < tw-eps || b.text.H() < th-eps) {
+			out.add("task %s's text box does not hold its text", t.ID)
+		}
+		if b.inside {
+			if !within(b.box, b.text) {
+				out.add("task %s's text sticks out of its bar", t.ID)
+			}
+		} else if b.text.X0 < b.box.X1-eps || b.text.Y0 < b.box.Y0-gtRow || b.text.Y1 > b.box.Y1+gtRow {
+			out.add("task %s's text is not to the right of its bar", t.ID)
+		}
+		texts = append(texts, labelled{b.text, "the text of " + t.ID, i})
+	}
+	for _, s := range gl.sections {
+		if !within(s.run, s.text) {
+			out.add("section title %q lies outside its rows or column", strings.Join(s.lines, " "))
+		}
+		texts = append(texts, labelled{s.text, "section title " + strings.Join(s.lines, " "), -1})
+	}
+	for i, tk := range gl.ticks {
+		if i > 0 && !(tk.x > gl.ticks[i-1].x) {
+			out.add("axis tick %q is out of order", tk.label)
+		}
+		if tk.label != "" {
+			texts = append(texts, labelled{tk.box, "axis label " + tk.label, -1})
+		}
+	}
+	for _, v := range gl.verts {
+		if !near(v.x, gl.x(float64(v.task.Start))) {
+			out.add("marker %s is not at its time", v.task.ID)
+		}
+		if v.task.Text != "" {
+			texts = append(texts, labelled{v.label, "the text of marker " + v.task.ID, -1})
+		}
+	}
+	for i, a := range texts {
+		if !all.contains(a.r) {
+			out.add("%s is outside the picture", a.what)
+		}
+		for j := i + 1; j < len(texts); j++ {
+			if a.r.overlaps(texts[j].r) {
+				out.add("%s overlaps %s", a.what, texts[j].what)
+			}
+		}
+		for k, b := range gl.bars {
+			if k != a.own && a.r.overlaps(b.box) {
+				out.add("%s lies over the bar of %s", a.what, b.task.ID)
+			}
+		}
+	}
+	for _, b := range gl.bars {
+		if !all.contains(b.box) {
+			out.add("task %s's bar is outside the picture", b.task.ID)
 		}
 	}
 	return out

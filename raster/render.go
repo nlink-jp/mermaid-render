@@ -60,6 +60,8 @@ type probe struct {
 	corruptPie func(pl *pieLayout)
 	// corruptState is corrupt for a state diagram's layout.
 	corruptState func(sl *stateLayout)
+	// corruptGantt is corrupt for a gantt chart's layout.
+	corruptGantt func(gl *ganttLayout)
 }
 
 // render is Render with a probe.
@@ -86,6 +88,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		seq       *seqLayout
 		pie       *pieLayout
 		st        *stateLayout
+		gt        *ganttLayout
 		nodeLines []int
 		title     string
 		titleLine int
@@ -124,6 +127,13 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		}
 		lay = &flowLayout{W: pie.W, H: pie.H}
 		title, titleLine = d.Title(), d.TitleLine()
+	case *mr.Gantt:
+		var err error
+		if gt, err = layoutGantt(d, fn.measureEm); err != nil {
+			return nil, err
+		}
+		lay = &flowLayout{W: gt.W, H: gt.H}
+		title, titleLine = d.Title(), d.TitleLine()
 	case *mr.StateDiagram:
 		var err error
 		if st, err = layoutState(d, fn.measureEm); err != nil {
@@ -159,7 +169,16 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	if pr.corruptState != nil && st != nil {
 		pr.corruptState(st)
 	}
-	if fs := verify(d, lay, er, seq, pie, st, fn.measureEm); len(fs) > 0 {
+	if pr.corruptGantt != nil && gt != nil {
+		pr.corruptGantt(gt)
+	}
+	var fs []string
+	if gt != nil {
+		fs = ganttFaults(d.(*mr.Gantt), gt, fn.measureEm)
+	} else {
+		fs = verify(d, lay, er, seq, pie, st, fn.measureEm)
+	}
+	if len(fs) > 0 {
 		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fs[0]}
 	}
 	img := image.NewRGBA(image.Rect(0, 0, wPx, hPx))
@@ -177,6 +196,12 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	}
 	if pie != nil {
 		if err := c.drawPie(d.(*mr.Pie), pie, fn); err != nil {
+			return nil, err
+		}
+		return img, nil
+	}
+	if gt != nil {
+		if err := c.drawGantt(gt, fn); err != nil {
 			return nil, err
 		}
 		return img, nil

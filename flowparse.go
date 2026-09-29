@@ -67,7 +67,7 @@ func splitStatements(l srcLine) ([]srcLine, error) {
 			}
 		case c == ';' && depth == 0:
 			if t := strings.TrimSpace(l.text[start:i]); t != "" {
-				out = append(out, srcLine{t, l.no})
+				out = append(out, srcLine{text: t, no: l.no})
 			}
 			start = i + 1
 		}
@@ -76,7 +76,7 @@ func splitStatements(l srcLine) ([]srcLine, error) {
 		return nil, errf(SyntaxError, l.no, "unclosed quote")
 	}
 	if t := strings.TrimSpace(l.text[start:]); t != "" {
-		out = append(out, srcLine{t, l.no})
+		out = append(out, srcLine{text: t, no: l.no})
 	}
 	return out, nil
 }

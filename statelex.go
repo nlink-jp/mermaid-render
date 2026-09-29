@@ -348,5 +348,5 @@ func lexState(lines []srcLine) ([]erToken, error) {
 	if len(lines) > 0 {
 		last = lines[len(lines)-1].no
 	}
-	return runLexer(append(lines[:len(lines):len(lines)], srcLine{"", last}), stateRules, "NL")
+	return runLexer(append(lines[:len(lines):len(lines)], srcLine{text: "", no: last}), stateRules, "NL")
 }

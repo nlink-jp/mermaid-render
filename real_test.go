@@ -33,6 +33,8 @@ func outcome(src string) string {
 		return dumpPie(d)
 	case *StateDiagram:
 		return dumpState(d)
+	case *Gantt:
+		return dumpGantt(d)
 	default:
 		return dump(d.(*Flowchart))
 	}

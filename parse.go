@@ -40,6 +40,8 @@ func Parse(src string) (Diagram, error) {
 			return nil, err
 		}
 		return parseState(lines, title)
+	case "gantt":
+		return parseGantt(lines, title)
 	case "pie":
 		// pie reads its accDescr blocks itself.
 		if lines, title, err = prepareLines(src, true); err != nil {
@@ -57,7 +59,7 @@ func Parse(src string) (Diagram, error) {
 // engine does not draw.
 var unsupportedTypes = map[string]bool{
 	"classDiagram": true, "classDiagram-v2": true,
-	"gantt": true, "mindmap": true, "journey": true, "gitGraph": true,
+	"mindmap": true, "journey": true, "gitGraph": true,
 	"timeline": true, "quadrantChart": true, "requirementDiagram": true,
 	"C4Context": true, "C4Container": true, "C4Component": true, "C4Dynamic": true, "C4Deployment": true,
 	"xychart-beta": true, "xychart": true, "sankey-beta": true, "sankey": true,
@@ -99,6 +101,9 @@ type frontTitle struct {
 type srcLine struct {
 	text string // trimmed
 	no   int    // 1-based line number in the source
+	// tail is the line with only its leading blanks removed: gantt's
+	// values keep trailing spaces (tickInterval "1day " is ignored).
+	tail string
 }
 
 // prepare splits src into meaningful lines: it removes the front matter
@@ -170,7 +175,7 @@ func prepareLines(src string, keepAccDescr bool) ([]srcLine, frontTitle, error) 
 			}
 			continue
 		}
-		out = append(out, srcLine{t, i + 1})
+		out = append(out, srcLine{text: t, no: i + 1, tail: strings.TrimLeft(raw[i], " \t")})
 	}
 	return out, title, nil
 }

@@ -5,7 +5,7 @@ import "testing"
 func TestDiagramTypes(t *testing.T) {
 	for src, kind := range map[string]ErrorKind{
 		"classDiagram\n A <|-- B": UnsupportedType,
-		"gantt\n title x":         UnsupportedType,
+		"mindmap\n  root":         UnsupportedType,
 		"journey\n title x":       UnsupportedType,
 		"hello world":             SyntaxError,
 	} {
@@ -14,7 +14,7 @@ func TestDiagramTypes(t *testing.T) {
 	wantErr(t, "", SyntaxError, 0)
 	wantErr(t, "%% only a comment\n\n", SyntaxError, 0)
 	// The type keyword may follow comments and blank lines; its line is reported.
-	wantErr(t, "\n%% c\ngantt\n title x", UnsupportedType, 3)
+	wantErr(t, "\n%% c\njourney\n title x", UnsupportedType, 3)
 	if _, err := Parse("\r\nflowchart LR\r\n A --> B\r\n"); err != nil {
 		t.Errorf("CRLF source: %v", err)
 	}
