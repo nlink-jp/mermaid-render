@@ -170,7 +170,9 @@ type chain struct {
 
 type layouter struct {
 	// sp is the spacing: emSpacing for a picture.
-	sp     *spacing
+	sp *spacing
+	// boxes lays every node out as a rectangle (text art draws boxes).
+	boxes  bool
 	f      *mr.Flowchart
 	m      measurer
 	horiz  bool // LR or RL: the rank axis is horizontal

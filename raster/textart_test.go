@@ -1,0 +1,176 @@
+package raster
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	mr "github.com/nlink-jp/mermaid-render"
+)
+
+// Every real flowchart draws as text art (mermaid-ascii drew 21 of 26 real
+// flowchart and ER blocks).
+func TestTextArtRealFlowcharts(t *testing.T) {
+	files, _ := filepath.Glob("../testdata/real/*/*.mmd")
+	n := 0
+	for _, p := range files {
+		b, _ := os.ReadFile(p)
+		d, err := mr.Parse(string(b))
+		if err != nil {
+			continue
+		}
+		if _, ok := d.(*mr.Flowchart); !ok {
+			continue
+		}
+		n++
+		if _, err := RenderText(d, TextOptions{}); err != nil {
+			t.Errorf("%s: %v", filepath.Base(p), err)
+		}
+	}
+	if n != 22 {
+		t.Errorf("%d real flowcharts, want 22", n)
+	}
+}
+
+// Random flowcharts in every direction: nearly all draw; the rest are
+// refused (the caller shows the source), never drawn wrong; the art is
+// the same every time.
+func TestTextArtRandomFlowcharts(t *testing.T) {
+	ok, total := 0, 0
+	for seed := int64(1); seed <= 300; seed++ {
+		for _, dir := range []string{"TD", "LR", "BT", "RL"} {
+			d, err := mr.Parse(randomFlowchart(seed, dir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			total++
+			art, err := RenderText(d, TextOptions{})
+			var e *mr.Error
+			if err != nil && !(errors.As(err, &e) && e.Kind == mr.LayoutFault) {
+				t.Fatalf("seed %d %s: %v", seed, dir, err)
+			}
+			if err != nil {
+				continue
+			}
+			ok++
+			if again, _ := RenderText(d, TextOptions{}); again != art {
+				t.Fatalf("seed %d %s: not deterministic", seed, dir)
+			}
+		}
+	}
+	if ok*100 < total*99 {
+		t.Errorf("%d of %d random flowcharts drawn, want 99%%", ok, total)
+	}
+}
+
+// The glyphs: shapes by family, strokes, heads, a label breaking its line.
+func TestTextArtGlyphs(t *testing.T) {
+	src := "flowchart TD\n    A([開始]) --> B{判定}\n    B -- はい --> C[完了]\n    B -.-> D(保留)\n    C ==> E[終了]\n    D --o E"
+	got, err := RenderTextSource(src, TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `   ╭──────╮
+   │ 開始 │
+   ╰──────╯
+       │
+       ▼
+◇───────────◇
+│   判定    │
+◇───────────◇
+       │   ┆
+       │   └┄┄┄┄┄┄┄┄┄┐
+       │             ┆
+     はい            ┆
+       ▼             ▼
+   ┌──────┐      ╭──────╮
+   │ 完了 │      │ 保留 │
+   └──────┘      ╰──────╯
+       ┃             │
+       ┃             │
+       ┃   ┌─────────┘
+       ▼   ○
+┌───────────┐
+│   終了    │
+└───────────┘`
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Labels the grid cannot hold cell by cell are refused; the caller's
+// widths are used.
+func TestTextArtLabels(t *testing.T) {
+	for _, label := range []string{"a\x1b[31mred", "tab\there", "e\u0301", "👨\u200d👩", "a\u202eb"} {
+		f := &mr.Flowchart{Nodes: []*mr.Node{{ID: "a", Label: label, Line: 2}}}
+		_, err := RenderText(f, TextOptions{})
+		var e *mr.Error
+		if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct {
+			t.Errorf("%q: %v, want unsupported", label, err)
+		}
+	}
+	narrow := func(rune) int { return 1 }
+	wide, _ := RenderTextSource("flowchart TD\n    a[日本語]", TextOptions{})
+	thin, _ := RenderTextSource("flowchart TD\n    a[日本語]", TextOptions{Width: narrow})
+	// 日本語 is 6 cells wide, or 3; a box is its text and 4, even.
+	if !strings.Contains(wide, "┌────────┐") || !strings.Contains(thin, "┌──────┐\n") {
+		t.Errorf("widths not used:\n%s\n%s", wide, thin)
+	}
+}
+
+// Every render checks the art on the grid: each corruption is named by its
+// own check.
+func TestTextArtFaults(t *testing.T) {
+	src := "flowchart TD\n    subgraph S [枠]\n        A[一] --> B[二]\n    end\n    B -->|ラベル| C[三]\n    A --> C"
+	for _, c := range []struct {
+		name, want string
+		corrupt    func(*textFlow)
+	}{
+		{"boxes overlapping", "overlap", func(tf *textFlow) { tf.boxes[1] = tf.boxes[0] }},
+		{"a box too small", "smaller than its text", func(tf *textFlow) { tf.boxes[0].x1 = tf.boxes[0].x0 + 3 }},
+		{"a frame not holding a member", "does not hold", func(tf *textFlow) { tf.frames[0].y1 = tf.frames[0].y0 + 2 }},
+		{"a line through a box", "runs through", func(tf *textFlow) {
+			// B moved onto A --> C's column.
+			x, b := tf.paths[2][0][0], &tf.boxes[1]
+			b.x0, b.x1 = x-2, x+3
+		}},
+		{"a line not ending beside its box", "does not end beside", func(tf *textFlow) {
+			p := tf.paths[0]
+			p[len(p)-1][1] -= 1
+		}},
+		{"a diagonal", "not a right angle", func(tf *textFlow) { tf.paths[0][len(tf.paths[0])-1][0]++ }},
+		{"two links sharing a run", "meet", func(tf *textFlow) {
+			// A --> C ends down B --> C's last run.
+			p, q := tf.paths[2], tf.paths[1]
+			a, b, c := p[0], q[len(q)-2], q[len(q)-1]
+			tf.paths[2] = [][2]int{a, {a[0], b[1]}, b, c}
+		}},
+		{"a label over a box", "lies over", func(tf *textFlow) { tf.labels[1] = tf.boxes[2] }},
+		{"a label too small", "smaller than its text", func(tf *textFlow) { tf.labels[1].x1 = tf.labels[1].x0 }},
+		{"a title with no room", "no room for its title", func(tf *textFlow) {
+			// The frame hugs its members: no row above or below them.
+			fr := &tf.frames[0]
+			top, bottom := tf.boxes[0].y0, tf.boxes[1].y1
+			fr.y0, fr.y1 = top-1, bottom+1
+			tf.titles[0].y0, tf.titles[0].y1 = top, top
+		}},
+	} {
+		textProbe = c.corrupt
+		debugArt = true
+		d, _ := mr.Parse(src)
+		_, err := RenderText(d, TextOptions{})
+		textProbe, debugArt = nil, false
+		var e *mr.Error
+		if !errors.As(err, &e) || e.Kind != mr.LayoutFault || !strings.Contains(e.Msg, c.want) {
+			t.Errorf("%s: %v, want a fault naming %q", c.name, err, c.want)
+		}
+	}
+	// Uncorrupted, it draws.
+	if _, err := RenderTextSource(src, TextOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	_ = fmt.Sprint
+}

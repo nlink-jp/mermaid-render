@@ -90,7 +90,17 @@ font, err = raster.LoadFont(raster.FontSpec{Path: "/path/Font.ttc", Name: "Font-
 	BoldPath: "/path/Font.ttc", BoldName: "Font-Bold"})
 img, err := raster.Render(d, raster.Options{Font: font}) // *image.RGBA; Scale 0 = 2
 img, err = raster.RenderSource(src, raster.Options{Font: font})
+
+// Text art, for terminals that draw no images: box-drawing characters.
+art, err := raster.RenderText(d, raster.TextOptions{Width: cellWidth}) // Width nil: East Asian Width
 ```
+
+Text art draws a flowchart in box-drawing characters on a grid of terminal
+cells, running the picture's layered layout snapped to the grid (sequence and
+ER diagrams follow). `Width` gives the columns a character takes on the
+caller's terminal. A label holding a control character or a multi-rune
+grapheme cluster is unsupported in the art. Every render is checked on the
+grid; a fault is a `LayoutFault` and the caller shows the source.
 
 Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 (which characters an id may hold, how link symbols are read, subgraph
@@ -144,8 +154,8 @@ Font may serve renders on several goroutines; they take turns. `mmdpng -font pat
 
 ## Dependencies
 
-`golang.org/x/image` (font loading, text drawing, filling shapes), maintained
-by the Go team. This is a declared exception to lib-series' standard-library
+`golang.org/x/image` (font loading, text drawing, filling shapes) and
+`golang.org/x/text` (character widths for text art), maintained by the Go team. This is a declared exception to lib-series' standard-library
 rule, approved by the operator on 2026-09-28. At run time the only outside
 resource is the macOS system fonts; nothing is bundled or downloaded. The
 default font is Hiragino Sans W3 / W6.

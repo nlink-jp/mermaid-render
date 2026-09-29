@@ -71,7 +71,15 @@ font, err = raster.LoadFont(raster.FontSpec{Path: "/path/Font.ttc", Name: "Font-
 	BoldPath: "/path/Font.ttc", BoldName: "Font-Bold"})
 img, err := raster.Render(d, raster.Options{Font: font}) // *image.RGBA。Scale 0 は 2
 img, err = raster.RenderSource(src, raster.Options{Font: font})
+
+// 罫線表示（画像を描けない端末向け）: 罫線の文字で描く。
+art, err := raster.RenderText(d, raster.TextOptions{Width: cellWidth}) // Width が nil なら East Asian Width
 ```
+
+罫線表示は flowchart を端末のセルの格子の上に罫線の文字で描く。絵と同じ層の配置を格子に合わせて走らせる
+（sequence と ER は続けて加える）。`Width` は呼び出し側の端末で文字が占める桁数。制御文字や、複数の rune からなる
+書記素クラスタを含むラベルは罫線では未対応。描くたびに格子の上で確かめ、破れれば `LayoutFault` で、呼び出し側は
+ソースを見せる。
 
 構文の読み取りは mermaid 12.0.0 のドキュメントに従う。ドキュメントが決めていない細部
 （ID に使える文字、線の記号の読み方、subgraph の所属）は、同じ版の mermaid 自身の
@@ -111,8 +119,8 @@ subgraph を合わせて 300（subgraph は 100 まで）、線と関係 500（m
 
 ## 依存
 
-`golang.org/x/image`（フォントの読み込み・文字の描画・図形の塗り）。Go チームが保守
-するもの。lib-series の「標準ライブラリだけ」という原則の例外で、2026-09-28 に運用者が
+`golang.org/x/image`（フォントの読み込み・文字の描画・図形の塗り）と `golang.org/x/text`（罫線表示の
+文字の幅）。Go チームが保守するもの。lib-series の「標準ライブラリだけ」という原則の例外で、2026-09-28 に運用者が
 承認した。実行時に使う外部のものは macOS のシステムフォントだけで、同梱もダウンロードも
 しない。既定のフォントはヒラギノ角ゴシック W3 / W6。
 

@@ -590,12 +590,12 @@ it (the operator's decisions of 2026-09-30):
   Pie, state, gantt and mindmap stay source on those terminals. The art is for the TUI only (not
   gem-agent's plain REPL or `-p` output). lagent, which shows the source there, gains the same
   art.
-- **API**: package `text`: `text.Render(d Diagram, opts text.Options) (string, error)` and
-  `text.RenderSource(src, opts)`. The diagram data is `Parse`'s, the same as the picture's, so
+- **API**: `raster.RenderText(d Diagram, opts raster.TextOptions) (string, error)` and
+  `raster.RenderTextSource(src, opts)` — in package raster, whose layered layout the art runs. The diagram data is `Parse`'s, the same as the picture's, so
   the art can no longer misread what the picture reads (mermaid-ascii drew BT as TD, RL as LR, a
   phantom node for `Z --> S`, and refused `<br>` and non-ASCII sequence labels: measured). Errors
   are the same three kinds plus `LayoutFault`; the caller shows the source for all.
-- **Cell widths**: `Options.Width func(r rune) int` gives the columns a character takes; the
+- **Cell widths**: `TextOptions.Width func(r rune) int` gives the columns a character takes; the
   caller passes the measure its terminal code uses. So that a rune is a whole grapheme cluster, a
   label holding a multi-rune cluster (a combining mark, ZWJ, a variation selector, a regional
   indicator, an emoji modifier) is unsupported in the art. The default is Unicode East Asian Width
@@ -609,8 +609,10 @@ it (the operator's decisions of 2026-09-30):
   shape's family — `╭╮╰╯` for round, stadium, circle and double circle, `◇` for rhombus and
   hexagon (decisions), `┌┐└┘` for the rest. Links in `─│` with corners, `┄┆` dotted, `━┃` thick;
   heads `►◄▲▼`, `○` and `×` ends. Links only cross (`┼`, a crossing of a dotted or thick line drawn
-  in its own glyph where one exists): they never merge. Subgraph frames with their title inside,
-  as in the picture. ER entities as tables — name, then a row per attribute in the picture's
+  in its own glyph where one exists): they never merge; a head ends a straight run. Subgraph
+  frames in double lines `╔═╗║╚╝` (a node's box is single), their title inside as in the picture,
+  in the rows above the members and slid along them clear of the links that cross; when those
+  leave it no room, below the members. ER entities as tables — name, then a row per attribute in the picture's
   columns (type, name, keys, comment; not wrapped) — and cardinality in mermaid's own notation in
   the two cells next to the table (`||`, `|o`, `}|`, `}o`, mirrored on the left); a
   non-identifying relationship dotted. Sequence: participant boxes at the top and again at the
@@ -628,7 +630,10 @@ it (the operator's decisions of 2026-09-30):
   rounded up to whole cells. Columns and tracks are snapped once each, by identity, in integer
   arithmetic — never point by point, which breaks right angles at half-cell ties (measured). Link
   ends and loop ends only use a face's interior cells, never a corner; a self-link is a loop on
-  the node's side over two interior rows. ER is always laid out left to right (right to left when
+  the node's side over two interior rows. A straight link whose two ends' interiors share no row
+  (column) steps across halfway. The spacing was measured on random flowcharts: link ends two
+  units apart on a face (one apart collided in 60% of them), a row between layers, two units
+  before a head. The 22 real flowcharts draw; of 4,000 random ones 99.6% (the rest are refused). ER is always laid out left to right (right to left when
   written RL): cardinality reads along a horizontal line; a TB diagram is drawn as LR — a stated
   difference, the relationships unchanged. Sequence has a column layout of its own, like the
   picture's. The independent verification ran this on the 22 real flowcharts (clean) and 20,000

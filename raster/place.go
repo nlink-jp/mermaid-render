@@ -1321,7 +1321,7 @@ func freeColumn(x float64, occupied []float64, trackSep float64) float64 {
 }
 
 func (l *layouter) shapeOf(n int) mr.Shape {
-	if n < len(l.nodes) {
+	if n < len(l.nodes) && !l.boxes {
 		return l.nodes[n].Shape
 	}
 	return mr.Rect

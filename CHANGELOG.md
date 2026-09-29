@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Text art (`raster.RenderText`): a flowchart in box-drawing characters on
+  a grid of terminal cells, for terminals that draw no images — the
+  picture's layered layout run in grid units and snapped to the grid,
+  node corners by shape family, dotted and thick strokes, labels breaking
+  their line, subgraphs in double-line frames. Character widths come from
+  the caller (default: East Asian Width). Every render is checked on the
+  grid. All 22 real flowcharts draw.
+
+### Changed
+
+- The layered layout's spacing is a per-layout value (pictures unchanged
+  but for sub-pixel shifts of some subgraph titles).
+
 ## [0.5.1] - 2026-09-30
 
 ### Changed
