@@ -216,8 +216,10 @@ func layoutGantt(g *mr.Gantt, m measurer) (*ganttLayout, error) {
 		if len(r.lines) > 0 {
 			cy := (runTop + y) / 2
 			gl.sections = append(gl.sections, gtSection{lines: r.lines,
-				run:  rect{0, runTop, gl.x0, y},
-				text: rect{gtSecPad, cy - r.h/2, gtSecPad + r.w, cy + r.h/2}})
+				run: rect{0, runTop, gl.x0, y},
+				// Centred across the column, as every title is (the operator's
+				// check of 2026-09-29).
+				text: rect{colW/2 - r.w/2, cy - r.h/2, colW/2 + r.w/2, cy + r.h/2}})
 		}
 	}
 	gl.rowsBottom = y

@@ -400,7 +400,7 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     errors.
   - The today marker is never drawn. `displayMode: compact` and `topAxis` configuration (front
     matter) are presentation and ignored: every task has its own row, one axis at the bottom.
-  - Layout: section titles in a column on the left, centred on their run of rows (a repeated
+  - Layout: section titles in a column on the left, centred across it and on their run of rows (a repeated
     section's runs each titled — mermaid merges them and misplaces the titles); a row per task on
     its section's stripe; the time scale spans the earliest start to the latest end; bars in that
     scale, a milestone a diamond at its start plus half its length; a task's text inside its bar
@@ -989,6 +989,10 @@ same way as pathguard.
     first always laid side by side; dense tick intervals made pictures past the pixel limit (6%
     of random charts), so they are thinned past 120 em. 20,000 random charts with the check, none
     refused; 3,000 with the real font, none refused; 31 mutants, all caught.
+  - **Visual review of gantt charts, round 1 (reviews-gantt1, 2026-09-29)**: 10 sheets — 1 real,
+    6 documentation examples, 3 made for the check (dense ticks thinned, Japanese and a two-line
+    section title, the tags). All ○ on all four items. One note: section titles of different
+    widths should be centred across the column alike; they are now.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

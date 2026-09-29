@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -248,4 +249,16 @@ func TestGanttMilestoneAtTheEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkGantt(t, "a milestone with no text at the end", g, gl)
+}
+
+// Section titles are centred across the column: a narrow one sits in the
+// middle of a wide one's width.
+func TestGanttSectionTitlesCentred(t *testing.T) {
+	_, gl := ganttOf(t, "gantt\n  dateFormat YYYY-MM-DD\n  section A much wider title\n  a :2024-01-01, 1d\n  section B\n  b :2024-01-02, 1d")
+	if len(gl.sections) != 2 {
+		t.Fatalf("%d sections", len(gl.sections))
+	}
+	if a, b := gl.sections[0].text.Center().X, gl.sections[1].text.Center().X; math.Abs(a-b) > 1e-9 {
+		t.Errorf("titles centred at %v and %v", a, b)
+	}
 }
