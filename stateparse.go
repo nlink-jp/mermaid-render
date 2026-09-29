@@ -316,6 +316,15 @@ type stBuild struct {
 	edges    []stEdge
 	notes    []stNoteAt
 	dividers int
+	starts   map[string]bool // ids a [*] became
+}
+
+// shown is an id as an error message names it: [*] as written.
+func (b *stBuild) shown(id string) string {
+	if b.starts[id] {
+		return "[*]"
+	}
+	return id
 }
 
 type stInfo struct {
@@ -343,7 +352,7 @@ type stNoteAt struct {
 const stRoot = "root"
 
 func buildState(doc []*stStmt, front frontTitle) (*StateDiagram, error) {
-	b := &stBuild{nodes: map[string]*stInfo{}}
+	b := &stBuild{nodes: map[string]*stInfo{}, starts: map[string]bool{}}
 	root := &stStmt{kind: "root", id: stRoot, doc: doc, isDoc: true}
 	if err := b.translate(root, root, true); err != nil {
 		return nil, err
@@ -371,6 +380,7 @@ func (b *stBuild) translate(parent, node *stStmt, first bool) error {
 		}
 		f := first
 		node.start = &f
+		b.starts[node.id] = true
 	}
 	if !node.isDoc {
 		return nil
@@ -468,6 +478,11 @@ func (b *stBuild) visit(parent string, it *stStmt) {
 
 // assemble checks what this engine can lay out and builds the scopes.
 func (b *stBuild) assemble(root *stStmt, front frontTitle) (*StateDiagram, error) {
+	// dataFetcher makes no state of the id "root" and keeps its inside at
+	// the top level; a transition to it has no end.
+	if n := b.nodes[stRoot]; n != nil {
+		return nil, errf(UnsupportedConstruct, n.line, "a state named root (mermaid draws no state for it)")
+	}
 	// Every parent chain must end at the top level.
 	for _, n := range b.order {
 		seen := map[string]bool{n.id: true}
@@ -568,7 +583,7 @@ func (b *stBuild) assemble(root *stStmt, front frontTitle) (*StateDiagram, error
 	for _, e := range b.edges {
 		sf, st := scopeOf(e.from), scopeOf(e.to)
 		if sf != st {
-			return nil, errf(UnsupportedConstruct, e.line, "the transition %s --> %s crosses a composite state's frame", e.from, e.to)
+			return nil, errf(UnsupportedConstruct, e.line, "the transition %s --> %s crosses a composite state's frame", b.shown(e.from), b.shown(e.to))
 		}
 		label, err := stateText(e.label, e.line)
 		if err != nil {
@@ -576,10 +591,27 @@ func (b *stBuild) assemble(root *stStmt, front frontTitle) (*StateDiagram, error
 		}
 		scopes[sf].Transitions = append(scopes[sf].Transitions, &Transition{From: e.from, To: e.to, Label: label, Line: e.line})
 	}
+	selfLoop := map[string]bool{}
+	for _, e := range b.edges {
+		if e.from == e.to {
+			selfLoop[e.from] = true
+		}
+	}
 	for _, nt := range b.notes {
 		text, err := stateText(nt.note.text, nt.line)
 		if err != nil {
 			return nil, err
+		}
+		// In a top-down scope a note stands beside its state, which takes
+		// a state that can stretch to the note's height and has no loop
+		// out of its side; elsewhere it could not be on the side it names.
+		if d := scopes[scopeOf(nt.state)].Direction; d == TB || d == BT {
+			switch n := nodes[nt.state]; {
+			case n.Kind != StatePlain && n.Kind != StateComposite:
+				return nil, errf(UnsupportedConstruct, nt.line, "a note beside a %s in a top-down diagram", n.Kind)
+			case selfLoop[nt.state]:
+				return nil, errf(UnsupportedConstruct, nt.line, "a note beside %s, which has a transition to itself, in a top-down diagram", b.shown(nt.state))
+			}
 		}
 		s := scopes[scopeOf(nt.state)]
 		s.Notes = append(s.Notes, &StateNote{State: nt.state, Left: nt.note.left, Text: text, Line: nt.line})

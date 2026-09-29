@@ -10,21 +10,29 @@ to [Semantic Versioning](https://semver.org/).
 
 - `stateDiagram` / `stateDiagram-v2` (mermaid 12.0.0, `stateDiagram.jison`):
   states and their descriptions, transitions with labels, `[*]` start and
-  end per scope, composite states nested to any depth, concurrent regions
+  end per scope, composite states nested up to 20 deep, concurrent regions
   (`--`), choice, fork and join, notes, a direction per scope; styling and
   accessibility statements are read and dropped. The lexer is ported rule
   by rule and was checked against a parser generated from the jison
   grammar. Each scope is laid out on its own, innermost first, and a
   composite is drawn as a frame around its regions; a transition crossing a
   composite's frame is unsupported. A note stands on the side it names,
-  beside its state in top-down diagrams. Every render checks every scope's
+  beside its state in top-down diagrams; there, a note on a start, end,
+  choice, fork or join, or on a state with a transition to itself, is
+  unsupported. So is a state named `root`. Every render checks every scope's
   layout, each composite's frame, title and regions.
 
 ### Changed
 
 - A port snapped onto its link's column stays on its node's face, off the
   rim (a state's end circle is narrow enough for the old snap to miss it).
-  Flowchart and ER layouts are unchanged.
+  Flowchart layouts and the real ER diagrams are unchanged; 3 of 3,000
+  random ER diagrams lay out differently.
+
+### Fixed
+
+- **`__bold__` in a markdown label was drawn as written**: it is formatting
+  in mermaid, refused like `**bold**` (ER names and labels, state labels).
 
 ## [0.2.1] - 2026-09-29
 

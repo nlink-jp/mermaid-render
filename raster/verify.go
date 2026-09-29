@@ -986,8 +986,22 @@ func stateFaults(d *mr.StateDiagram, sl *stateLayout, m measurer, strict bool, f
 				}
 			}
 		}
-		for i, t := range sc.titled {
-			b := sc.main[i]
+		// A scope's transition labels stay in the scope's own area (its
+		// links flowFaults keeps there): past it they run into a sibling
+		// region or the frame.
+		area := rect{-eps, -eps, sc.lay.W + eps, sc.lay.H + eps}
+		for _, e := range sc.lay.Edges {
+			if e.Label != "" && !within(area, e.LabelBox) {
+				out.add("the label %q leaves its scope", e.Label)
+			}
+		}
+		titled := make([]int, 0, len(sc.titled))
+		for i := range sc.titled {
+			titled = append(titled, i)
+		}
+		slices.Sort(titled)
+		for _, i := range titled {
+			t, b := sc.titled[i], sc.main[i]
 			if math.Max(t.tw, t.lw) > b.W()+eps || t.th+stRuleGap+t.lh > b.H()-2*padY+eps {
 				out.add("the title and lines of %s stick out of it", sc.states[i].ID)
 			}

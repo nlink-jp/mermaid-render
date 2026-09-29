@@ -383,10 +383,11 @@ func (p *erParser) text(s string, line int, markdown bool) (string, error) {
 
 // reMarkdown finds what mermaid's markdown labels would draw as formatting
 // (entity names and relationship labels are markdown in erDb): emphasis
-// with * (inside a word too) or with _ (at word edges only), code spans,
-// and a line that starts a heading, quote or list.
+// with * (inside a word too) or with _ or __ (at word edges only), code
+// spans, and a line that starts a heading, quote or list.
 var reMarkdown = regexp.MustCompile("\\*[^\\s*](?:[^*]*[^\\s*])?\\*" +
 	`|(?:^|[^\p{L}\p{N}_])_[^\s_](?:[^_]*[^\s_])?_(?:$|[^\p{L}\p{N}_])` +
+	`|(?:^|[^\p{L}\p{N}_])__[^\s_](?:[^_]*[^\s_])?__(?:$|[^\p{L}\p{N}_])` +
 	"|`[^`]+`" +
 	`|^\s*(?:#{1,6}\s|>|[-+*]\s|\d+[.)]\s)`)
 

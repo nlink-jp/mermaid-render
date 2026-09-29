@@ -126,6 +126,15 @@ var stateCases = map[string]string{
     A : third line
     A --> A : again
     A --> B`,
+	"notes stacked on both sides": `stateDiagram-v2
+    A --> B
+    note left of B : first on the left
+    note left of B
+        second on the left
+        over two lines
+    end note
+    note right of B : on the right
+    B --> C`,
 	"an empty diagram":   "stateDiagram-v2",
 	"an empty composite": "stateDiagram-v2\n  state X {\n  }\n  a --> X",
 	"many into the end": `stateDiagram-v2
@@ -170,11 +179,12 @@ func randomState(seed int64) string {
 			fmt.Fprintf(&b, "%sdirection %s\n", indent, []string{"TB", "BT", "LR", "RL"}[r.Intn(4)])
 		}
 		n := 1 + r.Intn(6)
-		ids := []string{}
+		ids, plain := []string{}, []string{}
 		for range n {
 			id := fmt.Sprintf("s%d", next)
 			next++
-			switch k := r.Intn(10); {
+			k := r.Intn(10)
+			switch {
 			case k == 0:
 				fmt.Fprintf(&b, "%sstate %s <<choice>>\n", indent, id)
 			case k == 1:
@@ -200,8 +210,12 @@ func randomState(seed int64) string {
 			default:
 				fmt.Fprintf(&b, "%s%s\n", indent, id)
 			}
+			if k > 1 {
+				plain = append(plain, id)
+			}
 			ids = append(ids, id)
 		}
+		looped := map[string]bool{}
 		pick := func() string {
 			if r.Intn(6) == 0 {
 				return "[*]"
@@ -210,14 +224,21 @@ func randomState(seed int64) string {
 		}
 		for range r.Intn(2 * n) {
 			a, c := pick(), pick()
+			if a == c {
+				looped[a] = true
+			}
 			fmt.Fprintf(&b, "%s%s --> %s", indent, a, c)
 			if r.Intn(3) == 0 {
 				fmt.Fprintf(&b, " : event %d", r.Intn(50))
 			}
 			b.WriteString("\n")
 		}
-		if r.Intn(4) == 0 {
-			fmt.Fprintf(&b, "%snote %s of %s : note %d\n", indent, []string{"left", "right"}[r.Intn(2)], ids[r.Intn(len(ids))], r.Intn(9))
+		// A note stands beside a state that can stretch and has no loop
+		// (in a top-down scope anything else is unsupported).
+		if len(plain) > 0 && r.Intn(4) == 0 {
+			if id := plain[r.Intn(len(plain))]; !looped[id] {
+				fmt.Fprintf(&b, "%snote %s of %s : note %d\n", indent, []string{"left", "right"}[r.Intn(2)], id, r.Intn(9))
+			}
 		}
 	}
 	scope(0, "    ")
@@ -312,8 +333,9 @@ func TestRenderRefusesStateFaults(t *testing.T) {
     A : line
     Box --> A
     note right of A : a note
+    note right of A : another note
     state Box {
-        x --> y
+        x --> y : go
         --
         z
     }`
@@ -370,13 +392,35 @@ func TestRenderRefusesStateFaults(t *testing.T) {
 				}
 			}
 		},
+		"notes overlapping beside a state": func(sl *stateLayout) {
+			// Each keeps its size and its side: only 0.2 em into the other.
+			a, b := sl.root.noteBox[0], sl.root.noteBox[1]
+			d := b.Y0 - (a.Y1 - 0.2)
+			sl.root.noteBox[1] = rect{b.X0, b.Y0 - d, b.X1, b.Y1 - d}
+		},
+		"a state's own part outside its node": func(sl *stateLayout) {
+			sc := sl.root
+			i := sc.stateIndex("A")
+			sc.main[i].Y1 = sc.lay.Nodes[i].Box.Y1 + 1
+		},
+		"a label out of its scope": func(sl *stateLayout) {
+			for _, sc := range sl.scopes {
+				for j, e := range sc.lay.Edges {
+					if e.Label != "" {
+						sc.lay.Edges[j].LabelBox.X0 = -5
+						return
+					}
+				}
+			}
+		},
 		"states overlapping inside a region": func(sl *stateLayout) {
 			r := sl.comps[0].regions[0]
-			r.lay.Nodes[1].Box = r.lay.Nodes[0].Box
+			r.lay.Nodes[1].Box, r.main[1] = r.lay.Nodes[0].Box, r.main[0]
 		},
 		"a titled state too small": func(sl *stateLayout) {
+			// Its own part, still inside its node.
 			for i := range sl.root.titled {
-				sl.root.lay.Nodes[i].Box.Y1 = sl.root.lay.Nodes[i].Box.Y0 + 0.5
+				sl.root.main[i].Y1 = sl.root.main[i].Y0 + 0.5
 			}
 		},
 	} {
@@ -420,12 +464,31 @@ func TestStateShapes(t *testing.T) {
 	}
 }
 
-// Seeds that exposed a defect.
+// Sources that exposed a defect, kept as written: the generator has
+// changed since.
+var stateRegressions = map[string]string{
+	// Seed 8960 (seed 3987 before the generator changed): a 0.2 em snap
+	// took the port past a narrow end circle's rim.
+	"seed 8960": `stateDiagram-v2
+    direction BT
+    s0
+    s1
+    s2
+    s3 : a longer description 50
+    s3 : and a line
+    s1 --> s2 : event 14
+    s2 --> s1 : event 27
+    [*] --> [*]
+    [*] --> s0 : event 42
+    s2 --> s0
+    [*] --> s0 : event 10
+    [*] --> s2 : event 38`,
+}
+
 func TestStateLayoutRegressions(t *testing.T) {
-	// 3987: a 0.2 em snap took the port past a narrow end circle's rim.
-	for _, seed := range []int64{3987} {
-		d, sl := stateOf(t, randomState(seed))
-		checkState(t, fmt.Sprintf("seed %d", seed), d, sl, nil)
+	for name, src := range stateRegressions {
+		d, sl := stateOf(t, src)
+		checkState(t, name, d, sl, nil)
 	}
 }
 
@@ -449,5 +512,22 @@ func TestStateNoteSides(t *testing.T) {
 				t.Errorf("%s: %q beside %v", dir, nt.Text, beside)
 			}
 		}
+	}
+}
+
+// Handed a note beside a state looping to itself in TB (which Parse
+// refuses), the layout makes the note a node rather than a slot the loop
+// would leave from.
+func TestStateNoteOnLoopIsANode(t *testing.T) {
+	d := &mr.StateDiagram{Root: &mr.StateScope{Direction: mr.TB,
+		States:      []*mr.StateNode{{ID: "A", Kind: mr.StatePlain, Label: "A"}},
+		Transitions: []*mr.Transition{{From: "A", To: "A"}},
+		Notes:       []*mr.StateNote{{State: "A", Text: "x"}}}}
+	sl, err := layoutState(d, fakeMeasure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sl.root.noteNode[0] < 0 {
+		t.Error("the note stands beside a state that loops out of its side")
 	}
 }

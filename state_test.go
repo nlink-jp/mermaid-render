@@ -375,6 +375,11 @@ func TestParseStateErrors(t *testing.T) {
 		{"two words before { across a line end", "stateDiagram-v2\n  state a\n  state b {\n  }", SyntaxError, 2},
 		{"a :: inside a description", "stateDiagram-v2\n  A : x::y", SyntaxError, 2},
 		{"a note first-met state with a transition only", "stateDiagram-v2\n  note left of A : x\n  A --> B", SyntaxError, 2},
+		{"a note beside a choice in TB", "stateDiagram-v2\n  state c <<choice>>\n  B --> c\n  note right of c : x", UnsupportedConstruct, 4},
+		{"a note beside a state looping to itself in BT", "stateDiagram-v2\n  direction BT\n  A --> A\n  note left of A : x", UnsupportedConstruct, 4},
+		{"a state named root", "stateDiagram-v2\n  A --> root", UnsupportedConstruct, 2},
+		{"a composite named root", "stateDiagram-v2\n  state root {\n    A\n  }", UnsupportedConstruct, 2},
+		{"bold with __", "stateDiagram-v2\n  __init__ --> running", UnsupportedConstruct, 2},
 		{"an unclosed composite", "stateDiagram-v2\n  state X {\n    a", SyntaxError, 3},
 		{"-- at the top level", "stateDiagram-v2\n  a\n  --\n  b", SyntaxError, 3},
 		{"a hyphen in an id", "stateDiagram-v2\n  a-b --> c", SyntaxError, 2},
@@ -407,5 +412,21 @@ func TestParseStateTrailingDivider(t *testing.T) {
 	_, err := Parse("stateDiagram-v2\n  state X {\n    a\n    --\n  }")
 	if err == nil || !strings.Contains(err.Error(), "ends with --") {
 		t.Errorf("%v, want the trailing -- refused", err)
+	}
+}
+
+// Where a note can stand on its side it is read: beside a choice in LR.
+func TestParseStateNoteOnChoiceLR(t *testing.T) {
+	d := mustState(t, "stateDiagram-v2\n  direction LR\n  state c <<choice>>\n  B --> c\n  note right of c : x")
+	if len(d.Root.Notes) != 1 {
+		t.Errorf("notes %v", d.Root.Notes)
+	}
+}
+
+// Messages name a [*] as written, not as the id it became.
+func TestParseStateMessagesShowStart(t *testing.T) {
+	_, err := Parse("stateDiagram-v2\n  state X {\n    a\n    --\n    [*] --> b\n  }\n  state Y {\n    b\n  }")
+	if err == nil || !strings.Contains(err.Error(), "[*] --> b") || strings.Contains(err.Error(), "\n") {
+		t.Errorf("%v", err)
 	}
 }

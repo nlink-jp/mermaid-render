@@ -280,8 +280,8 @@ lexical rules are ported from those.
     word"), even across a line end (`state a` then `state b {`); non-ASCII words do not count
     (`state 状態 X {` makes X).
 - **Statements.** `id`; `id : description`; `a --> b` and `a --> b : label`; `state "description"
-  as id`; `state id { … }` and `state "description" as id { … }` (composites, nested to any
-  depth; at the top level the `{` may be on the next line); `state id <<fork>>`, `<<join>>`,
+  as id`; `state id { … }` and `state "description" as id { … }` (composites, nested up to
+  20 deep; at the top level the `{` may be on the next line); `state id <<fork>>`, `<<join>>`,
   `<<choice>>` and the `[[fork]]` forms (the id is all before the marker: `state my fork <<fork>>`
   is `my fork`); `--` inside a composite (concurrent regions); `note left of id : text` (the text
   ends at `:`, `;` or the line's end), `note right of id` … `end note`; `direction`. Checked for
@@ -332,10 +332,12 @@ lexical rules are ported from those.
     state in TB). In TB and BT it stands beside the state: the state and a slot of the wider side's
     width on each side are one node, the state in the middle where its transitions meet it, the
     state as tall as its notes; notes on one side stack. In LR and RL the note is a node on a
-    dotted line whose direction puts it on its side. A start, end, choice, fork or join cannot
-    stretch, and a state with a transition to itself loops out of the node's side, so their notes
-    are nodes on the note edge's line in every direction. A note belongs to its state's scope
-    (mermaid attaches notes at the top level).
+    dotted line whose direction puts it on its side, whatever the state. In TB and BT a start,
+    end, choice, fork or join cannot stretch, and a state with a transition to itself loops out of
+    the node's side, so a note on one of them could not stand on its side there: unsupported. A
+    note belongs to its state's scope (mermaid attaches notes at the top level).
+  - A state named `root` is unsupported: `dataFetcher` makes no state of that id and keeps a
+    composite of that name's inside at the top level; a transition to it has no end.
   - Shapes: a state is a rounded rectangle (with a title, a rule under it); start a filled
     circle; end a ring round a filled circle; choice a small diamond; fork and join a bar across
     the scope's direction; a composite a rounded frame with its title centred in a top band.
@@ -890,6 +892,16 @@ same way as pathguard.
     transition meets such a state off its own part. 10 mutants, all caught.
   - **Round 2 (reviews-state2, 2026-09-29)**: the 14 sheets again and 2 more for notes (sides,
     several lines, a note on a composite; LR) — all 16 ○ on all four items.
+  - **Pre-release independent review of state diagrams (2026-09-29)**: about 55,000 random
+    diagrams through Render with the real font — no panic, hang or layout fault; output
+    deterministic. Found and fixed: a note on a start, end, choice or fork, or on a state looping
+    to itself, still stood below or above it in TB (now unsupported there); a state named `root`,
+    which mermaid does not draw as a state (unsupported); `__bold__` not refused as markdown (an
+    old gap in the ER rule, reachable now); the CHANGELOG's claim that ER layouts were unchanged
+    (3 of 3,000 random ones differ; the real ones do not); an error message naming `[*]` by its
+    internal id; a map walk ordering faults; untested checks (notes stacked on one side, a
+    state's part outside its node, a label outside its scope — new). A regression seed was
+    re-found for the generator's new output (8960). 48 mutants over the whole feature, all caught.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

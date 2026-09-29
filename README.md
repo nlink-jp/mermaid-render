@@ -33,13 +33,15 @@ inside (mermaid writes every one on its slice, where thin slices' labels
 overlap).
 
 A state diagram is read as mermaid reads it — `[*]` as its scope's start or
-end, composites nested to any depth, `--` regions, choice, fork and join,
+end, composites nested up to 20 deep, `--` regions, choice, fork and join,
 notes, a direction per scope. Each scope is laid out on its own, innermost
 first: a composite is a frame holding its title and its regions side by side,
 and a transition to it stops at the frame. So a transition that crosses a
 composite's frame (into its inner state from outside, or between regions) is
 unsupported, and the source is shown. A note stands on the side it names
-(beside its state in top-down diagrams), joined by a dotted line.
+(beside its state in top-down diagrams), joined by a dotted line; in a
+top-down diagram a note on a start, end, choice, fork or join, or on a state
+with a transition to itself, cannot stand there and is unsupported.
 
 ## API
 
