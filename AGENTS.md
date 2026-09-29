@@ -35,10 +35,13 @@ mermaid-render/
 ├── sequence.go       # Sequence, Participant, Box, Event
 ├── seqlex.go         # the sequenceDiagram.jison lexer (on erlex.go's runLexer)
 ├── seqparse.go       # the sequenceDiagram grammar and sequenceDb's rules
+├── pie.go            # Pie, Slice
+├── pieparse.go       # the pie grammar: pie.langium lexed as Chevrotain does, pieDb's rules
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
 ├── raster/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
 │   ├── seq.go        # sequence: columns from pairwise needs, events stacked, drawing
+│   ├── pie.go        # pie: pieRenderer's shares, labels inside or outside, legend, drawing
 │   ├── doc.go        # package raster
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, missingGlyphError
 │   ├── fontload.go   # FontSpec, LoadFont, name-table reader (every language)
@@ -57,6 +60,19 @@ mermaid-render/
 ## Gotchas
 
 - **`*.parse` goldens were read against their sources** before they were
+
+- **Since mermaid 11 some grammars are Langium, not jison** (pie now; more
+  in `packages/parser/src/language/`). Chevrotain tries token types in the
+  order Langium builds them — whitespace, keywords longest first, then
+  terminals in grammar order — and takes the first match, not the longest.
+  Values go through Langium's `DefaultValueConverter` (4.2.1 for mermaid
+  12.0.0: `convertString` undoes `\b \f \n \r \t \v \0` and keeps any
+  other escaped character; numbers are `Number()`). Read the grammar, the
+  common grammar and the value converters, never only the docs.
+- **A pie's percentages are of the whole, its angles of the drawn slices**
+  (`pieShares`): items under 1% are removed before d3's pie, but the label
+  still divides by the full sum. Keep both; a test picks values where they
+  round differently.
   frozen. `go test -run TestRealBlocks -update` rewrites them; read every
   changed file against its `.mmd` before committing, or the golden only
   proves the code agrees with itself.

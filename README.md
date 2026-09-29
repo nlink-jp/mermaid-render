@@ -17,10 +17,18 @@ support the iTerm2 or kitty image protocol.
 
 ## Diagrams
 
-Phase 1 covers `flowchart` / `graph`, `sequenceDiagram` and `erDiagram`, as
-specified in the RFP (the reference is the official mermaid documentation).
-`stateDiagram` and nested subgraphs follow in phase 2. Other diagram types are
-returned as "unsupported diagram type".
+`flowchart` / `graph`, `sequenceDiagram`, `erDiagram` and `pie`, as specified
+in the RFP (the reference is the official mermaid documentation, 12.0.0).
+Phase 2 adds, in this order, `pie` (done), `stateDiagram` with nested frames,
+`gantt` and `mindmap`. Other diagram types are returned as "unsupported
+diagram type".
+
+A pie chart is drawn as mermaid draws it — slices in the order written,
+clockwise from twelve o'clock; an item under 1% of the whole gets no slice
+but keeps its legend row; a slice shows its share of the whole, rounded as
+`toFixed(0)`; `showData` adds each value to the legend. One difference: a
+percentage that does not fit inside its slice goes outside the circle with a
+leader line, spaced so no two overlap (mermaid lets them overlap).
 
 ## API
 
@@ -36,6 +44,7 @@ switch d := d.(type) {
 case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities (attributes), Relationships, Direction
 case *mermaidrender.Sequence:  // Participants, Boxes, Events (messages, notes, blocks)
+case *mermaidrender.Pie:       // Slices (label, value), ShowData
 }
 
 font, err := raster.DefaultFont() // load once, reuse
@@ -58,7 +67,8 @@ terminal box. Limits keep a render bounded: 50,000 characters of source (mermaid
 maxTextSize), 300 nodes and subgraphs (at most
 100 subgraphs), 500 links or relationships (mermaid's own limit, checked while
 parsing), 300 ER entities with at most 200 attributes each, 300 sequence
-participants with at most 2000 events and blocks nested 50 deep, 1000
+participants with at most 2000 events and blocks nested 50 deep, 100 pie
+items whose total is a finite number, 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
 per image (for time and memory). A flowchart whose links would need more than
 20,000 layout items (very long links through many layers) is refused too. The PNG's size is the caller's to check — it

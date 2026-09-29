@@ -56,6 +56,8 @@ type probe struct {
 	// corrupt changes the layout before it is checked, to prove the check
 	// runs: a fault no real layout has cannot be reached otherwise.
 	corrupt func(lay *flowLayout, seq *seqLayout)
+	// corruptPie is corrupt for a pie chart's layout.
+	corruptPie func(pl *pieLayout)
 }
 
 // render is Render with a probe.
@@ -80,6 +82,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		lay       *flowLayout
 		er        *erLayout
 		seq       *seqLayout
+		pie       *pieLayout
 		nodeLines []int
 		title     string
 		titleLine int
@@ -111,6 +114,13 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		}
 		lay = &flowLayout{W: seq.W, H: seq.H}
 		title, titleLine = d.Title(), d.TitleLine()
+	case *mr.Pie:
+		var err error
+		if pie, err = layoutPie(d, fn.measureEm); err != nil {
+			return nil, err
+		}
+		lay = &flowLayout{W: pie.W, H: pie.H}
+		title, titleLine = d.Title(), d.TitleLine()
 	default:
 		return nil, &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("%T", d)}
 	}
@@ -133,7 +143,10 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	if pr.corrupt != nil {
 		pr.corrupt(lay, seq)
 	}
-	if fs := verify(d, lay, er, seq, fn.measureEm); len(fs) > 0 {
+	if pr.corruptPie != nil && pie != nil {
+		pr.corruptPie(pie)
+	}
+	if fs := verify(d, lay, er, seq, pie, fn.measureEm); len(fs) > 0 {
 		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fs[0]}
 	}
 	img := image.NewRGBA(image.Rect(0, 0, wPx, hPx))
@@ -148,6 +161,12 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	c.offX, c.offY = cardPad+(wEm-2*cardPad-lay.W)/2, cardPad+th
 	if er != nil {
 		c.rels = er.rels
+	}
+	if pie != nil {
+		if err := c.drawPie(d.(*mr.Pie), pie, fn); err != nil {
+			return nil, err
+		}
+		return img, nil
 	}
 	if seq != nil {
 		if err := c.drawSequence(seq, fn); err != nil {

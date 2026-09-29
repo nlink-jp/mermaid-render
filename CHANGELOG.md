@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `pie` (mermaid 12.0.0, `pie.langium`): `showData`, `title` (also on the
+  header's line), quoted labels with Langium's escapes, integer and decimal
+  values; a repeated label keeps its first value, a negative value is an
+  error. Drawn as pieRenderer draws it: slices in order, clockwise from
+  twelve o'clock, items under 1% without a slice but in the legend,
+  percentages of the whole rounded as `toFixed(0)`, `showData` values in the
+  legend. A percentage that does not fit inside its slice goes outside the
+  circle with a leader line, spaced so none overlap. Every render checks
+  the slices, the legend and the labels. At most 100 items.
+
 ## [0.1.0] - 2026-09-29
 
 First release. How each part was reviewed and changed on the way is in the

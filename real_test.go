@@ -29,6 +29,8 @@ func outcome(src string) string {
 		return dumpER(d)
 	case *Sequence:
 		return dumpSeq(d)
+	case *Pie:
+		return dumpPie(d)
 	default:
 		return dump(d.(*Flowchart))
 	}

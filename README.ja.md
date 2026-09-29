@@ -15,9 +15,14 @@ kitty の画像方式に対応した端末で、トランスクリプトの merm
 
 ## 対応する図
 
-第 1 段階は `flowchart` / `graph`、`sequenceDiagram`、`erDiagram`。範囲は RFP に
-定める（基準は mermaid の公式ドキュメント）。`stateDiagram` と入れ子の subgraph は
-第 2 段階。それ以外の種類は「図の種類が未対応」として返す。
+`flowchart` / `graph`、`sequenceDiagram`、`erDiagram`、`pie`。範囲は RFP に定める（基準は
+mermaid の公式ドキュメント、12.0.0）。第 2 段階でこの順に `pie`（済み）、入れ子の枠を含む
+`stateDiagram`、`gantt`、`mindmap` を加える。それ以外の種類は「図の種類が未対応」として返す。
+
+円グラフは mermaid と同じように描く — 扇形は書いた順に 12 時から時計回り。全体の 1% 未満の項目は
+扇形を描かないが凡例には残す。扇形には全体に対する割合を `toFixed(0)` で丸めて書く。`showData` なら
+凡例に値を付ける。違いは 1 つ: 扇形の中に収まらない % は引き出し線つきで円の外に出し、重ならない
+ように並べる（mermaid は重なるまま描く）。
 
 ## API
 
@@ -33,6 +38,7 @@ switch d := d.(type) {
 case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities（属性つき）, Relationships, Direction
 case *mermaidrender.Sequence:  // Participants, Boxes, Events（メッセージ・注記・枠）
+case *mermaidrender.Pie:       // Slices（ラベルと値）, ShowData
 }
 
 font, err := raster.DefaultFont() // 一度読んで使い回す
@@ -53,7 +59,7 @@ sequence 図は専用の配置で、白地のカードに描く。PNG への変�
 端末での枠の大きさは呼び出し側が決める。描画が止まらないよう、次を上限とする: ソース 5 万文字（mermaid 自身の maxTextSize）、ノードと
 subgraph を合わせて 300（subgraph は 100 まで）、線と関係 500（mermaid 自身の上限で、構文を読む
 段階で判定）、ER の実体 300・属性は実体ごとに 200、sequence の参加者 300・イベント 2000・枠の入れ子
-50、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
+50、円グラフの項目 100（値の合計が有限であること）、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
 メモリのため）。配置の要素が 2 万を超える flowchart（多くの段をまたぐ長い線）も拒む。PNG の大きさ（1 画素あたり 0.10〜0.67 バイトと幅がある）は呼び出し側が自分の
 上限（termimg の 2MiB）で確かめ、超えたらソースを表示する。上限を超えたときは、どのフォントにも無い文字と
 同じく `UnsupportedConstruct` のエラーになる。

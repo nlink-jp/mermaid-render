@@ -1,1 +1,6 @@
-error: line 1: unsupported diagram type: pie
+title "開発タスクの内訳 (工数比率)"
+slice "新機能開発" 45
+slice "バグ修正・リファクタ" 25
+slice "テスト自動化" 15
+slice "ドキュメント作成" 10
+slice "ミーティング" 5

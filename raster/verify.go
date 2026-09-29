@@ -33,8 +33,10 @@ func (f *faults) add(format string, a ...any) {
 }
 
 // verify runs the checks for whichever layout render made.
-func verify(d mr.Diagram, lay *flowLayout, el *erLayout, sl *seqLayout, m measurer) []string {
+func verify(d mr.Diagram, lay *flowLayout, el *erLayout, sl *seqLayout, pl *pieLayout, m measurer) []string {
 	switch d := d.(type) {
+	case *mr.Pie:
+		return pieFaults(d, pl)
 	case *mr.Flowchart:
 		return flowFaults(d, lay, m, false, nil)
 	case *mr.ER:
@@ -805,4 +807,77 @@ func (g *grid) near(r rect, pad float64) []int {
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+// pieFaults checks a pie chart's layout: the slices are the items over 1%,
+// in order, together a full turn with none empty; the legend names every
+// item in order; no text lies over another, over the legend or outside the
+// picture; a percentage inside the circle lies inside its own slice, one
+// outside lies clear of the circle; the legend is clear of the circle.
+// Every check is about a wrong picture, so there is no strict reading.
+func pieFaults(p *mr.Pie, pl *pieLayout) []string {
+	var out faults
+	kept, angle, _ := pieShares(p)
+	if len(pl.wedges) != len(kept) {
+		out.add("%d slices drawn, want %d", len(pl.wedges), len(kept))
+		return out
+	}
+	for k, w := range pl.wedges {
+		if w.item != kept[k] {
+			out.add("slice %d is item %d, want %d", k, w.item, kept[k])
+		}
+		if !(w.a1 > w.a0) || math.Abs(w.a0-angle[k]) > 1e-9 || math.Abs(w.a1-angle[k+1]) > 1e-9 {
+			out.add("slice %d runs %.4f to %.4f", k, w.a0, w.a1)
+		}
+	}
+	if n := len(pl.wedges); n > 0 && math.Abs(pl.wedges[n-1].a1-2*math.Pi) > 1e-6 {
+		out.add("the slices end at %.4f, not a full turn", pl.wedges[n-1].a1)
+	}
+	if len(pl.legend) != len(p.Slices) {
+		out.add("%d legend rows, want %d", len(pl.legend), len(p.Slices))
+		return out
+	}
+	for i, r := range pl.legend {
+		if r.item != i {
+			out.add("legend row %d is item %d", i, r.item)
+		}
+	}
+	all := rect{-eps, -eps, pl.W + eps, pl.H + eps}
+	circle := rect{pl.c.X - pieR, pl.c.Y - pieR, pl.c.X + pieR, pl.c.Y + pieR}
+	var texts []rect
+	var what []string
+	for _, w := range pl.wedges {
+		texts, what = append(texts, w.box), append(what, "the percentage of "+p.Slices[w.item].Label)
+		switch {
+		case w.inside && len(pl.wedges) > 1 && !inWedge(w.box, pl.c, pieR, w.a0, w.a1):
+			out.add("the percentage of %q is not inside its slice", p.Slices[w.item].Label)
+		case !w.inside && rectMeetsCircle(w.box, pl.c, pieR):
+			out.add("the percentage of %q lies over the circle", p.Slices[w.item].Label)
+		}
+	}
+	for _, r := range pl.legend {
+		texts, what = append(texts, r.box, r.swatch), append(what, "legend "+r.text, "the swatch of "+r.text)
+		if rectMeetsCircle(r.swatch, pl.c, pieR) || rectMeetsCircle(r.box, pl.c, pieR) || r.box.overlaps(circle) && r.box.X0 < pl.c.X {
+			out.add("legend row %q lies over the circle", r.text)
+		}
+	}
+	for i, a := range texts {
+		if !all.contains(a) {
+			out.add("%s is outside the picture", what[i])
+		}
+		for j := i + 1; j < len(texts); j++ {
+			if a.overlaps(texts[j]) {
+				out.add("%s overlaps %s", what[i], what[j])
+			}
+		}
+	}
+	return out
+}
+
+// rectMeetsCircle reports whether r shares area with the disc of radius
+// rad around c.
+func rectMeetsCircle(r rect, c pt, rad float64) bool {
+	dx := math.Max(r.X0-c.X, math.Max(0, c.X-r.X1))
+	dy := math.Max(r.Y0-c.Y, math.Max(0, c.Y-r.Y1))
+	return math.Hypot(dx, dy) < rad-eps
 }

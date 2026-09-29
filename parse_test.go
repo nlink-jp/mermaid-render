@@ -7,7 +7,7 @@ func TestDiagramTypes(t *testing.T) {
 		"stateDiagram-v2\n [*] --> A": UnsupportedType,
 		"classDiagram\n A <|-- B":     UnsupportedType,
 		"gantt\n title x":             UnsupportedType,
-		"pie\n \"a\" : 1":             UnsupportedType,
+		"journey\n title x":           UnsupportedType,
 		"hello world":                 SyntaxError,
 	} {
 		wantErr(t, src, kind, 0)

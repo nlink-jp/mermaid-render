@@ -23,6 +23,9 @@ func Parse(src string) (Diagram, error) {
 	}
 	head := lines[0]
 	kw := firstWord(head.text)
+	if strings.HasPrefix(kw, "pie%%") {
+		kw = "pie" // pie.langium: a comment may follow the keyword directly
+	}
 	switch kw {
 	case "flowchart", "graph", "flowchart-elk":
 		return parseFlowchart(lines, title)
@@ -30,6 +33,8 @@ func Parse(src string) (Diagram, error) {
 		return parseER(lines, title)
 	case "sequenceDiagram":
 		return parseSequence(lines, title)
+	case "pie":
+		return parsePie(lines, title)
 	}
 	if unsupportedTypes[kw] {
 		return nil, errf(UnsupportedType, head.no, "%s", kw)
@@ -41,7 +46,7 @@ func Parse(src string) (Diagram, error) {
 // engine does not draw.
 var unsupportedTypes = map[string]bool{
 	"stateDiagram": true, "stateDiagram-v2": true, "classDiagram": true, "classDiagram-v2": true,
-	"gantt": true, "pie": true, "mindmap": true, "journey": true, "gitGraph": true,
+	"gantt": true, "mindmap": true, "journey": true, "gitGraph": true,
 	"timeline": true, "quadrantChart": true, "requirementDiagram": true,
 	"C4Context": true, "C4Container": true, "C4Component": true, "C4Dynamic": true, "C4Deployment": true,
 	"xychart-beta": true, "xychart": true, "sankey-beta": true, "sankey": true,
