@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-29
+
 ### Added
 
 - `pie` (mermaid 12.0.0, `pie.langium`): `showData`, `title` (also on the
