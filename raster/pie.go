@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"unicode/utf8"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -99,7 +100,13 @@ func onCircle(c pt, r, a float64) pt {
 	return pt{c.X + r*math.Sin(a), c.Y - r*math.Cos(a)}
 }
 
-func layoutPie(p *mr.Pie, m measurer) (*pieLayout, error) {
+func layoutPie(p *mr.Pie, measure measurer) (*pieLayout, error) {
+	m := func(s string, bold bool) (float64, float64, error) {
+		if utf8.RuneCountInString(s) > MaxLabel {
+			return 0, 0, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: fmt.Sprintf("a label longer than %d characters", MaxLabel)}
+		}
+		return measure(s, bold)
+	}
 	pl := &pieLayout{c: pt{0, 0}}
 	kept, angle, pct := pieShares(p)
 	var left, right []int // outside labels by side, as indexes into wedges

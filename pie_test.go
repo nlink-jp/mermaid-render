@@ -89,6 +89,20 @@ slice "a" 1
 `},
 		{"a comment right after the keyword", "pie%%c\n\"a\" : 1", `slice "a" 1
 `},
+		{"accDescr's block over lines, on the header's line", "pie accDescr {\n  many\n  lines\n}\n\"a\" : 1", `slice "a" 1
+`},
+		{"accDescr with its brace on the next line", "pie\naccDescr\n{ x }\n\"a\" : 1", `slice "a" 1
+`},
+		{"entity codes in a label and the title", "pie title T #35;1\n\"a#amp;b\" : 1", `title "T #1"
+slice "a&b" 1
+`},
+		{"a bare title keeps the front matter's", "---\ntitle: Front\n---\npie\ntitle\n\"a\" : 1", `title "Front"
+slice "a" 1
+`},
+		{"JavaScript prints small numbers with an exponent", "pie showData\n\"a\" : 0.0000001\n\"b\" : 0.000001", `showData
+slice "a" 1e-7
+slice "b" 0.000001
+`},
 		{"accTitle and accDescr are ignored", "pie\naccTitle: x\naccDescr: y %% z\naccDescr {\n  many\n  lines\n}\n\"a\" : 1", `slice "a" 1
 `},
 	} {
@@ -113,6 +127,10 @@ func TestParsePieErrors(t *testing.T) {
 		{"a word glued to the keyword", "pie showDatax\n\"a\" : 1", SyntaxError, 1},
 		{"showData on a later line", "pie\nshowData", SyntaxError, 2},
 		{"an exponent", "pie\n\"a\" : 1e3", SyntaxError, 2},
+		{"text after an accDescr block", "pie\naccDescr {x} \"a\" : 1\n\"b\" : 2", SyntaxError, 2},
+		{"an item glued to showData", "pie showData\"a\" : 1", SyntaxError, 1},
+		{"a title glued to showData", "pie showDatatitle T", SyntaxError, 1},
+		{"an unclosed accDescr block", "pie\naccDescr {\n\"a\" : 1", SyntaxError, 2},
 		{"too many items", "pie\n" + strings.Repeat("\"x\" : 1\n", 1) + func() string {
 			var b strings.Builder
 			for i := range MaxSlices + 1 {

@@ -349,8 +349,9 @@ and gem-agent's `internal/diagram` (finding mermaid fences, text-art display).
 
 **Out of scope**:
 
-- Diagram types other than flowchart, sequence and ER (state is phase 2; class, gantt, pie,
-  mindmap, journey, gitGraph and others are not planned).
+- Diagram types other than flowchart, sequence, ER and those phase 2 adds (pie, state, gantt,
+  mindmap, by the operator's decision of 2026-09-29); class, journey, gitGraph and others are
+  not planned.
 - Themes, colour settings, applying style.
 - SVG output.
 - Images on sixel terminals or terminals without image support; these keep today's display.

@@ -13,9 +13,8 @@ import (
 // in the order Langium builds them — whitespace, then the keywords longest
 // first ("showData", "pie", ":"), then the terminals in grammar order — and
 // the first that matches is taken. AbstractMermaidTokenBuilder lets
-// nothing but a space, a line end or "%%" follow a keyword; with no name
-// terminal in this grammar that changes only which error a glued word
-// gets, so the keywords here are plain.
+// nothing but a space, a line end or "%%" follow a keyword ("pie
+// showDatatitle T" does not lex), checked after the match.
 var pieTokens = []struct {
 	kind string
 	re   *regexp.Regexp
@@ -49,6 +48,10 @@ func lexPie(s string, no int) ([]pieToken, error) {
 				continue
 			}
 			switch t.kind {
+			case "pie", "showData":
+				if rest := s[len(m):]; rest != "" && !strings.HasPrefix(rest, "%%") && rest[0] != ' ' && rest[0] != '\t' {
+					continue
+				}
 			case "number":
 				// (?!\.): a number followed by '.' is not this token.
 				if strings.HasPrefix(s[len(m):], ".") {
@@ -84,6 +87,10 @@ func firstRuneOrWord(s string) string {
 }
 
 func parsePie(lines []srcLine, front frontTitle) (*Pie, error) {
+	lines, err := joinAccDescr(lines)
+	if err != nil {
+		return nil, err
+	}
 	p := &Pie{title: front.text, titleLine: front.line}
 	seen := map[string]bool{}
 	sum := 0.0
@@ -111,9 +118,11 @@ func parsePie(lines []srcLine, front frontTitle) (*Pie, error) {
 			if len(toks) != 1 {
 				return nil, errf(SyntaxError, ln.no, "a title ends its line")
 			}
-			// titleRegex: title([\t ][^\n\r]*|), trimmed, runs of blanks as one.
-			v := strings.TrimSpace(strings.TrimPrefix(toks[0].text, "title"))
-			p.title, p.titleLine = collapseBlanks(v), ln.no
+			// titleRegex: title([\t ][^\n\r]*|), trimmed, runs of blanks as
+			// one; populateCommonDb sets only a title that is not empty.
+			if v := collapseBlanks(strings.TrimSpace(strings.TrimPrefix(toks[0].text, "title"))); v != "" {
+				p.title, p.titleLine = decodeEntitiesOnly(v), ln.no
+			}
 		case "accTitle", "accDescr":
 			if len(toks) != 1 {
 				return nil, errf(SyntaxError, ln.no, "%s ends its line", toks[0].kind)
@@ -143,7 +152,9 @@ func parsePie(lines []srcLine, front frontTitle) (*Pie, error) {
 			if math.IsInf(sum, 0) {
 				return nil, errf(UnsupportedConstruct, ln.no, "the values add up past what a number holds")
 			}
-			p.Slices = append(p.Slices, Slice{Label: svgText(label), Value: v, Text: jsNumber(v), Line: ln.no})
+			// encodeEntities runs on every diagram's source and the SVG is
+			// decoded (Diagram.fromText, mermaidAPI.ts): #amp; is &.
+			p.Slices = append(p.Slices, Slice{Label: svgText(decodeEntitiesOnly(label)), Value: v, Text: jsNumber(v), Line: ln.no})
 		default:
 			return nil, errf(SyntaxError, ln.no, "unexpected %q", toks[0].text)
 		}
@@ -211,16 +222,50 @@ func collapseBlanks(s string) string {
 
 var blanksRe = regexp.MustCompile(`[\t ]{2,}`)
 
-// jsNumber is a number as JavaScript's String() prints it, for the values
-// a pie accepts: shortest round-trip digits, no exponent below 1e21, and
-// -0 as "0".
+// jsNumber is a number as JavaScript's String() prints it: shortest
+// round-trip digits, an exponent from 1e21 up and below 1e-6 ("1e-7",
+// "1e+21", no leading zero in it), and -0 as "0".
 func jsNumber(v float64) string {
 	if v == 0 {
 		return "0"
 	}
-	if math.Abs(v) >= 1e21 {
-		s := strconv.FormatFloat(v, 'e', -1, 64) // 1e+21
+	if a := math.Abs(v); a >= 1e21 || a < 1e-6 {
+		s := strconv.FormatFloat(v, 'e', -1, 64) // 1e-07, 1e+21
+		s = strings.Replace(s, "e-0", "e-", 1)
 		return strings.Replace(s, "e+0", "e+", 1)
 	}
 	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// joinAccDescr puts an accDescr { ... } block that runs over lines back on
+// one line, as pie.langium's ACC_DESCR (\s*{[^}]*}) reads it across line
+// ends — "accDescr" alone with its brace on the next line too. Whatever
+// follows the closing brace stays on that line, where the grammar wants
+// its end.
+func joinAccDescr(lines []srcLine) ([]srcLine, error) {
+	var out []srcLine
+	for i := 0; i < len(lines); i++ {
+		ln := lines[i]
+		for {
+			j := strings.LastIndex(ln.text, "accDescr")
+			if j < 0 || strings.HasPrefix(strings.TrimLeft(ln.text[j+len("accDescr"):], " \t"), ":") {
+				break
+			}
+			tail := ln.text[j+len("accDescr"):]
+			open := strings.Index(tail, "{")
+			if open >= 0 && strings.Contains(tail[open:], "}") {
+				break // closed on this line
+			}
+			if open < 0 && strings.TrimSpace(tail) != "" {
+				break // not a block; the lexer says what it is
+			}
+			if i+1 >= len(lines) {
+				return nil, errf(SyntaxError, ln.no, "accDescr block is not closed with }")
+			}
+			i++
+			ln.text += "\n" + lines[i].text
+		}
+		out = append(out, ln)
+	}
+	return out, nil
 }

@@ -34,6 +34,10 @@ func Parse(src string) (Diagram, error) {
 	case "sequenceDiagram":
 		return parseSequence(lines, title)
 	case "pie":
+		// pie reads its accDescr blocks itself.
+		if lines, title, err = prepareLines(src, true); err != nil {
+			return nil, err
+		}
 		return parsePie(lines, title)
 	}
 	if unsupportedTypes[kw] {
@@ -94,6 +98,13 @@ type srcLine struct {
 // (keeping its title), comment and directive lines (%%, %%{...}%%), blank
 // lines, and accDescr { ... } blocks.
 func prepare(src string) ([]srcLine, frontTitle, error) {
+	return prepareLines(src, false)
+}
+
+// prepareLines is prepare; keepAccDescr leaves accDescr { ... } blocks in
+// place for a grammar that reads them itself (pie.langium's ACC_DESCR
+// spans lines and must end its line).
+func prepareLines(src string, keepAccDescr bool) ([]srcLine, frontTitle, error) {
 	src = strings.ReplaceAll(src, "\r\n", "\n")
 	src = strings.ReplaceAll(src, "\r", "\n") // a CR alone ends a line too
 	raw := strings.Split(src, "\n")
@@ -142,7 +153,7 @@ func prepare(src string) ([]srcLine, frontTitle, error) {
 		if t == "" || strings.HasPrefix(t, "%%") {
 			continue
 		}
-		if rest, ok := strings.CutPrefix(t, "accDescr"); ok && strings.HasPrefix(strings.TrimSpace(rest), "{") {
+		if rest, ok := strings.CutPrefix(t, "accDescr"); ok && !keepAccDescr && strings.HasPrefix(strings.TrimSpace(rest), "{") {
 			start := i
 			for !strings.Contains(raw[i], "}") {
 				i++

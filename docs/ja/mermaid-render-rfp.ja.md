@@ -300,8 +300,8 @@ click、subgraph の中の `direction`、`~~~`（見えない線。配置のた�
 
 **対象外**:
 
-- flowchart・sequence・ER 以外の図（state は第 2 段階。class、gantt、pie、mindmap、journey、
-  gitGraph などは予定しない）。
+- flowchart・sequence・ER と、第 2 段階で加えるもの（2026-09-29 の運用者の判断で pie・state・gantt・
+  mindmap）以外の図。class、journey、gitGraph などは予定しない。
 - テーマ、色の指定、style の反映。
 - SVG の出力。
 - sixel、および画像を出せない端末への画像表示。これらはいまの表示のまま。

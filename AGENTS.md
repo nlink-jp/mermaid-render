@@ -7,7 +7,7 @@ for gem-agent and lagent to show diagrams in the terminal through their
 `internal/termimg`. Module `github.com/nlink-jp/mermaid-render`. Two packages:
 `mermaidrender` (parse into drawing-independent diagram data) and `raster`
 (layout and drawing). Phase 1 covers flowchart / graph, sequenceDiagram and
-erDiagram. Dependency: `golang.org/x/image` only (declared exception to the
+erDiagram; phase 2 adds pie (done), stateDiagram, gantt and mindmap. Dependency: `golang.org/x/image` only (declared exception to the
 lib-series standard-library rule). The specification is
 `docs/en/mermaid-render-rfp.md` (ja: `docs/ja/mermaid-render-rfp.ja.md`).
 
@@ -60,7 +60,9 @@ mermaid-render/
 ## Gotchas
 
 - **`*.parse` goldens were read against their sources** before they were
-
+  frozen. `go test -run TestRealBlocks -update` rewrites them; read every
+  changed file against its `.mmd` before committing, or the golden only
+  proves the code agrees with itself.
 - **Since mermaid 11 some grammars are Langium, not jison** (pie now; more
   in `packages/parser/src/language/`). Chevrotain tries token types in the
   order Langium builds them — whitespace, keywords longest first, then
@@ -73,12 +75,9 @@ mermaid-render/
   (`pieShares`): items under 1% are removed before d3's pie, but the label
   still divides by the full sum. Keep both; a test picks values where they
   round differently.
-  frozen. `go test -run TestRealBlocks -update` rewrites them; read every
-  changed file against its `.mmd` before committing, or the golden only
-  proves the code agrees with itself.
 - **Layout properties are the correctness gate** (they replace the text-art
-  faithfulness checks of gem-agent ADR-0042). `flowFaults`, `erFaults` and
-  `seqFaults` in `raster/verify.go` are the list, run on every render
+  faithfulness checks of gem-agent ADR-0042). `flowFaults`, `erFaults`,
+  `seqFaults` and `pieFaults` in `raster/verify.go` are the list, run on every render
   (`LayoutFault`) and strictly by the tests. `strict` adds what is only a
   matter of looks (0.6 em spacing, 20° crossings, centring, frame
   crossings, label-to-bend room); a render must never refuse for those, and
