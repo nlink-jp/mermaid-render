@@ -14,9 +14,10 @@ to [Semantic Versioning](https://semver.org/).
   error. Drawn as pieRenderer draws it: slices in order, clockwise from
   twelve o'clock, items under 1% without a slice but in the legend,
   percentages of the whole rounded as `toFixed(0)`, `showData` values in the
-  legend. A percentage that does not fit inside its slice goes outside the
-  circle with a leader line, spaced so none overlap. Every render checks
-  the slices, the legend and the labels. At most 100 items.
+  legend. Every item's percentage also stands in a column at the legend's
+  right (`<1%` for an item with no slice), and a slice carries its
+  percentage only when it fits inside, so no text overlaps. Every render
+  checks the slices, the legend and the labels. At most 100 items.
 
 ## [0.1.0] - 2026-09-29
 

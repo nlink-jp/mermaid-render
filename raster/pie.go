@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"sort"
 	"strconv"
 	"unicode/utf8"
 
@@ -15,18 +14,21 @@ import (
 // written, clockwise from twelve o'clock; an item under 1% of the whole
 // gets no slice and the drawn slices share the circle; a slice's
 // percentage is of the whole total, rounded as toFixed(0) rounds; the
-// legend lists every item. What is this engine's: a percentage that does
-// not fit inside its slice goes outside the circle, spaced so none overlap
-// (mermaid lets them overlap), and the colours.
+// legend lists every item. What is this engine's (the operator's decision
+// of 2026-09-29): every item's percentage also stands in a column at the
+// legend's right — "<1%" for an item with no slice — and a slice carries
+// its percentage only when the text fits inside it. mermaid writes every
+// percentage on its slice, where thin slices' labels overlap until none
+// can be read; leader lines to labels outside the circle, tried first,
+// crossed and ran through the circle once slices were many.
 
 const (
 	pieR        = 6.0  // em, the circle's radius
 	pieText     = 0.75 // mermaid's textPosition: where a percentage sits, as a share of the radius
-	pieOut      = 0.5  // em, from the circle to an outside label
-	pieGap      = 0.2  // em, between stacked outside labels
-	pieLegendGo = 1.6  // em, from the pie's right edge to the legend
+	pieLegendGo = 1.6  // em, from the circle to the legend
 	pieSwatch   = 0.9  // em, a legend swatch's side
 	pieRowGap   = 0.45 // em, between legend rows
+	piePctGap   = 1.2  // em, from the longest legend label to the percentage column
 )
 
 // piePalette is twelve colours for a white card, assigned in item order and
@@ -41,9 +43,8 @@ type pieWedge struct {
 	item   int     // index in the diagram's slices
 	a0, a1 float64 // radians clockwise from twelve o'clock
 	pct    string  // "45%"
-	box    rect    // the percentage's text box
-	inside bool
-	leader []pt // from the circle to an outside label
+	box    rect    // the percentage's text box, when inside
+	inside bool    // the percentage is written on the slice
 }
 
 type pieRow struct {
@@ -51,6 +52,8 @@ type pieRow struct {
 	swatch rect
 	text   string
 	box    rect
+	pct    string // "48%", "<1%", or "" when the total is zero
+	pctBox rect
 }
 
 type pieLayout struct {
@@ -63,10 +66,7 @@ type pieLayout struct {
 // pieShares is pieRenderer's arithmetic: which items get a slice, the
 // share of the circle each gets, and the percentage it shows.
 func pieShares(p *mr.Pie) (kept []int, angle []float64, pct []string) {
-	sum := 0.0
-	for _, s := range p.Slices {
-		sum += s.Value
-	}
+	sum := pieSum(p)
 	keptSum := 0.0
 	for i, s := range p.Slices {
 		if s.Value/sum*100 >= 1 { // createPieArcs: values under 1% are removed
@@ -82,6 +82,29 @@ func pieShares(p *mr.Pie) (kept []int, angle []float64, pct []string) {
 	}
 	angle = append(angle, a)
 	return kept, angle, pct
+}
+
+func pieSum(p *mr.Pie) float64 {
+	sum := 0.0
+	for _, s := range p.Slices {
+		sum += s.Value
+	}
+	return sum
+}
+
+// legendPct is an item's percentage in the legend column: the slice's own,
+// "<1%" for an item under 1% (it has no slice), nothing when the total is
+// zero and no share exists.
+func legendPct(p *mr.Pie, i int) string {
+	sum := pieSum(p)
+	if !(sum > 0) {
+		return ""
+	}
+	x := p.Slices[i].Value / sum * 100
+	if x >= 1 {
+		return toFixed0(x) + "%"
+	}
+	return "<1%"
 }
 
 // toFixed0 is JavaScript's toFixed(0) for a non-negative finite x: the
@@ -109,78 +132,29 @@ func layoutPie(p *mr.Pie, measure measurer) (*pieLayout, error) {
 	}
 	pl := &pieLayout{c: pt{0, 0}}
 	kept, angle, pct := pieShares(p)
-	var left, right []int // outside labels by side, as indexes into wedges
 	for k, i := range kept {
 		w := pieWedge{item: i, a0: angle[k], a1: angle[k+1], pct: pct[k]}
 		tw, th, err := m(w.pct, false)
 		if err != nil {
 			return nil, glyphErr(err, p.Slices[i].Line)
 		}
-		mid := (w.a0 + w.a1) / 2
-		at := onCircle(pl.c, pieR*pieText, mid)
-		w.box = rect{at.X - tw/2, at.Y - th/2, at.X + tw/2, at.Y + th/2}
-		if len(kept) == 1 || inWedge(w.box, pl.c, pieR, w.a0, w.a1) {
-			w.inside = true
-		} else {
-			edge := onCircle(pl.c, pieR+pieOut, mid)
-			if math.Sin(mid) >= 0 {
-				w.box = rect{edge.X, edge.Y - th/2, edge.X + tw, edge.Y + th/2}
-				right = append(right, len(pl.wedges))
-			} else {
-				w.box = rect{edge.X - tw, edge.Y - th/2, edge.X, edge.Y + th/2}
-				left = append(left, len(pl.wedges))
-			}
+		at := onCircle(pl.c, pieR*pieText, (w.a0+w.a1)/2)
+		if len(kept) == 1 {
+			at = pl.c // a full circle: its percentage at the centre
 		}
+		w.box = rect{at.X - tw/2, at.Y - th/2, at.X + tw/2, at.Y + th/2}
+		w.inside = len(kept) == 1 || inWedge(w.box, pl.c, pieR, w.a0, w.a1)
 		pl.wedges = append(pl.wedges, w)
 	}
-	// Outside labels on each side stack top to bottom without touching:
-	// each is pushed down below the one above it, then the run is pulled
-	// up as a whole if it hangs below its last anchor.
-	for _, side := range [][]int{left, right} {
-		sort.SliceStable(side, func(a, b int) bool { return pl.wedges[side[a]].box.Y0 < pl.wedges[side[b]].box.Y0 })
-		for j := 1; j < len(side); j++ {
-			prev, cur := &pl.wedges[side[j-1]], &pl.wedges[side[j]]
-			if d := prev.box.Y1 + pieGap - cur.box.Y0; d > 0 {
-				cur.box.Y0 += d
-				cur.box.Y1 += d
-			}
-		}
-		for _, j := range side {
-			w := &pl.wedges[j]
-			mid := (w.a0 + w.a1) / 2
-			// Near twelve and six o'clock, and once pushed down, a box
-			// beside its anchor can reach into the circle: move it out
-			// sideways until it keeps pieOut from the circle.
-			dir := 1.0
-			if math.Sin(mid) < 0 {
-				dir = -1
-			}
-			for rectMeetsCircle(w.box, pl.c, pieR+pieOut) {
-				w.box.X0 += dir * 0.1
-				w.box.X1 += dir * 0.1
-			}
-			from := onCircle(pl.c, pieR, mid)
-			to := pt{w.box.X0, w.box.Center().Y}
-			if math.Sin(mid) < 0 {
-				to.X = w.box.X1
-			}
-			w.leader = []pt{from, to}
-		}
-	}
-	// The legend: right of the circle and of any label outside it.
+	// The legend, right of the circle: swatch, label, and the percentage
+	// column right-aligned beyond the longest label.
 	x0 := pl.c.X + pieR + pieLegendGo
-	for _, w := range pl.wedges {
-		if !w.inside {
-			x0 = math.Max(x0, w.box.X1+pieLegendGo)
-		}
-	}
 	type row struct {
-		text   string
-		tw, th float64
-		item   int
+		text, pct      string
+		tw, th, pw, ph float64
 	}
-	var rows []row
-	total := 0.0
+	rows := make([]row, len(p.Slices))
+	total, textMax, pctMax := 0.0, 0.0, 0.0
 	for i, s := range p.Slices {
 		text := s.Label
 		if p.ShowData {
@@ -190,16 +164,29 @@ func layoutPie(p *mr.Pie, measure measurer) (*pieLayout, error) {
 		if err != nil {
 			return nil, glyphErr(err, s.Line)
 		}
-		rows = append(rows, row{text, tw, th, i})
-		total += math.Max(th, pieSwatch) + pieRowGap
+		r := row{text: text, pct: legendPct(p, i), tw: tw, th: th}
+		if r.pct != "" {
+			if r.pw, r.ph, err = m(r.pct, false); err != nil {
+				return nil, glyphErr(err, s.Line)
+			}
+		}
+		rows[i] = r
+		textMax, pctMax = math.Max(textMax, tw), math.Max(pctMax, r.pw)
+		total += math.Max(math.Max(th, r.ph), pieSwatch) + pieRowGap
 	}
+	tx := x0 + pieSwatch + 0.4
+	pctRight := tx + textMax + piePctGap + pctMax
 	y := pl.c.Y - total/2 + pieRowGap/2
-	for _, r := range rows {
-		h := math.Max(r.th, pieSwatch)
+	for i, r := range rows {
+		h := math.Max(math.Max(r.th, r.ph), pieSwatch)
 		cy := y + h/2
-		sw := rect{x0, cy - pieSwatch/2, x0 + pieSwatch, cy + pieSwatch/2}
-		tx := sw.X1 + 0.4
-		pl.legend = append(pl.legend, pieRow{item: r.item, swatch: sw, text: r.text, box: rect{tx, cy - r.th/2, tx + r.tw, cy + r.th/2}})
+		row := pieRow{item: i, text: r.text, pct: r.pct,
+			swatch: rect{x0, cy - pieSwatch/2, x0 + pieSwatch, cy + pieSwatch/2},
+			box:    rect{tx, cy - r.th/2, tx + r.tw, cy + r.th/2}}
+		if r.pct != "" {
+			row.pctBox = rect{pctRight - r.pw, cy - r.ph/2, pctRight, cy + r.ph/2}
+		}
+		pl.legend = append(pl.legend, row)
 		y += h + pieRowGap
 	}
 	// Bounds: shift everything to start at 0.
@@ -207,12 +194,12 @@ func layoutPie(p *mr.Pie, measure measurer) (*pieLayout, error) {
 	grow := func(r rect) {
 		minX, minY, maxX, maxY = math.Min(minX, r.X0), math.Min(minY, r.Y0), math.Max(maxX, r.X1), math.Max(maxY, r.Y1)
 	}
-	for _, w := range pl.wedges {
-		grow(w.box)
-	}
 	for _, r := range pl.legend {
 		grow(r.swatch)
 		grow(r.box)
+		if r.pct != "" {
+			grow(r.pctBox)
+		}
 	}
 	pl.shift(-minX, -minY)
 	pl.W, pl.H = maxX-minX, maxY-minY
@@ -223,20 +210,20 @@ func (pl *pieLayout) shift(dx, dy float64) {
 	mv := func(r rect) rect { return rect{r.X0 + dx, r.Y0 + dy, r.X1 + dx, r.Y1 + dy} }
 	pl.c = pt{pl.c.X + dx, pl.c.Y + dy}
 	for i := range pl.wedges {
-		w := &pl.wedges[i]
-		w.box = mv(w.box)
-		for j := range w.leader {
-			w.leader[j] = pt{w.leader[j].X + dx, w.leader[j].Y + dy}
-		}
+		pl.wedges[i].box = mv(pl.wedges[i].box)
 	}
 	for i := range pl.legend {
-		pl.legend[i].swatch = mv(pl.legend[i].swatch)
-		pl.legend[i].box = mv(pl.legend[i].box)
+		r := &pl.legend[i]
+		r.swatch, r.box, r.pctBox = mv(r.swatch), mv(r.box), mv(r.pctBox)
 	}
 }
 
 // inWedge reports whether r lies inside the circle of radius rad around c
-// and between the angles a0 and a1, with a little room from each edge.
+// and between the angles a0 and a1, with a little room from each edge. It
+// tests the corners, which is enough for a wedge up to half the circle; a
+// wider one's notch could fall between corners, and a box there is not
+// asked about: a percentage sits at 0.75 R on its wedge's middle, opposite
+// the notch.
 func inWedge(r rect, c pt, rad, a0, a1 float64) bool {
 	const margin = 0.15
 	for _, p := range []pt{{r.X0, r.Y0}, {r.X1, r.Y0}, {r.X1, r.Y1}, {r.X0, r.Y1}} {
@@ -301,25 +288,35 @@ func (c *canvas) drawPie(p *mr.Pie, pl *pieLayout, fn *Font) error {
 	}
 	circle := arcPoints(pl.c, pieR, 0, 2*math.Pi)[1:]
 	c.polyline(append(circle, circle[0]), lineW, false, colEdge)
+	text := func(r rect, s string, col color.RGBA, line int) error {
+		ctr := r.Center()
+		if err := fn.drawText(c.img, (ctr.X+c.offX)*c.em, (ctr.Y+c.offY)*c.em, s, false, c.em, col); err != nil {
+			return glyphErr(err, line)
+		}
+		return nil
+	}
 	for _, w := range pl.wedges {
-		col := colText
-		if w.inside {
-			col = textOn(colorOf(w.item))
-		} else {
-			c.polyline(w.leader, lineW, false, colEdge)
+		if !w.inside {
+			continue
 		}
-		ctr := w.box.Center()
-		if err := fn.drawText(c.img, (ctr.X+c.offX)*c.em, (ctr.Y+c.offY)*c.em, w.pct, false, c.em, col); err != nil {
-			return glyphErr(err, p.Slices[w.item].Line)
+		if err := text(w.box, w.pct, textOn(colorOf(w.item)), p.Slices[w.item].Line); err != nil {
+			return err
 		}
+		c.tracef("pct %d %s", w.item, w.pct)
 	}
 	for _, r := range pl.legend {
 		c.outlineShape([]pt{{r.swatch.X0, r.swatch.Y0}, {r.swatch.X1, r.swatch.Y0}, {r.swatch.X1, r.swatch.Y1}, {r.swatch.X0, r.swatch.Y1}}, colorOf(r.item), colEdge, lineW*0.6, false)
-		ctr := r.box.Center()
-		if err := fn.drawText(c.img, (ctr.X+c.offX)*c.em, (ctr.Y+c.offY)*c.em, r.text, false, c.em, colText); err != nil {
-			return glyphErr(err, p.Slices[r.item].Line)
+		if err := text(r.box, r.text, colText, p.Slices[r.item].Line); err != nil {
+			return err
 		}
-		c.tracef("legend %d %s", r.item, r.text)
+		drawn := ""
+		if r.pct != "" {
+			if err := text(r.pctBox, r.pct, colText, p.Slices[r.item].Line); err != nil {
+				return err
+			}
+			drawn = r.pct
+		}
+		c.tracef("legend %d %s | %s", r.item, r.text, drawn)
 	}
 	return nil
 }

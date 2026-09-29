@@ -811,9 +811,9 @@ func (g *grid) near(r rect, pad float64) []int {
 
 // pieFaults checks a pie chart's layout: the slices are the items over 1%,
 // in order, together a full turn with none empty; the legend names every
-// item in order; no text lies over another, over the legend or outside the
-// picture; a percentage inside the circle lies inside its own slice, one
-// outside lies clear of the circle; the legend is clear of the circle.
+// item in order with its percentage ("<1%" for one with no slice); no text
+// lies over another or outside the picture; a percentage written on a slice
+// lies inside that slice; the legend is clear of the circle.
 // Every check is about a wrong picture, so there is no strict reading.
 func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 	var out faults
@@ -840,6 +840,8 @@ func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 	for i, r := range pl.legend {
 		if r.item != i {
 			out.add("legend row %d is item %d", i, r.item)
+		} else if want := legendPct(p, i); r.pct != want {
+			out.add("legend row %d shows %q, want %q", i, r.pct, want)
 		}
 	}
 	all := rect{-eps, -eps, pl.W + eps, pl.H + eps}
@@ -847,18 +849,26 @@ func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 	var texts []rect
 	var what []string
 	for _, w := range pl.wedges {
+		if !w.inside {
+			continue
+		}
 		texts, what = append(texts, w.box), append(what, "the percentage of "+p.Slices[w.item].Label)
-		switch {
-		case w.inside && len(pl.wedges) > 1 && !inWedge(w.box, pl.c, pieR, w.a0, w.a1):
+		if len(pl.wedges) > 1 && !inWedge(w.box, pl.c, pieR, w.a0, w.a1) {
 			out.add("the percentage of %q is not inside its slice", p.Slices[w.item].Label)
-		case !w.inside && rectMeetsCircle(w.box, pl.c, pieR):
-			out.add("the percentage of %q lies over the circle", p.Slices[w.item].Label)
 		}
 	}
 	for _, r := range pl.legend {
+		parts := []rect{r.swatch, r.box}
 		texts, what = append(texts, r.box, r.swatch), append(what, "legend "+r.text, "the swatch of "+r.text)
-		if rectMeetsCircle(r.swatch, pl.c, pieR) || rectMeetsCircle(r.box, pl.c, pieR) || r.box.overlaps(circle) && r.box.X0 < pl.c.X {
-			out.add("legend row %q lies over the circle", r.text)
+		if r.pct != "" {
+			parts = append(parts, r.pctBox)
+			texts, what = append(texts, r.pctBox), append(what, "the legend percentage of "+r.text)
+		}
+		for _, b := range parts {
+			if rectMeetsCircle(b, pl.c, pieR) || b.overlaps(circle) && b.X0 < pl.c.X {
+				out.add("legend row %q lies over the circle", r.text)
+				break
+			}
 		}
 	}
 	for i, a := range texts {

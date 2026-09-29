@@ -243,8 +243,10 @@ lexical rules are ported from those.
   colours are assigned in item order and repeat (the colours themselves chosen for this engine's
   white card).
 - **Decided here**: mermaid lets the percentages of thin slices overlap their neighbours until they
-  cannot be read. This engine treats overlapping text as wrong, so a percentage that does not fit
-  inside its slice is placed outside the circle, spaced so none overlap.
+  cannot be read. This engine treats overlapping text as wrong: every item's percentage stands in a
+  column at the legend's right, right-aligned (`<1%` for an item with no slice, nothing when the
+  total is 0), and a slice carries its percentage only when the text fits inside it (the
+  operator's decision of 2026-09-29; see the Discussion Log).
 - Limits: 100 items; a total that is not finite is an unsupported construct.
 
 ### Layout specification
@@ -744,6 +746,15 @@ same way as pathguard.
     circle (outside labels are now pushed out sideways until clear). All 10 mutants are caught (2
     slipped at first and the tests were fixed). Visual review (reviews-pie1): the 7 sheets — 1 real,
     2 documentation examples, 4 made for the check — all ○ on all four items.
+  - **Pre-release independent review of pie (2026-09-29)**: fixed — an `accDescr { … }` block
+    over several lines, keywords glued to what follows (`pie showDatatitle`) accepted, entities in
+    labels and the title not decoded, numbers under 1e-6 printed unlike JavaScript, a bare `title`
+    line, and the label length limit. The leader lines of outside labels crossed each other and ran
+    through the circle once slices were many; asked for a choice, the operator moved every
+    percentage into a legend column instead of adjusting the leaders, since no placement of many
+    thin slices' labels keeps leaders apart without growing the picture. 15 mutants, all caught.
+    Left as rare differences: a quoted label over several lines, trimming of NBSP / U+3000, a YAML
+    block in the body.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

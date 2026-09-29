@@ -26,9 +26,11 @@ diagram type".
 A pie chart is drawn as mermaid draws it — slices in the order written,
 clockwise from twelve o'clock; an item under 1% of the whole gets no slice
 but keeps its legend row; a slice shows its share of the whole, rounded as
-`toFixed(0)`; `showData` adds each value to the legend. One difference: a
-percentage that does not fit inside its slice goes outside the circle with a
-leader line, spaced so no two overlap (mermaid lets them overlap).
+`toFixed(0)`; `showData` adds each value to the legend. One difference: every
+item's percentage also stands in a column at the legend's right (`<1%` for an
+item with no slice), and a slice carries its percentage only when it fits
+inside (mermaid writes every one on its slice, where thin slices' labels
+overlap).
 
 ## API
 

@@ -31,27 +31,6 @@ func checkPie(t *testing.T, name string, p *mr.Pie, pl *pieLayout) {
 	for _, f := range pieFaults(p, pl) {
 		t.Errorf("%s: %s", name, f)
 	}
-	// A matter of looks, so the tests' alone: the labels outside the
-	// circle keep their slices' order down each side, so leaders do not
-	// cross — clockwise on the right, counter-clockwise on the left.
-	var prevR, prevL *pieWedge
-	for i := range pl.wedges {
-		w := &pl.wedges[i]
-		if w.inside {
-			continue
-		}
-		if math.Sin((w.a0+w.a1)/2) >= 0 {
-			if prevR != nil && w.box.Y0 < prevR.box.Y0 {
-				t.Errorf("%s: outside labels on the right are out of order", name)
-			}
-			prevR = w
-		} else {
-			if prevL != nil && w.box.Y0 > prevL.box.Y0 {
-				t.Errorf("%s: outside labels on the left are out of order", name)
-			}
-			prevL = w
-		}
-	}
 }
 
 // pieRenderer's arithmetic: items under 1% get no slice, the drawn slices
@@ -120,7 +99,8 @@ func TestPieLayoutRandom(t *testing.T) {
 }
 
 // What is drawn is what the source says: one slice per item over 1%, in
-// order, and one legend row per item, with showData's values.
+// order, and one legend row per item, with showData's values and its
+// percentage of the whole — "<1%" for the item with no slice.
 func TestPieDrawn(t *testing.T) {
 	fn := systemFont(t)
 	d, err := mr.Parse("pie showData\n\"犬\" : 386\n\"猫\" : 85\n\"鼠\" : 0.5\n\"兎\" : 15")
@@ -143,7 +123,7 @@ func TestPieDrawn(t *testing.T) {
 	if fmt.Sprint(slices) != "[0 1 3]" {
 		t.Errorf("slices drawn for items %v, want [0 1 3] (item 2 is under 1%%)", slices)
 	}
-	if want := "[犬 [386] 猫 [85] 鼠 [0.5] 兎 [15]]"; fmt.Sprint(legend) != want {
+	if want := "[犬 [386] | 79% 猫 [85] | 17% 鼠 [0.5] | <1% 兎 [15] | 3%]"; fmt.Sprint(legend) != want {
 		t.Errorf("legend %v, want %s", legend, want)
 	}
 }
@@ -155,8 +135,19 @@ func TestRenderRefusesPieFaults(t *testing.T) {
 		"a slice missing":      func(pl *pieLayout) { pl.wedges = pl.wedges[1:] },
 		"a legend row missing": func(pl *pieLayout) { pl.legend = pl.legend[1:] },
 		"a label on another":   func(pl *pieLayout) { pl.legend[1].box = pl.legend[0].box },
+		"a wrong percentage":   func(pl *pieLayout) { pl.legend[2].pct = "9%" },
+		"a percentage on another": func(pl *pieLayout) {
+			pl.legend[1].pctBox = pl.legend[0].pctBox
+		},
+		"a legend over the circle": func(pl *pieLayout) {
+			r := &pl.legend[0].pctBox
+			*r = rect{pl.c.X, pl.c.Y, pl.c.X + r.X1 - r.X0, pl.c.Y + r.Y1 - r.Y0}
+		},
 		"a label off its slice": func(pl *pieLayout) {
-			pl.wedges[0].box = pl.wedges[1].box
+			// At the centre, on every slice's edge and over no other text.
+			b := pl.wedges[0].box
+			w, h := (b.X1-b.X0)/2, (b.Y1-b.Y0)/2
+			pl.wedges[0].box = rect{pl.c.X - w, pl.c.Y - h, pl.c.X + w, pl.c.Y + h}
 		},
 	} {
 		d, _ := mr.Parse("pie\n\"a\" : 60\n\"b\" : 30\n\"c\" : 10")

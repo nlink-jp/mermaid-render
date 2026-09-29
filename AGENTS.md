@@ -41,7 +41,7 @@ mermaid-render/
 ├── raster/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
 │   ├── seq.go        # sequence: columns from pairwise needs, events stacked, drawing
-│   ├── pie.go        # pie: pieRenderer's shares, labels inside or outside, legend, drawing
+│   ├── pie.go        # pie: pieRenderer's shares, labels inside when they fit, legend with a % column, drawing
 │   ├── doc.go        # package raster
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, missingGlyphError
 │   ├── fontload.go   # FontSpec, LoadFont, name-table reader (every language)
