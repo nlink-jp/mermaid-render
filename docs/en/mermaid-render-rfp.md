@@ -579,6 +579,54 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
 - **sequence**: participants are lined up across and messages stacked down. A message to self
   folds back to the right.
 
+### Text art (phase 2e)
+
+Terminals that cannot draw images get the diagram as text in box-drawing characters. Today
+gem-agent draws it with `mermaid-ascii` (community code) behind a table rewriting mermaid into
+its grammar and two guards (every label present, one arrowhead per edge). This engine replaces
+it (the operator's decisions of 2026-09-30):
+
+- **Scope**: flowchart / graph, sequenceDiagram, erDiagram — the three types the art draws today.
+  Pie, state, gantt and mindmap stay source on those terminals. lagent, which shows the source
+  there (lagent ADR-0025), gains the same art.
+- **API**: package `text`: `text.Render(d Diagram, opts text.Options) (string, error)` and
+  `text.RenderSource(src, opts)`. The diagram data is `Parse`'s, the same as the picture's, so
+  the art can no longer misread what the picture reads. Errors are the same three kinds plus
+  `LayoutFault`; the caller shows the source for all.
+- **Cell widths**: `Options.Width func(r rune) int` gives the columns a character takes; the
+  caller passes the measure its terminal code uses, so the art and the rest of the screen agree.
+  The default is Unicode East Asian Width (`golang.org/x/text/width`, already required through
+  `x/image`): wide and fullwidth 2, combining and zero-width 0, others 1. Labels of any script are
+  drawn, sequence labels included (the art refuses non-ASCII sequence labels today). A terminal
+  set to draw East Asian ambiguous characters double-width misaligns box drawing (U+2500–257F is
+  ambiguous); that cannot be detected without a query, so it is a stated limit, as today.
+- **Glyphs**: boxes in `┌─┐│└┘`; a node's corners tell its shape's family — `╭╮╰╯` for round,
+  stadium, circle and double circle, `◇` for rhombus and hexagon (decisions), `┌┐└┘` for the rest.
+  Links in `─│` with corners; `┄┆` dotted, `━┃` thick; heads `►◄▲▼`, `○` and `×` ends; where
+  lines meet, `┼├┤┬┴`. Subgraph frames with their title on the top border. ER entities as
+  tables (name, then a row per attribute), cardinality at each end in two cells: `├┤` exactly
+  one, `○┤` zero or one, `├<` one or more, `○<` zero or more (mirrored per side), a dotted line
+  for a non-identifying relationship. Sequence: participant boxes, `┆` lifelines, messages as
+  arrows with their text above, `┄` for the dashed kinds, notes as boxes, blocks as frames with
+  their kind and label, activations as `║` on the lifeline.
+- **Layout**: flowchart and ER run the layered layout the picture uses (the same crossing
+  reduction and alignment rules the operator's review settled), in grid units: one unit is one
+  row down and two columns across (a terminal cell is about twice as tall as wide), with every
+  spacing a whole number of cells, and the result snapped to the grid. Sequence has a column
+  layout of its own, like the picture's.
+- **Checked on every render**, on the grid, as the picture's properties are: every node's box
+  drawn once with its whole label inside; no two boxes overlap; each link a connected path of
+  line cells from its source's box to its target's, touching no other box, sharing no cell run
+  with another link except where fans meet; one head per arrowed end, next to its box; every
+  label present, clear of lines and boxes; frames holding their members; ER markers at their
+  own ends; sequence messages in order, each from its sender's lifeline to its receiver's.
+  A failure is `LayoutFault`, and the caller shows the source. Never refused for width: art wider
+  than the terminal wraps there and taller scrolls (gem-agent ADR-0063); a cap of 400 columns ×
+  2,000 rows bounds time and memory.
+- **Integration**: gem-agent drops `mermaid-ascii`, its rewrite table and its two guards, and
+  hands the fence to this engine (an ADR amending ADR-0042 / ADR-0063). The art still bypasses
+  the Markdown renderer. lagent adds the art lane the same way (an ADR amending ADR-0025).
+
 ### Configuration
 
 The library has no configuration file and no environment variables. Settings such as the font
@@ -709,7 +757,8 @@ tests, a visual review and an independent review.
   looks different, and which node is whose child is the same)
 - 2e. Replace the text-art renderer with an in-house one and remove `mermaid-ascii` from gem-agent
   (the binary shrinks by about 4.3MB net), after the four types — terminals that draw pictures
-  do not use the art, so it is not urgent
+  do not use the art, so it is not urgent. Specified under "Text art (phase 2e)" above: the three
+  types the art draws today, and lagent gains it too (the operator's decisions of 2026-09-30)
 
 ### Phase 3: Release
 
