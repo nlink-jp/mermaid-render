@@ -45,6 +45,7 @@ mermaid-render/
 │   ├── er.go         # ER: table sizes, layout with marker spacing, markers, tables
 │   ├── seq.go        # sequence: columns from pairwise needs, events stacked, drawing
 │   ├── pie.go        # pie: pieRenderer's shares, labels inside when they fit, legend with a % column, drawing
+│   ├── state.go      # state: scopes laid out innermost first on layoutGraph, composites as frames, drawing
 │   ├── doc.go        # package raster
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, missingGlyphError
 │   ├── fontload.go   # FontSpec, LoadFont, name-table reader (every language)
@@ -81,13 +82,20 @@ mermaid-render/
   grammar found eleven wrong claims; the comparison found one more. A rule's
   `need` prefilter looks at the current line only: never give it to a rule
   whose match can cross a line end (`\s+` does).
+- **A state diagram's small shapes found edges of the flowchart layout.**
+  Start and end circles are sized up front for their links (`spreads` lets
+  them use 0.8 of a face, not the circle's 0.4) — the layout widens only
+  across, which made ellipses; a fork bar is a port gap thick, since link
+  ends on its two faces must be that far apart; and a port snap now stays
+  within 0.9 of its node's half-width (seed 3987: the snap missed a 1.15 em
+  circle). Run `-staterandom 20000` after any change to either layout.
 - **A pie's percentages are of the whole, its angles of the drawn slices**
   (`pieShares`): items under 1% are removed before d3's pie, but the label
   still divides by the full sum. Keep both; a test picks values where they
   round differently.
 - **Layout properties are the correctness gate** (they replace the text-art
   faithfulness checks of gem-agent ADR-0042). `flowFaults`, `erFaults`,
-  `seqFaults` and `pieFaults` in `raster/verify.go` are the list, run on every render
+  `seqFaults`, `pieFaults` and `stateFaults` in `raster/verify.go` are the list, run on every render
   (`LayoutFault`) and strictly by the tests. `strict` adds what is only a
   matter of looks (0.6 em spacing, 20° crossings, centring, frame
   crossings, label-to-bend room); a render must never refuse for those, and

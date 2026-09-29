@@ -172,6 +172,9 @@ type layouter struct {
 	// faceSpread, when set, is the share of every node face its link ends
 	// may use (ER tables); else each shape's own (portSpreadOf).
 	faceSpread float64
+	// spreads, when set, overrides that share node by node (0: the
+	// default): a state's start and end circles use their whole face.
+	spreads []float64
 	// labelRoom is the least room between a link's label and a bend in
 	// the gap below it.
 	labelRoom float64

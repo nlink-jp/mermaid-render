@@ -58,6 +58,8 @@ type probe struct {
 	corrupt func(lay *flowLayout, seq *seqLayout)
 	// corruptPie is corrupt for a pie chart's layout.
 	corruptPie func(pl *pieLayout)
+	// corruptState is corrupt for a state diagram's layout.
+	corruptState func(sl *stateLayout)
 }
 
 // render is Render with a probe.
@@ -83,6 +85,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		er        *erLayout
 		seq       *seqLayout
 		pie       *pieLayout
+		st        *stateLayout
 		nodeLines []int
 		title     string
 		titleLine int
@@ -121,6 +124,13 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		}
 		lay = &flowLayout{W: pie.W, H: pie.H}
 		title, titleLine = d.Title(), d.TitleLine()
+	case *mr.StateDiagram:
+		var err error
+		if st, err = layoutState(d, fn.measureEm); err != nil {
+			return nil, err
+		}
+		lay = &flowLayout{W: st.W, H: st.H}
+		title, titleLine = d.Title(), d.TitleLine()
 	default:
 		return nil, &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("%T", d)}
 	}
@@ -146,7 +156,10 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	if pr.corruptPie != nil && pie != nil {
 		pr.corruptPie(pie)
 	}
-	if fs := verify(d, lay, er, seq, pie, fn.measureEm); len(fs) > 0 {
+	if pr.corruptState != nil && st != nil {
+		pr.corruptState(st)
+	}
+	if fs := verify(d, lay, er, seq, pie, st, fn.measureEm); len(fs) > 0 {
 		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fs[0]}
 	}
 	img := image.NewRGBA(image.Rect(0, 0, wPx, hPx))
@@ -164,6 +177,12 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	}
 	if pie != nil {
 		if err := c.drawPie(d.(*mr.Pie), pie, fn); err != nil {
+			return nil, err
+		}
+		return img, nil
+	}
+	if st != nil {
+		if err := c.drawState(st, fn); err != nil {
 			return nil, err
 		}
 		return img, nil

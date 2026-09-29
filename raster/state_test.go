@@ -1,0 +1,401 @@
+package raster
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"math"
+	"math/rand"
+	"strings"
+	"testing"
+
+	mr "github.com/nlink-jp/mermaid-render"
+)
+
+func stateOf(t *testing.T, src string) (*mr.StateDiagram, *stateLayout) {
+	t.Helper()
+	d, err := mr.Parse(src)
+	if err != nil {
+		t.Fatalf("parse: %v\n%s", err, src)
+	}
+	sd := d.(*mr.StateDiagram)
+	sl, err := layoutState(sd, fakeMeasure)
+	if err != nil {
+		t.Fatalf("layout: %v\n%s", err, src)
+	}
+	return sd, sl
+}
+
+// checkState holds the strict reading (frame crossings counted) and the
+// render's reading, which must find nothing.
+func checkState(t *testing.T, name string, d *mr.StateDiagram, sl *stateLayout, crossed *int) {
+	t.Helper()
+	for _, f := range stateFaults(d, sl, fakeMeasure, true, crossed) {
+		t.Errorf("%s: %s", name, f)
+	}
+	for _, f := range stateFaults(d, sl, fakeMeasure, false, nil) {
+		t.Errorf("%s: a render would refuse: %s", name, f)
+	}
+}
+
+var stateCases = map[string]string{
+	"the documentation's first": `stateDiagram-v2
+    [*] --> Still
+    Still --> [*]
+    Still --> Moving
+    Moving --> Still
+    Moving --> Crash
+    Crash --> [*]`,
+	"composites and transitions between them": `stateDiagram-v2
+    [*] --> First
+    First --> Second
+    First --> Third
+    state First {
+        [*] --> fir
+        fir --> [*]
+    }
+    state Second {
+        [*] --> sec
+        sec --> [*]
+    }
+    state Third {
+        [*] --> thi
+        thi --> [*]
+    }`,
+	"deep nesting": `stateDiagram-v2
+    [*] --> First
+    state First {
+        [*] --> Second
+        state Second {
+            [*] --> second
+            second --> Third
+            state Third {
+                [*] --> third
+                third --> [*]
+            }
+        }
+    }`,
+	"fork and join": `stateDiagram-v2
+    state fork_state <<fork>>
+    [*] --> fork_state
+    fork_state --> State2
+    fork_state --> State3
+    state join_state <<join>>
+    State2 --> join_state
+    State3 --> join_state
+    join_state --> State4
+    State4 --> [*]`,
+	"fork across LR": `stateDiagram-v2
+    direction LR
+    state f <<fork>>
+    [*] --> f
+    f --> a
+    f --> b
+    f --> c`,
+	"choice": `stateDiagram-v2
+    state if_state <<choice>>
+    [*] --> IsPositive
+    IsPositive --> if_state
+    if_state --> False: if n < 0
+    if_state --> True : if n >= 0`,
+	"notes": `stateDiagram-v2
+    State1: The state with a note
+    note right of State1
+        Important information! You can write
+        notes.
+    end note
+    State1 --> State2
+    note left of State2 : This is the note to the left.`,
+	"concurrency": `stateDiagram-v2
+    [*] --> Active
+    state Active {
+        [*] --> NumLockOff
+        NumLockOff --> NumLockOn : EvNumLockPressed
+        NumLockOn --> NumLockOff : EvNumLockPressed
+        --
+        [*] --> CapsLockOff
+        CapsLockOff --> CapsLockOn : EvCapsLockPressed
+        --
+        direction LR
+        [*] --> ScrollLockOff
+        ScrollLockOff --> ScrollLockOn
+    }`,
+	"titled states and a self transition": `stateDiagram-v2
+    A : first
+    A : second line
+    A : third line
+    A --> A : again
+    A --> B`,
+	"an empty diagram":   "stateDiagram-v2",
+	"an empty composite": "stateDiagram-v2\n  state X {\n  }\n  a --> X",
+	"many into the end": `stateDiagram-v2
+    a --> [*]
+    b --> [*]
+    c --> [*]
+    d --> [*]
+    [*] --> a
+    [*] --> b
+    [*] --> c`,
+	"a direction per scope": `stateDiagram
+    direction LR
+    [*] --> A
+    A --> B
+    B --> C
+    state B {
+      direction LR
+      a --> b
+    }
+    B --> D`,
+}
+
+func TestStateLayoutCases(t *testing.T) {
+	for name, src := range stateCases {
+		d, sl := stateOf(t, src)
+		checkState(t, name, d, sl, nil)
+	}
+}
+
+// randomState is a state diagram of nested scopes: composites (some split
+// into regions) up to three deep, starts and ends, choices and forks,
+// labels, notes and directions. Every transition stays in its scope, as a
+// drawable diagram's must.
+func randomState(seed int64) string {
+	r := rand.New(rand.NewSource(seed))
+	var b strings.Builder
+	b.WriteString("stateDiagram-v2\n")
+	next := 0
+	var scope func(depth int, indent string)
+	scope = func(depth int, indent string) {
+		if r.Intn(4) == 0 {
+			fmt.Fprintf(&b, "%sdirection %s\n", indent, []string{"TB", "BT", "LR", "RL"}[r.Intn(4)])
+		}
+		n := 1 + r.Intn(6)
+		ids := []string{}
+		for range n {
+			id := fmt.Sprintf("s%d", next)
+			next++
+			switch k := r.Intn(10); {
+			case k == 0:
+				fmt.Fprintf(&b, "%sstate %s <<choice>>\n", indent, id)
+			case k == 1:
+				fmt.Fprintf(&b, "%sstate %s <<fork>>\n", indent, id)
+			case k == 2 && depth < 3:
+				fmt.Fprintf(&b, "%sstate %s {\n", indent, id)
+				regions := 1
+				if r.Intn(3) == 0 {
+					regions = 2 + r.Intn(2)
+				}
+				for g := range regions {
+					if g > 0 {
+						fmt.Fprintf(&b, "%s    --\n", indent)
+					}
+					scope(depth+1, indent+"    ")
+				}
+				fmt.Fprintf(&b, "%s}\n", indent)
+			case k == 3:
+				fmt.Fprintf(&b, "%s%s : a longer description %d\n", indent, id, r.Intn(100))
+				if r.Intn(2) == 0 {
+					fmt.Fprintf(&b, "%s%s : and a line\n", indent, id)
+				}
+			default:
+				fmt.Fprintf(&b, "%s%s\n", indent, id)
+			}
+			ids = append(ids, id)
+		}
+		pick := func() string {
+			if r.Intn(6) == 0 {
+				return "[*]"
+			}
+			return ids[r.Intn(len(ids))]
+		}
+		for range r.Intn(2 * n) {
+			a, c := pick(), pick()
+			fmt.Fprintf(&b, "%s%s --> %s", indent, a, c)
+			if r.Intn(3) == 0 {
+				fmt.Fprintf(&b, " : event %d", r.Intn(50))
+			}
+			b.WriteString("\n")
+		}
+		if r.Intn(4) == 0 {
+			fmt.Fprintf(&b, "%snote %s of %s : note %d\n", indent, []string{"left", "right"}[r.Intn(2)], ids[r.Intn(len(ids))], r.Intn(9))
+		}
+	}
+	scope(0, "    ")
+	return b.String()
+}
+
+var stateRandomN = flag.Int("staterandom", 400, "number of random state diagrams TestStateLayoutRandom lays out")
+
+func TestStateLayoutRandom(t *testing.T) {
+	laid, refused, crossed := 0, 0, 0
+	reasons := map[string]int{}
+	for seed := int64(1); seed <= int64(*stateRandomN); seed++ {
+		src := randomState(seed)
+		d, err := mr.Parse(src)
+		if err != nil {
+			var e *mr.Error
+			if errors.As(err, &e) && e.Kind == mr.UnsupportedConstruct {
+				refused++
+				reasons[e.Msg]++
+				continue
+			}
+			t.Fatalf("seed %d: parse: %v\n%s", seed, err, src)
+		}
+		sd := d.(*mr.StateDiagram)
+		sl, err := layoutState(sd, fakeMeasure)
+		if err != nil {
+			t.Fatalf("seed %d: %v\n%s", seed, err, src)
+		}
+		before := t.Failed()
+		checkState(t, fmt.Sprintf("seed %d", seed), sd, sl, &crossed)
+		if t.Failed() && !before {
+			t.Logf("source of seed %d:\n%s", seed, src)
+			return
+		}
+		laid++
+	}
+	t.Logf("laid out %d random state diagrams, refused %d: %v", laid, refused, reasons)
+	if laid < *stateRandomN*9/10 {
+		t.Errorf("only %d of %d random state diagrams were laid out", laid, *stateRandomN)
+	}
+}
+
+// What is drawn is what the source says: each state by its kind, each
+// transition solid and each note line dotted, each composite with its
+// regions.
+func TestStateDrawn(t *testing.T) {
+	fn := systemFont(t)
+	d, err := mr.Parse(`stateDiagram-v2
+    state c <<choice>>
+    state f <<fork>>
+    state j <<join>>
+    [*] --> c
+    c --> f : yes
+    f --> A
+    f --> B
+    A --> j
+    B --> j
+    j --> [*]
+    note right of A : a note
+    state Box {
+        x --> y
+        --
+        z
+    }
+    c --> Box`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var trace []string
+	if _, err := render(d, Options{Font: fn}, probe{trace: func(s string) { trace = append(trace, s) }}); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(trace, "\n")
+	for _, want := range []string{
+		"state choice c", "state fork f", "state join j", "state start root_start", "state end root_end",
+		"state state A", "state composite Box", "composite Box regions 2", "state state x", "state state z",
+		"transition c f solid", "transition A note\n0 dotted", "transition x y solid", "note A",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("trace lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+// Every render checks a state diagram's layout: a corrupted one is a
+// layout fault.
+func TestRenderRefusesStateFaults(t *testing.T) {
+	fn := systemFont(t)
+	src := `stateDiagram-v2
+    [*] --> Box
+    A : title
+    A : line
+    Box --> A
+    state Box {
+        x --> y
+        --
+        z
+    }`
+	for name, corrupt := range map[string]func(*stateLayout){
+		"a frame off its box":    func(sl *stateLayout) { sl.comps[0].frame.X0 -= 1 },
+		"a region off its scope": func(sl *stateLayout) { sl.comps[0].regionR[0].Y0 += 0.5 },
+		"a region out of the frame": func(sl *stateLayout) {
+			c := sl.comps[0]
+			r := c.regions[1]
+			dy := c.frame.Y1 - r.off.Y
+			r.off.Y += dy
+			c.regionR[1].Y0 += dy
+			c.regionR[1].Y1 += dy
+		},
+		"regions overlapping": func(sl *stateLayout) {
+			c := sl.comps[0]
+			r := c.regions[1]
+			dx := c.regionR[0].X0 - c.regionR[1].X0
+			r.off.X += dx
+			c.regionR[1].X0 += dx
+			c.regionR[1].X1 += dx
+		},
+		"a title outside its band": func(sl *stateLayout) { sl.comps[0].title.Y1 = sl.comps[0].band.Y1 + 1 },
+		"a state left out of its scope's graph": func(sl *stateLayout) {
+			// The graph and its layout agree; only the scope has one more.
+			sc := sl.root.scope
+			sc.States = append(sc.States, &mr.StateNode{ID: "left out"})
+		},
+		"states overlapping inside a region": func(sl *stateLayout) {
+			r := sl.comps[0].regions[0]
+			r.lay.Nodes[1].Box = r.lay.Nodes[0].Box
+		},
+		"a titled state too small": func(sl *stateLayout) {
+			for i := range sl.root.titled {
+				sl.root.lay.Nodes[i].Box.Y1 = sl.root.lay.Nodes[i].Box.Y0 + 0.5
+			}
+		},
+	} {
+		d, _ := mr.Parse(src)
+		_, err := render(d, Options{Font: fn}, probe{corruptState: corrupt})
+		var e *mr.Error
+		if !errors.As(err, &e) || e.Kind != mr.LayoutFault {
+			t.Errorf("%s: %v, want a layout fault", name, err)
+		}
+	}
+}
+
+// Start and end stay circles however many links meet them (sized up front,
+// never widened by the layout), and a fork or join bar lies across its
+// scope's direction.
+func TestStateShapes(t *testing.T) {
+	for _, dir := range []string{"TB", "LR"} {
+		src := "stateDiagram-v2\n  direction " + dir + `
+  state f <<fork>>
+  [*] --> f
+  [*] --> a
+  [*] --> b
+  f --> c
+  a --> [*]
+  b --> [*]
+  c --> [*]`
+		_, sl := stateOf(t, src)
+		for i, n := range sl.root.states {
+			b := sl.root.lay.Nodes[i].Box
+			switch n.Kind {
+			case mr.StateStart, mr.StateEnd:
+				if math.Abs(b.W()-b.H()) > 1e-9 {
+					t.Errorf("%s: %s is %.2f x %.2f, not a circle", dir, n.ID, b.W(), b.H())
+				}
+			case mr.StateFork:
+				if (dir == "TB") != (b.W() > b.H()) {
+					t.Errorf("%s: the fork bar is %.2f x %.2f", dir, b.W(), b.H())
+				}
+			}
+		}
+	}
+}
+
+// Seeds that exposed a defect.
+func TestStateLayoutRegressions(t *testing.T) {
+	// 3987: a 0.2 em snap took the port past a narrow end circle's rim.
+	for _, seed := range []int64{3987} {
+		d, sl := stateOf(t, randomState(seed))
+		checkState(t, fmt.Sprintf("seed %d", seed), d, sl, nil)
+	}
+}

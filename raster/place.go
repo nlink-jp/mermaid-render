@@ -132,10 +132,15 @@ func (l *layouter) place() *flowLayout {
 				xs = pickPorts(lo, hi, len(ps), occ, l.portGap)
 			}
 			// A snap may leave the port range only on a node without
-			// self-links: the range keeps ports clear of loop ends.
+			// self-links: the range keeps ports clear of loop ends. It
+			// stays on the node's face, off its rim: a state's end circle
+			// is narrow enough for a 0.2 em snap to miss it.
 			slo, shi := math.Inf(-1), math.Inf(1)
 			if k[0] == 1 || l.hasLoop(k[1]) {
 				slo, shi = lo, hi
+			} else {
+				c0, h := l.nodeItem[k[1]].x, 0.9*baseHalf[k[1]]
+				slo, shi = c0-h, c0+h
 			}
 			snapPorts(xs, want, occ, slo, shi, l.portGap)
 			for i, p := range ps {
@@ -1324,6 +1329,9 @@ func (l *layouter) shapeOf(n int) mr.Shape {
 
 // spreadOf is the share of node n's faces its link ends may use.
 func (l *layouter) spreadOf(n int) float64 {
+	if n < len(l.spreads) && l.spreads[n] > 0 {
+		return l.spreads[n]
+	}
 	if l.faceSpread > 0 {
 		return l.faceSpread
 	}

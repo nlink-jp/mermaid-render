@@ -15,14 +15,20 @@ kitty の画像方式に対応した端末で、トランスクリプトの merm
 
 ## 対応する図
 
-`flowchart` / `graph`、`sequenceDiagram`、`erDiagram`、`pie`。範囲は RFP に定める（基準は
-mermaid の公式ドキュメント、12.0.0）。第 2 段階でこの順に `pie`（済み）、入れ子の枠を含む
-`stateDiagram`、`gantt`、`mindmap` を加える。それ以外の種類は「図の種類が未対応」として返す。
+`flowchart` / `graph`、`sequenceDiagram`、`erDiagram`、`pie`、`stateDiagram` / `stateDiagram-v2`。
+範囲は RFP に定める（基準は mermaid の公式ドキュメント、12.0.0）。第 2 段階でこの順に `pie`（済み）、
+`stateDiagram`（済み）、`gantt`、`mindmap` を加える。それ以外の種類は「図の種類が未対応」として返す。
 
 円グラフは mermaid と同じように描く — 扇形は書いた順に 12 時から時計回り。全体の 1% 未満の項目は
 扇形を描かないが凡例には残す。扇形には全体に対する割合を `toFixed(0)` で丸めて書く。`showData` なら
 凡例に値を付ける。違いは 1 つ: すべての項目の % を凡例の右の列にも書き（扇形のない項目は `<1%`）、
 扇形の中には収まるときだけ書く（mermaid はすべて扇形の上に書くので、細い扇形では重なって読めない）。
+
+状態遷移図は mermaid と同じように読む — `[*]` はその範囲の開始か終了、何段でも入れ子にできる複合状態、
+`--` の領域、choice・fork・join、注記、範囲ごとの方向。範囲ごとに内側から先に配置する: 複合状態は見出しと、
+横に並べた領域を収める枠で、そこへの遷移は枠で止まる。そのため複合状態の枠をまたぐ遷移（外から内側の
+状態へ、領域どうし）は未対応で、ソースを表示する。注記は mermaid 自身のグラフが与える向きの点線で状態と
+つなぐ。
 
 ## API
 
@@ -39,6 +45,7 @@ case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities（属性つき）, Relationships, Direction
 case *mermaidrender.Sequence:  // Participants, Boxes, Events（メッセージ・注記・枠）
 case *mermaidrender.Pie:       // Slices（ラベルと値）, ShowData
+case *mermaidrender.StateDiagram: // Root: States・Transitions・Notes を持つ範囲。複合状態は Regions を持つ
 }
 
 font, err := raster.DefaultFont() // 一度読んで使い回す
@@ -59,7 +66,7 @@ sequence 図は専用の配置で、白地のカードに描く。PNG への変�
 端末での枠の大きさは呼び出し側が決める。描画が止まらないよう、次を上限とする: ソース 5 万文字（mermaid 自身の maxTextSize）、ノードと
 subgraph を合わせて 300（subgraph は 100 まで）、線と関係 500（mermaid 自身の上限で、構文を読む
 段階で判定）、ER の実体 300・属性は実体ごとに 200、sequence の参加者 300・イベント 2000・枠の入れ子
-50、円グラフの項目 100（値の合計が有限であること）、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
+50、円グラフの項目 100（値の合計が有限であること）、複合状態の入れ子 20 段、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
 メモリのため）。配置の要素が 2 万を超える flowchart（多くの段をまたぐ長い線）も拒む。PNG の大きさ（1 画素あたり 0.10〜0.67 バイトと幅がある）は呼び出し側が自分の
 上限（termimg の 2MiB）で確かめ、超えたらソースを表示する。上限を超えたときは、どのフォントにも無い文字と
 同じく `UnsupportedConstruct` のエラーになる。

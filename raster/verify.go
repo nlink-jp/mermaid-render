@@ -33,8 +33,10 @@ func (f *faults) add(format string, a ...any) {
 }
 
 // verify runs the checks for whichever layout render made.
-func verify(d mr.Diagram, lay *flowLayout, el *erLayout, sl *seqLayout, pl *pieLayout, m measurer) []string {
+func verify(d mr.Diagram, lay *flowLayout, el *erLayout, sl *seqLayout, pl *pieLayout, st *stateLayout, m measurer) []string {
 	switch d := d.(type) {
+	case *mr.StateDiagram:
+		return stateFaults(d, st, m, false, nil)
 	case *mr.Pie:
 		return pieFaults(d, pl)
 	case *mr.Flowchart:
@@ -113,8 +115,12 @@ func flowFaults(f *mr.Flowchart, lay *flowLayout, m measurer, strict bool, frame
 			}
 		}
 	}
-	// A node's label fits inside its shape.
+	// A node's label fits inside its shape (a state's bar or circle has
+	// none to fit).
 	for _, n := range lay.Nodes {
+		if n.Label == "" {
+			continue
+		}
 		tw, th, err := m(n.Label, false)
 		if err != nil {
 			continue
@@ -892,6 +898,71 @@ func pieFaults(p *mr.Pie, pl *pieLayout) []string {
 		for j := i + 1; j < len(texts); j++ {
 			if a.overlaps(texts[j]) {
 				out.add("%s overlaps %s", what[i], what[j])
+			}
+		}
+	}
+	return out
+}
+
+// stateFaults checks a state diagram: every scope's layout has the
+// flowchart's properties and holds exactly its states, notes and
+// transitions; a titled state holds its title and lines; a composite's
+// frame is its box in the parent's layout, and its title band and regions
+// lie inside the frame, the regions below the band and apart.
+func stateFaults(d *mr.StateDiagram, sl *stateLayout, m measurer, strict bool, frameCrossings *int) []string {
+	var out faults
+	for _, sc := range sl.scopes {
+		s := sc.scope
+		if len(sc.graph.Nodes) != len(s.States)+len(s.Notes) || len(sc.graph.Links) != len(s.Transitions)+len(s.Notes) {
+			out.add("a scope laid out %d nodes and %d links, want %d and %d", len(sc.graph.Nodes), len(sc.graph.Links),
+				len(s.States)+len(s.Notes), len(s.Transitions)+len(s.Notes))
+			continue
+		}
+		if len(sc.graph.Nodes) > 0 {
+			for _, f := range flowFaults(sc.graph, sc.lay, m, strict, frameCrossings) {
+				out.add("%s", f)
+			}
+		}
+		for i, t := range sc.titled {
+			if i >= len(sc.lay.Nodes) {
+				continue
+			}
+			b := sc.lay.Nodes[i].Box
+			if math.Max(t.tw, t.lw) > b.W()+eps || t.th+stRuleGap+t.lh > b.H()-2*padY+eps {
+				out.add("the title and lines of %s stick out of it", sc.states[i].ID)
+			}
+		}
+	}
+	for _, c := range sl.comps {
+		if c.idx >= len(c.parent.lay.Nodes) {
+			out.add("composite %s has no box", c.node.ID)
+			continue
+		}
+		b := c.parent.lay.Nodes[c.idx].Box
+		o := c.parent.off
+		if want := (rect{b.X0 + o.X, b.Y0 + o.Y, b.X1 + o.X, b.Y1 + o.Y}); c.frame != want {
+			out.add("composite %s's frame %v is not its box %v", c.node.ID, c.frame, want)
+		}
+		if !c.frame.contains(c.band) || !c.band.contains(c.title) {
+			out.add("composite %s's title is outside its band or frame", c.node.ID)
+		}
+		if len(c.regionR) != len(c.regions) {
+			out.add("composite %s placed %d of %d regions", c.node.ID, len(c.regionR), len(c.regions))
+			continue
+		}
+		inner := rect{c.frame.X0, c.band.Y1, c.frame.X1, c.frame.Y1}
+		for i, r := range c.regionR {
+			rs := c.regions[i]
+			if want := (rect{rs.off.X, rs.off.Y, rs.off.X + rs.lay.W, rs.off.Y + rs.lay.H}); r != want {
+				out.add("composite %s's region %d is not where its scope is", c.node.ID, i+1)
+			}
+			if !inner.contains(r) {
+				out.add("composite %s's region %d lies outside its frame", c.node.ID, i+1)
+			}
+			for _, q := range c.regionR[:i] {
+				if r.overlaps(q) {
+					out.add("composite %s's regions overlap", c.node.ID)
+				}
 			}
 		}
 	}

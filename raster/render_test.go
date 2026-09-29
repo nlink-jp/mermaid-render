@@ -157,15 +157,12 @@ func TestRealBlocksRender(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if _, ok := d.(*mr.StateDiagram); ok {
-			continue // parsed; drawn from the next step (RFP phase 2b)
-		}
 		if _, err := Render(d, Options{Font: fn}); err != nil {
 			t.Errorf("%s: %v", filepath.Base(f), err)
 		}
 		n++
 	}
-	if n != 44 {
-		t.Errorf("rendered %d real diagrams, want 44", n)
+	if n != 46 {
+		t.Errorf("rendered %d real diagrams, want 46", n)
 	}
 }

@@ -867,6 +867,15 @@ same way as pathguard.
     accepts), statement trees compared, no difference — including one the comparison found (the
     two-word rule had been tried only on lines holding a `{`). 16 mutants of the reading rules,
     all caught.
+  - **2b laying out and drawing state diagrams (2026-09-29)**: each scope goes through the
+    flowchart layout with its states as sizes, as ER passes its tables. The render-time check
+    caught two real defects during the work: a fork bar thinner than two heads put link ends on
+    its two faces "at the same point", and a 0.2 em port snap took a link past a narrow end
+    circle's rim (seed 3987). Start and end circles are now sized for their links up front (the
+    layout only widens a node across, which drew ellipses), bars are a port gap thick, and a snap
+    stays within 0.9 of its node's half-width — 20,000 random flowcharts, ER and sequence diagrams
+    give the same results as before. 20,000 random state diagrams, no fault; 15 mutants of the
+    drawing and its check, all caught.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

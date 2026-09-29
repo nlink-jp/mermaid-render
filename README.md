@@ -17,11 +17,11 @@ support the iTerm2 or kitty image protocol.
 
 ## Diagrams
 
-`flowchart` / `graph`, `sequenceDiagram`, `erDiagram` and `pie`, as specified
-in the RFP (the reference is the official mermaid documentation, 12.0.0).
-Phase 2 adds, in this order, `pie` (done), `stateDiagram` with nested frames,
-`gantt` and `mindmap`. Other diagram types are returned as "unsupported
-diagram type".
+`flowchart` / `graph`, `sequenceDiagram`, `erDiagram`, `pie` and
+`stateDiagram` / `stateDiagram-v2`, as specified in the RFP (the reference is
+the official mermaid documentation, 12.0.0). Phase 2 adds, in this order,
+`pie` (done), `stateDiagram` (done), `gantt` and `mindmap`. Other diagram
+types are returned as "unsupported diagram type".
 
 A pie chart is drawn as mermaid draws it — slices in the order written,
 clockwise from twelve o'clock; an item under 1% of the whole gets no slice
@@ -31,6 +31,15 @@ item's percentage also stands in a column at the legend's right (`<1%` for an
 item with no slice), and a slice carries its percentage only when it fits
 inside (mermaid writes every one on its slice, where thin slices' labels
 overlap).
+
+A state diagram is read as mermaid reads it — `[*]` as its scope's start or
+end, composites nested to any depth, `--` regions, choice, fork and join,
+notes, a direction per scope. Each scope is laid out on its own, innermost
+first: a composite is a frame holding its title and its regions side by side,
+and a transition to it stops at the frame. So a transition that crosses a
+composite's frame (into its inner state from outside, or between regions) is
+unsupported, and the source is shown. A note is joined to its state by a
+dotted line in the direction mermaid's own graph gives it.
 
 ## API
 
@@ -47,6 +56,7 @@ case *mermaidrender.Flowchart: // Nodes, Links, Subgraphs, Direction
 case *mermaidrender.ER:        // Entities (attributes), Relationships, Direction
 case *mermaidrender.Sequence:  // Participants, Boxes, Events (messages, notes, blocks)
 case *mermaidrender.Pie:       // Slices (label, value), ShowData
+case *mermaidrender.StateDiagram: // Root: a scope of States, Transitions, Notes; composites hold Regions
 }
 
 font, err := raster.DefaultFont() // load once, reuse
@@ -70,7 +80,7 @@ maxTextSize), 300 nodes and subgraphs (at most
 100 subgraphs), 500 links or relationships (mermaid's own limit, checked while
 parsing), 300 ER entities with at most 200 attributes each, 300 sequence
 participants with at most 2000 events and blocks nested 50 deep, 100 pie
-items whose total is a finite number, 1000
+items whose total is a finite number, composite states nested 20 deep, 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
 per image (for time and memory). A flowchart whose links would need more than
 20,000 layout items (very long links through many layers) is refused too. The PNG's size is the caller's to check — it
