@@ -587,47 +587,70 @@ its grammar and two guards (every label present, one arrowhead per edge). This e
 it (the operator's decisions of 2026-09-30):
 
 - **Scope**: flowchart / graph, sequenceDiagram, erDiagram — the three types the art draws today.
-  Pie, state, gantt and mindmap stay source on those terminals. lagent, which shows the source
-  there (lagent ADR-0025), gains the same art.
+  Pie, state, gantt and mindmap stay source on those terminals. The art is for the TUI only (not
+  gem-agent's plain REPL or `-p` output). lagent, which shows the source there, gains the same
+  art.
 - **API**: package `text`: `text.Render(d Diagram, opts text.Options) (string, error)` and
   `text.RenderSource(src, opts)`. The diagram data is `Parse`'s, the same as the picture's, so
-  the art can no longer misread what the picture reads. Errors are the same three kinds plus
-  `LayoutFault`; the caller shows the source for all.
+  the art can no longer misread what the picture reads (mermaid-ascii drew BT as TD, RL as LR, a
+  phantom node for `Z --> S`, and refused `<br>` and non-ASCII sequence labels: measured). Errors
+  are the same three kinds plus `LayoutFault`; the caller shows the source for all.
 - **Cell widths**: `Options.Width func(r rune) int` gives the columns a character takes; the
-  caller passes the measure its terminal code uses, so the art and the rest of the screen agree.
-  The default is Unicode East Asian Width (`golang.org/x/text/width`, already required through
-  `x/image`): wide and fullwidth 2, combining and zero-width 0, others 1. Labels of any script are
-  drawn, sequence labels included (the art refuses non-ASCII sequence labels today). A terminal
-  set to draw East Asian ambiguous characters double-width misaligns box drawing (U+2500–257F is
-  ambiguous); that cannot be detected without a query, so it is a stated limit, as today.
-- **Glyphs**: boxes in `┌─┐│└┘`; a node's corners tell its shape's family — `╭╮╰╯` for round,
-  stadium, circle and double circle, `◇` for rhombus and hexagon (decisions), `┌┐└┘` for the rest.
-  Links in `─│` with corners; `┄┆` dotted, `━┃` thick; heads `►◄▲▼`, `○` and `×` ends; where
-  lines meet, `┼├┤┬┴`. Subgraph frames with their title on the top border. ER entities as
-  tables (name, then a row per attribute), cardinality at each end in two cells: `├┤` exactly
-  one, `○┤` zero or one, `├<` one or more, `○<` zero or more (mirrored per side), a dotted line
-  for a non-identifying relationship. Sequence: participant boxes, `┆` lifelines, messages as
-  arrows with their text above, `┄` for the dashed kinds, notes as boxes, blocks as frames with
-  their kind and label, activations as `║` on the lifeline.
-- **Layout**: flowchart and ER run the layered layout the picture uses (the same crossing
-  reduction and alignment rules the operator's review settled), in grid units: one unit is one
-  row down and two columns across (a terminal cell is about twice as tall as wide), with every
-  spacing a whole number of cells, and the result snapped to the grid. Sequence has a column
-  layout of its own, like the picture's.
+  caller passes the measure its terminal code uses. So that a rune is a whole grapheme cluster, a
+  label holding a multi-rune cluster (a combining mark, ZWJ, a variation selector, a regional
+  indicator, an emoji modifier) is unsupported in the art. The default is Unicode East Asian Width
+  (`golang.org/x/text/width`, already required through `x/image`; its line in go.mod becomes
+  direct): wide and fullwidth 2, others 1. Labels of any script are drawn, sequence labels
+  included. Control characters (C0, C1, DEL — a decoded `#27;` is a real ESC — TAB, and the bidi
+  controls) in a label are unsupported in the art. Every glyph below is East Asian ambiguous or
+  neutral (x/text 0.42): a terminal set to draw ambiguous characters double-width misaligns the
+  art; that cannot be detected without a query, so it is a stated limit, as today.
+- **Glyphs** (today's art's where it has one): boxes in `┌─┐│└┘`; a node's corners tell its
+  shape's family — `╭╮╰╯` for round, stadium, circle and double circle, `◇` for rhombus and
+  hexagon (decisions), `┌┐└┘` for the rest. Links in `─│` with corners, `┄┆` dotted, `━┃` thick;
+  heads `►◄▲▼`, `○` and `×` ends. Links only cross (`┼`, a crossing of a dotted or thick line drawn
+  in its own glyph where one exists): they never merge. Subgraph frames with their title inside,
+  as in the picture. ER entities as tables — name, then a row per attribute in the picture's
+  columns (type, name, keys, comment; not wrapped) — and cardinality in mermaid's own notation in
+  the two cells next to the table (`||`, `|o`, `}|`, `}o`, mirrored on the left); a
+  non-identifying relationship dotted. Sequence: participant boxes at the top and again at the
+  bottom (mermaid's `mirrorActors`), `actor` as a participant, `│` lifelines, `┃` activations,
+  messages as arrows with their text above (`┈` for the dashed kinds; heads `►` / `◄`, `×` for the
+  cross kinds, `)` for the async kinds, none for `->` / `-->`; both ends for `<<->>`), a message to
+  self as a loop to the right, autonumber as a `1.` prefix, notes as boxes, `box` groups as titled
+  frames, blocks as frames with their kind and label, their sections split by a `┈` line naming
+  `else` / `and` / `option`, each nesting level one column inside the last.
+- **Edge labels**: written across their link where it runs straight through the label's layer,
+  the line broken for the label's width (as today: `──IP─/─CIDR──`); a vertical link breaks for
+  the label's rows. Centring an odd width leaves the extra cell on the right.
+- **Layout**: flowchart and ER run the layered layout the picture uses (its ordering, coordinates
+  and track assignment), with every spacing a per-layout parameter in whole cells and node sizes
+  rounded up to whole cells. Columns and tracks are snapped once each, by identity, in integer
+  arithmetic — never point by point, which breaks right angles at half-cell ties (measured). Link
+  ends and loop ends only use a face's interior cells, never a corner; a self-link is a loop on
+  the node's side over two interior rows. ER is always laid out left to right (right to left when
+  written RL): cardinality reads along a horizontal line; a TB diagram is drawn as LR — a stated
+  difference, the relationships unchanged. Sequence has a column layout of its own, like the
+  picture's. The independent verification ran this on the 22 real flowcharts (clean) and 20,000
+  random ones (0.03% collide, all rounding ties, before the interior-cell and title rules).
 - **Checked on every render**, on the grid, as the picture's properties are: every node's box
-  drawn once with its whole label inside; no two boxes overlap; each link a connected path of
-  line cells from its source's box to its target's, touching no other box, sharing no cell run
-  with another link except where fans meet; one head per arrowed end, next to its box; every
-  label present, clear of lines and boxes; frames holding their members; ER markers at their
-  own ends; sequence messages in order, each from its sender's lifeline to its receiver's.
-  A failure is `LayoutFault`, and the caller shows the source. Never refused for width: art wider
-  than the terminal wraps there and taller scrolls (gem-agent ADR-0063); a cap of 400 columns ×
-  2,000 rows bounds time and memory.
+  drawn once with its whole label inside; no two boxes overlap; each link a connected path of line
+  cells from its source's box to its target's, touching no other box; two links share a cell only
+  where two straight runs cross at a right angle — a corner or a T on another link is a fault; one
+  head per arrowed end, next to its box; every label present, clear of boxes and other links;
+  frames holding their members, titles inside; ER markers at their own ends; sequence messages in
+  order, each from its sender's lifeline to its receiver's. A failure is `LayoutFault`, and the
+  caller shows the source. Never refused for width: art wider than the terminal wraps there and
+  taller scrolls (gem-agent ADR-0063). The only size bound is 2,000,000 cells (an unsupported
+  construct): the largest diagrams the picture allows measured up to 1.3 million (a 299-leaf star
+  laid out top-down, 4,868 × 267) and took under 50 ms to lay out.
 - **Integration**: gem-agent drops `mermaid-ascii`, its rewrite table and its two guards, and
   hands the fence to this engine (an ADR amending ADR-0042 / ADR-0063). The art still bypasses
-  the Markdown renderer. lagent adds the art lane the same way (an ADR amending ADR-0025).
+  the Markdown renderer and still goes through the TUI's inert filter. lagent adds the art lane
+  the same way: `Segment` gains art, the reply renderer emits it verbatim (an ADR amending
+  ADR-0025, ADR-0024 — which rules out a box-art hold — and ADR-0020 A1).
 
-### Configuration
+### Configuration### Configuration
 
 The library has no configuration file and no environment variables. Settings such as the font
 live in the gem-agent and lagent configuration and reach the library as a `FontSpec`. The key
@@ -639,7 +662,7 @@ each runtime's integration ADR.
 - `golang.org/x/image` (font loading, text drawing, shape filling). go.mod also gains
   `golang.org/x/text` and `golang.org/x/sys`, but only `x/text/encoding/charmap` is linked (the
   verification pass's measurement; about 0.4MB of binary). All are maintained by the Go team.
-  x/image v0.46.0 requires go 1.26 or later.
+  x/image v0.46.0 requires go 1.26 or later. Phase 2e's text art links `x/text/width` too (its line in go.mod becomes direct).
 - This dependency is an exception to lib-series' standard-library-only principle, so it is
   declared not only in this RFP but also in the library's README / README.ja / AGENTS.md and in
   its row of the lib-series catalog. Updates and vulnerabilities are checked with govulncheck
@@ -1191,6 +1214,16 @@ same way as pathguard.
     (`_snake_case_`: now a delimiter-run test, for ER and state as well — 90,000 strings against
     marked 16, none missed); hard breaks keep a line; a `<` before a letter hides the rest; icons
     in text and math; hyphens break; `&amp;` decodes.
+  - **2e text art (2026-09-30)**: the operator's decisions — the three types the art draws today;
+    lagent gains the art too. The independent verification of the specification ran the picture's
+    layout on the grid (the 22 real flowcharts clean; 20,000 random, 0.03% colliding at doubled
+    spacing) and found what "the same layout, snapped" hid: spacing as package constants and
+    literals, fractional positions from centring and spreads, snapping point by point breaking
+    right angles, ports on box corners, titles on the border crossed by links (15% of random
+    diagrams); a per-rune width that disagrees with the TUI's grapheme clusters; decoded control
+    characters; lagent's ADR-0024 and ADR-0020; a row and column cap refusing diagrams the
+    picture allows; today's glyphs and sequence features the draft had left out. All written into
+    the section above; ER is drawn left to right, since cardinality reads along a line.
   - **Pre-release independent review of mindmap (2026-09-30)**: the reading against a new
     generator (tabs, Unicode spaces, CR, directives mid-line, comments inside labels) and the
     labels against the emulator of mermaid's label pipeline found: emphasis missed where Go's and
