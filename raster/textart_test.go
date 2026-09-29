@@ -281,3 +281,143 @@ func TestTextArtERMarkFault(t *testing.T) {
 		t.Errorf("%v, want a fault naming the cardinality mark", err)
 	}
 }
+
+// Every real sequence diagram draws as text art, Japanese labels included
+// (mermaid-ascii refused them).
+func TestTextArtRealSequences(t *testing.T) {
+	files, _ := filepath.Glob("../testdata/real/*/*.mmd")
+	n := 0
+	for _, p := range files {
+		b, _ := os.ReadFile(p)
+		d, err := mr.Parse(string(b))
+		if err != nil {
+			continue
+		}
+		if _, ok := d.(*mr.Sequence); !ok {
+			continue
+		}
+		n++
+		if _, err := RenderText(d, TextOptions{}); err != nil {
+			t.Errorf("%s: %v", filepath.Base(p), err)
+		}
+	}
+	if n != 10 {
+		t.Errorf("%d real sequence diagrams, want 10", n)
+	}
+}
+
+func TestTextArtRandomSequences(t *testing.T) {
+	ok := 0
+	for seed := int64(1); seed <= 600; seed++ {
+		d, err := mr.Parse(randomSequence(seed))
+		if err != nil {
+			t.Fatal(err)
+		}
+		art, err := RenderText(d, TextOptions{})
+		var e *mr.Error
+		if err != nil && !(errors.As(err, &e) && e.Kind == mr.LayoutFault) {
+			t.Fatalf("seed %d: %v", seed, err)
+		}
+		if err != nil {
+			continue
+		}
+		ok++
+		if again, _ := RenderText(d, TextOptions{}); again != art {
+			t.Fatalf("seed %d: not deterministic", seed)
+		}
+	}
+	if ok*100 < 600*99 {
+		t.Errorf("%d of 600 random sequence diagrams drawn, want 99%%", ok)
+	}
+}
+
+// Sequence: a group, autonumber, activation, blocks with a section, notes,
+// a message to self, the head kinds.
+func TestTextArtSequence(t *testing.T) {
+	src := `sequenceDiagram
+    autonumber
+    box 社内
+    actor U as 利用者
+    participant A as エージェント
+    end
+    participant T as ツール
+    U->>A: 調査して
+    activate A
+    loop 3回まで
+        A->>T: 問い合わせ
+        alt 成功
+            T-->>A: 結果
+        else 失敗
+            T--xA: エラー
+        end
+    end
+    Note over A,T: 集計
+    A->>A: 要約
+    A-)U: 報告
+    deactivate A`
+	got, err := RenderTextSource(src, TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `┌─社内─────────────────────────┐
+│┌────────┐    ┌──────────────┐│   ┌────────┐
+││ 利用者 │    │ エージェント ││   │ ツール │
+│└────────┘    └──────────────┘│   └────────┘
+│     │                │       │        │
+│     │   1. 調査して  │       │        │
+│     │───────────────►│       │        │
+│     │                │       │        │
+│     │           ┌─[loop] 3回まで──────┼────┐
+│     │           │    ┃       │        │    │
+│     │           │    ┃  2. 問い合わせ │    │
+│     │           │    ┃───────┼───────►│    │
+│     │           │    ┃       │        │    │
+│     │           │  ┌─[alt] 成功───────┼─┐  │
+│     │           │  │ ┃       │        │ │  │
+│     │           │  │ ┃     3. 結果    │ │  │
+│     │           │  │ ┃◄┈┈┈┈┈┈┼┈┈┈┈┈┈┈┈│ │  │
+│     │           │  │ ┃       │        │ │  │
+│     │           │  ├┈[else] 失敗┈┈┈┈┈┈┼┈┤  │
+│     │           │  │ ┃       │        │ │  │
+│     │           │  │ ┃    4. エラー   │ │  │
+│     │           │  │ ┃×┈┈┈┈┈┈┼┈┈┈┈┈┈┈┈│ │  │
+│     │           │  │ ┃       │        │ │  │
+│     │           │  └─┼────────────────┼─┘  │
+│     │           │    ┃       │        │    │
+│     │           └────┼────────────────┼────┘
+│     │                ┃       │        │
+│     │               ┌──────────────────┐
+│     │               │       集計       │
+│     │               └──────────────────┘
+│     │                ┃       │        │
+│     │                ┃─┐ 5. 要約      │
+│     │                ┃◄┘     │        │
+│     │                ┃       │        │
+│     │     6. 報告    ┃       │        │
+│     │(───────────────┃       │        │
+│     │                ┃       │        │
+│┌────────┐    ┌──────────────┐│   ┌────────┐
+││ 利用者 │    │ エージェント ││   │ ツール │
+│└────────┘    └──────────────┘│   └────────┘
+└──────────────────────────────┘`
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// The gate: what may cover what.
+func TestTextArtSequenceGate(t *testing.T) {
+	g, _ := newGrid(4, 1)
+	a := &seqArt{g: g, tm: &textMeasure{width: eastAsianWidth}, kind: [][]seqCell{make([]seqCell, 4)}}
+	a.kind[0][0], a.kind[0][1], a.kind[0][2] = scLifeline, scFrame, scGroup
+	a.put(0, 0, '─', scArrow) // an arrow crosses a lifeline
+	a.put(2, 0, '─', scArrow) // and a group's side
+	if len(a.fault) != 0 || g.cells[0][0].r != '┼' || g.cells[0][2].r != '┼' {
+		t.Errorf("crossings: %v %q %q", a.fault, g.cells[0][0].r, g.cells[0][2].r)
+	}
+	a.put(1, 0, 'x', scText) // text over a block's frame
+	a.put(0, 0, 'y', scBox)  // a box over an arrow
+	if len(a.fault) != 2 {
+		t.Errorf("faults %v, want two", a.fault)
+	}
+}

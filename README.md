@@ -95,9 +95,11 @@ img, err = raster.RenderSource(src, raster.Options{Font: font})
 art, err := raster.RenderText(d, raster.TextOptions{Width: cellWidth}) // Width nil: East Asian Width
 ```
 
-Text art draws flowcharts and ER diagrams in box-drawing characters on a grid
-of terminal cells, running the picture's layered layout snapped to the grid
-(sequence diagrams follow). ER entities are tables, laid out left to right,
+Text art draws flowcharts, ER and sequence diagrams in box-drawing characters
+on a grid of terminal cells: flowcharts and ER run the picture's layered layout
+snapped to the grid; sequence diagrams have columns of their own (participants
+above and below, `│` lifelines, `┃` while active, blocks as frames, groups
+around their members). ER entities are tables, laid out left to right,
 with the cardinality in mermaid's notation (`||`, `o{`, …) next to each table. `Width` gives the columns a character takes on the
 caller's terminal. A label holding a control character or a multi-rune
 grapheme cluster is unsupported in the art. Every render is checked on the

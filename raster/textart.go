@@ -54,6 +54,8 @@ func RenderText(d mr.Diagram, opts TextOptions) (string, error) {
 		g, err = flowText(d, tm)
 	case *mr.ER:
 		g, err = erText(d, tm)
+	case *mr.Sequence:
+		g, err = seqText(d, tm)
 	default:
 		return "", &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("text art: %T", d)}
 	}

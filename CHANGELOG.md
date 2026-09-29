@@ -17,7 +17,10 @@ to [Semantic Versioning](https://semver.org/).
   grid. All 22 real flowcharts draw. ER diagrams too: tables laid out left
   to right, cardinality in mermaid's notation next to each table, a
   relationship to itself looping on the table's right face; all 11 real ER
-  diagrams draw.
+  diagrams draw. Sequence diagrams too, labels of any script: participants
+  above and below, lifelines (heavy while active), messages with every head
+  kind, messages to self, notes, blocks as frames sized to what they hold,
+  groups as background frames; all 10 real sequence diagrams draw.
 
 ### Changed
 

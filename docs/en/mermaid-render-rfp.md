@@ -621,7 +621,12 @@ it (the operator's decisions of 2026-09-30):
   cross kinds, `)` for the async kinds, none for `->` / `-->`; both ends for `<<->>`), a message to
   self as a loop to the right, autonumber as a `1.` prefix, notes as boxes, `box` groups as titled
   frames, blocks as frames with their kind and label, their sections split by a `┈` line naming
-  `else` / `and` / `option`, each nesting level one column inside the last.
+  `else` / `and` / `option`, each nesting level one column inside the last. A block's frame is
+  sized to what it holds (its messages' text, notes, inner frames, its labels); a `box` group is a
+  background frame that arrows and text cross. Every cell is written through one gate that knows
+  what may cover what (text over a lifeline, an arrow across a lifeline or a group's side as `┼`,
+  nothing over a block's frame): that is the sequence's check. All 10 real sequence diagrams and
+  4,000 random ones draw.
 - **Edge labels**: written across their link where it runs straight through the label's layer,
   the line broken for the label's width (as today: `──IP─/─CIDR──`); a vertical link breaks for
   the label's rows. Centring an odd width leaves the extra cell on the right.
