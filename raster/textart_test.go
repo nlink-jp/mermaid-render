@@ -488,3 +488,17 @@ func TestTextArtStraighten(t *testing.T) {
 		}
 	}
 }
+
+// A label stands on its own line: both resolves_to labels break their
+// lines (the operator's check, round 2: one stood a row above its line).
+func TestTextArtLabelOnLine(t *testing.T) {
+	ms, _ := filepath.Glob("../testdata/real/*/0a1fd38f5f.mmd")
+	b, _ := os.ReadFile(ms[0])
+	art, err := RenderTextSource(string(b), TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(art, "─resolves_to─"); n != 2 {
+		t.Errorf("%d resolves_to labels on their lines, want 2:\n%s", n, art)
+	}
+}

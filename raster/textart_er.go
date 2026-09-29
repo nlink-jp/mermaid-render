@@ -175,6 +175,7 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 		}
 		tf.w, tf.h = max(tf.w, x+8+tf.labels[i].x1-tf.labels[i].x0+1), max(tf.h, yb+1)
 	}
+	labelsOnLines(f, tf, 3)
 	return drawFlowText(f, tf, tm)
 }
 

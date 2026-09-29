@@ -642,7 +642,10 @@ it (the operator's decisions of 2026-09-30):
   (column) steps across halfway. A labelled link that bends four times or more around its label's
   layer is re-routed onto two bends — down its source's column and across once, or across once and
   down its target's — with the label on the long straight run, when that route is clear (the
-  operator's check of the text art, round 1: two links bent four times where two bends reached). The spacing was measured on random flowcharts: link ends two
+  operator's check of the text art, round 1: two links bent four times where two bends reached).
+  A label its link does not run through (the link took a track a row away from the label's
+  layer) moves onto a straight run of the link under its span, clear of the heads or marks and a
+  cell of line, when nothing else is there (round 2). The spacing was measured on random flowcharts: link ends two
   units apart on a face (one apart collided in 60% of them), a row between layers, two units
   before a head. The 22 real flowcharts draw; of 4,000 random ones 99.6% (the rest are refused). ER is always laid out left to right (right to left when
   written RL): cardinality reads along a horizontal line; a TB diagram is drawn as LR — a stated

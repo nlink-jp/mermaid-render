@@ -82,6 +82,7 @@ func flowText(f *mr.Flowchart, tm *textMeasure) (*tgrid, error) {
 func flowGrid(f *mr.Flowchart, lay *flowLayout, tm *textMeasure) *textFlow {
 	tf := snapFlow(f, lay)
 	straighten(f, tf, tm)
+	labelsOnLines(f, tf, 2)
 	return tf
 }
 
@@ -932,4 +933,115 @@ func dedupePts(pts [][2]int) [][2]int {
 		out = append(out, p)
 	}
 	return out
+}
+
+// labelsOnLines moves a label its link does not run through onto a
+// straight run of that link under the label's span — across for a run
+// across, down for a run down — when the cells there hold nothing else
+// (the operator's check of the text art, round 2: a label beside its
+// line, where the line ran a track away from the label's layer).
+// keep is how many cells at each end of a link a label stays off: its head
+// and a cell of line, or an ER mark and a cell of line.
+func labelsOnLines(f *mr.Flowchart, tf *textFlow, keep int) {
+	type key [2]int
+	occupied := map[key]int{} // cell -> link+1
+	for i, p := range tf.paths {
+		if cells, _, ok := walk(p); ok {
+			for _, c := range cells {
+				occupied[key(c)] = i + 1
+			}
+		}
+	}
+	solid := func(x, y, link int) bool {
+		if l := occupied[key{x, y}]; l != 0 && l != link+1 {
+			return true
+		}
+		for _, b := range tf.boxes {
+			if b.has(x, y) {
+				return true
+			}
+		}
+		for _, fr := range tf.frames {
+			if (x == fr.x0 || x == fr.x1) && y >= fr.y0 && y <= fr.y1 || (y == fr.y0 || y == fr.y1) && x >= fr.x0 && x <= fr.x1 {
+				return true
+			}
+		}
+		for _, t := range tf.titles {
+			if t.has(x, y) {
+				return true
+			}
+		}
+		for j, r := range tf.labels {
+			if j != link && f.Links[j].Label != "" && r.has(x, y) {
+				return true
+			}
+		}
+		return false
+	}
+	for i, lk := range f.Links {
+		if lk.Label == "" || len(tf.paths[i]) < 2 {
+			continue
+		}
+		r := tf.labels[i]
+		on := false
+		for y := r.y0; y <= r.y1 && !on; y++ {
+			for x := r.x0; x <= r.x1; x++ {
+				if occupied[key{x, y}] == i+1 {
+					on = true
+					break
+				}
+			}
+		}
+		if on {
+			continue
+		}
+		w, h := r.x1-r.x0+1, r.y1-r.y0+1
+		pts := tf.paths[i]
+		ends := map[key]bool{}
+		if cells, _, ok := walk(pts); ok {
+			for k := 0; k < keep && k < len(cells); k++ {
+				ends[key(cells[k])] = true
+				ends[key(cells[len(cells)-1-k])] = true
+			}
+		}
+		best, bestD := iRect{}, -1
+		for k := 1; k < len(pts); k++ {
+			a, b := pts[k-1], pts[k]
+			var c iRect
+			switch {
+			case a[1] == b[1] && h == 1: // across: the label on the row
+				lo, hi := min(a[0], b[0]), max(a[0], b[0])
+				x0 := clamp(r.x0, lo+1, hi-w)
+				if x0 < lo+1 || x0+w-1 > hi-1 {
+					continue
+				}
+				c = iRect{x0, a[1], x0 + w - 1, a[1]}
+			case a[0] == b[0]: // down: the label centred on the column
+				lo, hi := min(a[1], b[1]), max(a[1], b[1])
+				y0 := clamp(r.y0, lo+1, hi-h)
+				if y0 < lo+1 || y0+h-1 > hi-1 {
+					continue
+				}
+				c = iRect{a[0] - w/2, y0, a[0] - w/2 + w - 1, y0 + h - 1}
+			default:
+				continue
+			}
+			clear := true
+			for y := c.y0; y <= c.y1 && clear; y++ {
+				for x := c.x0; x <= c.x1; x++ {
+					if solid(x, y, i) || ends[key{x, y}] {
+						clear = false
+						break
+					}
+				}
+			}
+			d := abs(float64(c.x0-r.x0)) + abs(float64(c.y0-r.y0))
+			if clear && (bestD < 0 || int(d) < bestD) {
+				best, bestD = c, int(d)
+			}
+		}
+		if bestD >= 0 {
+			tf.labels[i] = best
+		}
+	}
 }
