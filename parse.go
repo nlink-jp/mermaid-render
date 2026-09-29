@@ -26,6 +26,9 @@ func Parse(src string) (Diagram, error) {
 	if strings.HasPrefix(kw, "pie%%") {
 		kw = "pie" // pie.langium: a comment may follow the keyword directly
 	}
+	if strings.HasPrefix(kw, "mindmap") {
+		kw = "mindmap" // the detector is /^\s*mindmap/; the grammar refuses the rest
+	}
 	switch kw {
 	case "flowchart", "graph", "flowchart-elk":
 		return parseFlowchart(lines, title)
@@ -42,6 +45,9 @@ func Parse(src string) (Diagram, error) {
 		return parseState(lines, title)
 	case "gantt":
 		return parseGantt(lines, title)
+	case "mindmap":
+		// The grammar reads indentation and blank lines.
+		return parseMindmap(src)
 	case "pie":
 		// pie reads its accDescr blocks itself.
 		if lines, title, err = prepareLines(src, true); err != nil {
@@ -59,7 +65,7 @@ func Parse(src string) (Diagram, error) {
 // engine does not draw.
 var unsupportedTypes = map[string]bool{
 	"classDiagram": true, "classDiagram-v2": true,
-	"mindmap": true, "journey": true, "gitGraph": true,
+	"journey": true, "gitGraph": true,
 	"timeline": true, "quadrantChart": true, "requirementDiagram": true,
 	"C4Context": true, "C4Container": true, "C4Component": true, "C4Dynamic": true, "C4Deployment": true,
 	"xychart-beta": true, "xychart": true, "sankey-beta": true, "sankey": true,
@@ -117,36 +123,9 @@ func prepare(src string) ([]srcLine, frontTitle, error) {
 // place for a grammar that reads them itself (pie.langium's ACC_DESCR
 // spans lines and must end its line).
 func prepareLines(src string, keepAccDescr bool) ([]srcLine, frontTitle, error) {
-	src = strings.ReplaceAll(src, "\r\n", "\n")
-	src = strings.ReplaceAll(src, "\r", "\n") // a CR alone ends a line too
-	raw := strings.Split(src, "\n")
-	i := 0
-	for i < len(raw) && strings.TrimSpace(raw[i]) == "" {
-		i++
-	}
-	var title frontTitle
-	if i < len(raw) && strings.TrimSpace(raw[i]) == "---" {
-		start := i
-		i++
-		closed := false
-		for ; i < len(raw); i++ {
-			t := strings.TrimSpace(raw[i])
-			if t == "---" {
-				closed = true
-				i++
-				break
-			}
-			// Only a top-level "title:" key matters; config and the rest are
-			// presentation.
-			if !strings.HasPrefix(raw[i], " ") && !strings.HasPrefix(raw[i], "\t") {
-				if v, ok := strings.CutPrefix(t, "title:"); ok {
-					title = frontTitle{unquoteYAML(strings.TrimSpace(v)), i + 1}
-				}
-			}
-		}
-		if !closed {
-			return nil, title, errf(SyntaxError, start+1, "front matter is not closed with ---")
-		}
+	raw, i, title, err := frontMatter(src)
+	if err != nil {
+		return nil, title, err
 	}
 	var out []srcLine
 	for ; i < len(raw); i++ {
@@ -178,6 +157,41 @@ func prepareLines(src string, keepAccDescr bool) ([]srcLine, frontTitle, error) 
 		out = append(out, srcLine{text: t, no: i + 1, tail: strings.TrimLeft(raw[i], " \t")})
 	}
 	return out, title, nil
+}
+
+// frontMatter splits src into lines, CRs as line ends, and reads the front
+// matter: raw[i:] is what follows it.
+func frontMatter(src string) (raw []string, i int, title frontTitle, err error) {
+	src = strings.ReplaceAll(src, "\r\n", "\n")
+	src = strings.ReplaceAll(src, "\r", "\n") // a CR alone ends a line too
+	raw = strings.Split(src, "\n")
+	for i < len(raw) && strings.TrimSpace(raw[i]) == "" {
+		i++
+	}
+	if i < len(raw) && strings.TrimSpace(raw[i]) == "---" {
+		start := i
+		i++
+		closed := false
+		for ; i < len(raw); i++ {
+			t := strings.TrimSpace(raw[i])
+			if t == "---" {
+				closed = true
+				i++
+				break
+			}
+			// Only a top-level "title:" key matters; config and the rest are
+			// presentation.
+			if !strings.HasPrefix(raw[i], " ") && !strings.HasPrefix(raw[i], "\t") {
+				if v, ok := strings.CutPrefix(t, "title:"); ok {
+					title = frontTitle{unquoteYAML(strings.TrimSpace(v)), i + 1}
+				}
+			}
+		}
+		if !closed {
+			return nil, 0, title, errf(SyntaxError, start+1, "front matter is not closed with ---")
+		}
+	}
+	return raw, i, title, nil
 }
 
 // unquoteYAML reads a YAML scalar as a title: single quotes with ” for a

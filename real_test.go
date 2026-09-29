@@ -35,6 +35,8 @@ func outcome(src string) string {
 		return dumpState(d)
 	case *Gantt:
 		return dumpGantt(d)
+	case *Mindmap:
+		return dumpMindmap(d)
 	default:
 		return dump(d.(*Flowchart))
 	}

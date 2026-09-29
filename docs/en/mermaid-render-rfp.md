@@ -432,20 +432,27 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
   case-insensitive, `\b` after a rule ending in a word character, the exclusive states `NODE`,
   `NSTR`, `NSTR2`, `ICON`, `CLASS`), with mermaid's added line end. The header is `mindmap`
   (the detector is case-sensitive; the lexer's `mindmap` is not, so a node whose text starts
-  with the word `mindmap`, any case, is mermaid's syntax error). A node may share the header's
-  line (`mindmap root`). Consequences shared with mermaid:
-  - A node is a line's text: its indentation is the count of whitespace characters before it (a
-    tab counts one), and it is either a bare text (`[^([\n){}]+`, the id and the label both) or
-    an optional id followed by a delimited label. A bare text runs to the first `(`, `[`, `)`,
-    `{` or `}`, so `言語 (Go)` is a rounded node labelled `Go`, and text after a delimited label
-    is a syntax error. `:::` and `%%` inside a bare text are text (`A:::x` is the node `A:::x`,
-    `A %% c` the node `A %% c`); a line starting with `%%` (after spaces) is a comment.
+  with the word `mindmap`, any case, is mermaid's syntax error; `mindmaps` is not). The source
+  is read after mermaid's own preparation: directives (`%%{…}%%`) are removed wherever they
+  stand, a whole-line comment is removed together with the whitespace-only lines right before it
+  (`cleanupComments`), and a line end is added. A node may share the header's line (`mindmap
+  root`); its indentation is then the space after `mindmap`. Consequences shared with mermaid:
+  - A node is a line's text: its indentation is the count of JavaScript whitespace characters
+    before it (a tab, U+3000 and U+00A0 count one each), and it is either a bare text
+    (`[^([\n){}]+`, the id and the label both) or an optional id followed by a delimited label.
+    A bare text runs to the first `(`, `[`, `)`, `{` or `}`, so `言語 (Go)` is a rounded node
+    labelled `Go`, and text after a delimited label is a syntax error unless it is a `%%`
+    comment. `:::` and `%%` inside a bare text are text (`A:::x` is the node `A:::x`, `A %% c` the
+    node `A %% c`).
   - The shape comes from the opening delimiter alone (`getType`): `[` rectangle, `(` rounded
     rectangle when closed by `)` and cloud otherwise, `((` circle, `)` cloud, `))` bang, `{{`
-    hexagon; `(-` and `-)` open the default shape. A label ends at the first `)`, `]`, `}}`, `(`,
-    `((`, `(-` or `-)`, whichever the delimiter was (`{{h]` is a hexagon labelled `h`); a `}` alone
-    or `{x}` is a syntax error. `"…"` and `` "`…`" `` inside the delimiters quote the label
-    (brackets allowed inside); a label may span lines.
+    hexagon; `(-` and `-)` open the default shape, but only where no id or text runs into them:
+    the id and the label take a `-` (`x(-y-)` is labelled `y-`, `a-)x)` is the node `a-` as a
+    cloud labelled `x`). A label ends at the first `)`, `]`, `}}`, `(` or `((`, whichever the
+    delimiter was (`{{h]` is a hexagon labelled `h`); a `}` alone anywhere in it, `{x}`, and an
+    empty label are syntax errors. `"…"` and `` "`…`" `` quote the label only right inside the
+    delimiters (`a[ "x"]` shows the quotes; `a["x" ]` is an error); the backquoted form cannot hold
+    `"` or a backquote. A label may span lines.
   - A line of `:::` followed by classes and a line of `::icon(…)` (the icon text may span lines)
     decorate the last node; before any node they are mermaid's crash, an error here.
   - Blank lines, whitespace-only lines and comment lines separate nothing.
@@ -458,22 +465,33 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
 - **Labels.** Every label is markdown (mermaid 12.0.0 gives every node `labelType: 'markdown'`) and
   HTML (`htmlLabels` defaults to true), drawn by `markdownToHTML`, which renders only emphasis
   (`strong`, `em`) as formatting and shows every other markdown token as written. So:
-  - Emphasis (`*x*`, `**x**`, `_x_`, `__x__`, as ER's rule finds it) is unsupported (the
-    operator's decision of 2026-09-29: as in ER and state). Headings, lists, quotes and code
-    spans on one line are drawn as written, as mermaid shows them.
+  - Emphasis is unsupported (the operator's decision of 2026-09-29: as in ER and state). It is
+    found as CommonMark reads delimiter runs — a run of `*` or `_` that can open followed by one of
+    the same character that can close — erring toward refusal: `_snake_case_` and `__init_db__`
+    are emphasis, `user_id` is not. (The regular expression ER used missed `_` inside the span;
+    ER and state now use the same test.) With a `<` in the label, DOMPurify decodes entity codes
+    before markdown reads it, so `#42;x#42;<br>y` is emphasis too. Headings, lists, quotes and
+    code spans on one line are drawn as written, as mermaid shows them.
   - A label spanning lines breaks at each line end, each line trimmed; empty lines do not show.
     A label spanning lines with a line that starts a markdown block (a list item, heading, quote,
-    fence, or a `---` / `===` underline) is unsupported: mermaid shows the block's raw text with
-    its line ends collapsed into spaces.
-  - A backslash before ASCII punctuation (a markdown escape, which mermaid drops) is unsupported.
-  - `<br>` breaks the line; any other HTML is unsupported; entity codes are decoded; runs of
-    spaces show as one.
-  - **Wrapping**: mermaid lets a label grow to 200 px at its 16 px text and then wraps it
-    (`addHtmlSpan`: `white-space: break-spaces` in a 200 px box, lines centred). Here a line wider
-    than 12.5 em wraps: at spaces, and between characters where either is CJK (Han, kana,
-    full-width forms), never before closing punctuation (`、。，．）」』】〉》〕｝！？ー` and small
-    kana) or after opening brackets. A run with no break wider than 12.5 em stays on its line,
-    widening the node, as in mermaid.
+    fence, or a `---` / `===` underline), or with a hard break (a line ending in two spaces or a
+    backslash), is unsupported: mermaid shows the raw text with its line ends as spaces.
+  - A backslash before ASCII punctuation (a markdown escape, which mermaid drops) is unsupported;
+    so are an icon written in the text (`fa:fa-car`, which mermaid replaces with an icon) and
+    math (`$$…$$`, drawn by KaTeX).
+  - `<br>` (and `</br>`) breaks the line; a `<` before a letter, `/`, `!` or `?` is unsupported
+    (it opens a tag, which hides the rest: `x<y` shows `x`). Entity codes and HTML references are
+    decoded (`#35;`, `&amp;`); a name HTML does not know shows as a reference (`#foo;` as `&foo;`).
+    Runs of spaces show as one (mermaid keeps them in a label wrapped by `break-spaces`: not text).
+  - **Wrapping**: mermaid lets a label grow to a width, then wraps it (`addHtmlSpan`:
+    `white-space: break-spaces` in a box of that width, lines centred), at its 16 px text: 200 px
+    (`maxNodeWidth`) in the default shape, circle, cloud and bang; 120 px
+    (`flowchart.wrappingWidth`, as the renderer zeroes their width) in the rectangle, rounded
+    rectangle and hexagon. Here a line wider than 12.5 em, or 7.5 em in those three shapes, wraps:
+    at spaces, after a hyphen inside a word (not before a digit), and between characters where
+    either is CJK (Han, kana, full-width forms), never before closing punctuation
+    (`、。，．）」』】〉》〕｝！？ー` and small kana) or after opening brackets. A run with no
+    break wider than the width stays on its line, widening the node, as in mermaid.
 - **Read and dropped**: `:::` classes (the site's stylesheet, as in flowchart) and `::icon(…)`
   (drawn only when the page supplies an icon font; the operator's decision of 2026-09-29).
   `config` in front matter, `layout: tidy-tree` included, is ignored.
@@ -489,8 +507,9 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     outer side (right side: left-aligned there; left side: right-aligned). So nothing but its
     own subtree lies in a band, and nothing but lines lies between a parent and its children.
   - **Lines**: from the middle of a parent's outer side to the middle of a child's inner side, a
-    smooth curve (horizontal at both ends), under the nodes; its width falls with depth
-    (`edge-depth-N` in mermaid), its colour the child's section.
+    smooth curve (horizontal at both ends), under the nodes; its width falls with the tree's depth
+    (mermaid's `edge-depth-N` counts indentation characters, not depth), its colour the child's
+    section.
   - **Shapes**: the default a rounded rectangle; `[ ]` a rectangle; `( )` a rectangle with large
     rounded corners; `(( ))` a circle round the label; `) (` a cloud; `)) ((` a bang; `{{ }}` a
     hexagon — each filled with its section's colour, the label inside.
@@ -501,8 +520,8 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
 - **Checked on every render**: every node placed once, inside the picture, no two nodes'
   shapes overlapping; each label inside its shape; each child on its parent's outer side, one
   gap out, siblings in source order; each band holding only its subtree; each line starting and
-  ending on its two nodes' sides and staying between them; every wrapped line within 12.5 em or
-  a run with no break.
+  ending on its two nodes' sides and staying between them; every wrapped line within its
+  shape's width or a run with no break, and no text lost in wrapping.
 
 ### Layout specification
 
@@ -1092,6 +1111,21 @@ same way as pathguard.
     year; the render check now also holds each bar on its row's stripe, the excluded runs where
     the scale puts them, each tick at its time and each marker across every row. 44 mutants,
     all caught.
+  - **2d mindmap (2026-09-29)**: the operator's decisions — emphasis in a label is refused as in ER
+    and state; `::icon(…)` is read and dropped. mermaid places a mind map with a physics simulation,
+    so the layout follows its `tidy-tree` option in outline (two sides, first child left) in bands
+    that leave nothing but lines between a parent and its children. The reading was checked
+    against a parser generated from `mindmap.jison` with a port of `mindmapDb` and mermaid's
+    preparation: 24,000 generated sources, no difference. It showed what the documentation does
+    not say: a blank line right after the header, or spaces after `mindmap`, is mermaid's syntax
+    error. The independent review of the specification checked against real mermaid 12.0.0 in a
+    browser (12,000 sources, 1,444 labels) and found fourteen claims wrong or loose: the
+    rectangle, rounded rectangle and hexagon wrap at 120 px, not 200 (`flowchart.wrappingWidth`
+    is 120 in 12.0.0); `(-` / `-)` only open a node where no id or text takes the `-`; a `%%`
+    comment may follow a delimited label; ER's emphasis expression missed `_` inside the span
+    (`_snake_case_`: now a delimiter-run test, for ER and state as well — 90,000 strings against
+    marked 16, none missed); hard breaks keep a line; a `<` before a letter hides the rest; icons
+    in text and math; hyphens break; `&amp;` decodes.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

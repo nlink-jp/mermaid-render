@@ -15,9 +15,9 @@ kitty の画像方式に対応した端末で、トランスクリプトの merm
 
 ## 対応する図
 
-`flowchart` / `graph`、`sequenceDiagram`、`erDiagram`、`pie`、`stateDiagram` / `stateDiagram-v2`、`gantt`。
-範囲は RFP に定める（基準は mermaid の公式ドキュメント、12.0.0）。第 2 段階でこの順に `pie`（済み）、
-`stateDiagram`（済み）、`gantt`（済み）、`mindmap` を加える。それ以外の種類は「図の種類が未対応」として返す。
+`flowchart` / `graph`、`sequenceDiagram`、`erDiagram`、`pie`、`stateDiagram` / `stateDiagram-v2`、`gantt`、
+`mindmap`。範囲は RFP に定める（基準は mermaid の公式ドキュメント、12.0.0）。それ以外の種類は「図の種類が
+未対応」として返す。
 
 円グラフは mermaid と同じように描く — 扇形は書いた順に 12 時から時計回り。全体の 1% 未満の項目は
 扇形を描かないが凡例には残す。扇形には全体に対する割合を `toFixed(0)` で丸めて書く。`showData` なら
@@ -38,6 +38,13 @@ kitty の画像方式に対応した端末で、トランスクリプトの merm
 付ける）、日付を今日から取る `dateFormat`。今日の線は描かない。節の見出しは左の列、タスク名は棒の中か右、
 密な軸ラベルは間引く。
 
+マインドマップの木は mermaid と同じように字下げの輪郭から読む — ノードの親はそれより前で字下げが浅い最後の
+ノード、形は開きの括弧で決まり、`::icon(…)` と `:::` のクラスは捨てる。mermaid は結果の決まらない物理
+シミュレーションで置くが、ここでは決まった規則で並べ、大筋は mermaid の `tidy-tree` 設定と同じ形にする:
+根の子を左右交互に（1 番目は左）、部分木ごとに自分の帯、親の脇から子へ曲線、枝ごとに色。ラベルは mermaid と
+同じく折り返す（12.5 em。四角・角丸・六角形は 7.5 em）。強調（`**x**`・`_x_`）、文字の中のアイコン、数式は
+未対応としてソースを表示する。
+
 ## API
 
 ```go
@@ -55,6 +62,7 @@ case *mermaidrender.Sequence:  // Participants, Boxes, Events（メッセージ�
 case *mermaidrender.Pie:       // Slices（ラベルと値）, ShowData
 case *mermaidrender.Gantt:        // Tasks（時刻は ms、UTC）, AxisFormat, 目盛り, 除外日
 case *mermaidrender.StateDiagram: // Root: States・Transitions・Notes を持つ範囲。複合状態は Regions を持つ
+case *mermaidrender.Mindmap:      // Nodes（ソースの順）: Text, Shape, Level, Parent, Children, Section
 }
 
 font, err := raster.DefaultFont() // 一度読んで使い回す
@@ -75,7 +83,7 @@ sequence 図は専用の配置で、白地のカードに描く。PNG への変�
 端末での枠の大きさは呼び出し側が決める。描画が止まらないよう、次を上限とする: ソース 5 万文字（mermaid 自身の maxTextSize）、ノードと
 subgraph を合わせて 300（subgraph は 100 まで）、線と関係 500（mermaid 自身の上限で、構文を読む
 段階で判定）、ER の実体 300・属性は実体ごとに 200、sequence の参加者 300・イベント 2000・枠の入れ子
-50、円グラフの項目 100（値の合計が有限であること）、複合状態の入れ子 20 段、ガントのタスク 500（既定の倍率では約 200 行で先に画素数の上限に達する）、`excludes` と照らす日 20 万日、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
+50、円グラフの項目 100（値の合計が有限であること）、複合状態の入れ子 20 段、ガントのタスク 500（既定の倍率では約 200 行で先に画素数の上限に達する）、`excludes` と照らす日 20 万日、マインドマップのノード 300、ラベル 1 つあたり 1000 文字、線の長さ 10（mermaid と同じ）、`Scale` 8、1 枚 1200 万画素（時間と
 メモリのため）。配置の要素が 2 万を超える flowchart（多くの段をまたぐ長い線）も拒む。PNG の大きさ（1 画素あたり 0.10〜0.67 バイトと幅がある）は呼び出し側が自分の
 上限（termimg の 2MiB）で確かめ、超えたらソースを表示する。上限を超えたときは、どのフォントにも無い文字と
 同じく `UnsupportedConstruct` のエラーになる。

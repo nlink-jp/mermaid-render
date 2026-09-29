@@ -5,7 +5,7 @@ import "testing"
 func TestDiagramTypes(t *testing.T) {
 	for src, kind := range map[string]ErrorKind{
 		"classDiagram\n A <|-- B": UnsupportedType,
-		"mindmap\n  root":         UnsupportedType,
+		"timeline\n  title x":     UnsupportedType,
 		"journey\n title x":       UnsupportedType,
 		"hello world":             SyntaxError,
 	} {

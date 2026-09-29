@@ -162,7 +162,7 @@ func TestRealBlocksRender(t *testing.T) {
 		}
 		n++
 	}
-	if n != 47 {
-		t.Errorf("rendered %d real diagrams, want 47", n)
+	if n != 48 {
+		t.Errorf("rendered %d real diagrams, want 48", n)
 	}
 }

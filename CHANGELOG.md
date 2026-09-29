@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `mindmap` (mermaid 12.0.0, `mindmap.jison`, `mindmapDb.ts`): the tree read
+  from its indented outline as mermaid reads it — shapes from the opening
+  bracket, labels spanning lines, `::icon(…)` and `:::` classes dropped —
+  after mermaid's own preparation of the source (a blank line right after
+  `mindmap` is mermaid's syntax error, and so here). The reading was
+  checked against a parser generated from the grammar. mermaid places a
+  mind map with a physics simulation; here it is laid out by fixed rules,
+  as mermaid's `tidy-tree` option does in outline: two sides, a band per
+  subtree, curved lines, a colour per branch. Labels wrap as mermaid's
+  (200 px or 120 px of 16 px text, by shape). Emphasis, icons written in the
+  text and math are unsupported. Every render checks the tree's placing,
+  texts, wrapping and lines.
+
 ### Fixed
 
 - Emphasis in ER and state labels is found by CommonMark's delimiter-run

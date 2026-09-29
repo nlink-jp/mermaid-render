@@ -18,10 +18,9 @@ support the iTerm2 or kitty image protocol.
 ## Diagrams
 
 `flowchart` / `graph`, `sequenceDiagram`, `erDiagram`, `pie`,
-`stateDiagram` / `stateDiagram-v2` and `gantt`, as specified in the RFP (the reference is
-the official mermaid documentation, 12.0.0). Phase 2 adds, in this order,
-`pie` (done), `stateDiagram` (done), `gantt` (done) and `mindmap`. Other
-diagram types are returned as "unsupported diagram type".
+`stateDiagram` / `stateDiagram-v2`, `gantt` and `mindmap`, as specified in the RFP (the
+reference is the official mermaid documentation, 12.0.0). Other diagram types are returned
+as "unsupported diagram type".
 
 A pie chart is drawn as mermaid draws it — slices in the order written,
 clockwise from twelve o'clock; an item under 1% of the whole gets no slice
@@ -54,6 +53,17 @@ from today. The today marker is never drawn. Section titles stand in a column
 on the left; a task's text sits in its bar or to its right; dense axis labels
 are thinned.
 
+A mind map's tree is read as mermaid reads its indented outline — the parent
+of a node is the last one before it indented less, shapes come from the
+opening bracket, `::icon(…)` and `:::` classes are dropped. mermaid places it
+with a physics simulation whose result is not fixed; here it is laid out by
+fixed rules, as mermaid's `tidy-tree` option does in outline: the root's
+children alternate left and right (the first on the left), every subtree in
+a band of its own, lines curving from a parent's side to its children, each
+branch in its own colour. Labels wrap as mermaid wraps them (12.5 em; 7.5 em
+in rectangles, rounded rectangles and hexagons). Emphasis (`**x**`, `_x_`),
+icons written in the text and math are unsupported and the source is shown.
+
 ## API
 
 ```go
@@ -71,6 +81,7 @@ case *mermaidrender.Sequence:  // Participants, Boxes, Events (messages, notes, 
 case *mermaidrender.Pie:       // Slices (label, value), ShowData
 case *mermaidrender.Gantt:        // Tasks (times in ms, UTC), AxisFormat, ticks, excluded days
 case *mermaidrender.StateDiagram: // Root: a scope of States, Transitions, Notes; composites hold Regions
+case *mermaidrender.Mindmap:      // Nodes in source order: Text, Shape, Level, Parent, Children, Section
 }
 
 font, err := raster.DefaultFont() // load once, reuse
@@ -96,7 +107,7 @@ parsing), 300 ER entities with at most 200 attributes each, 300 sequence
 participants with at most 2000 events and blocks nested 50 deep, 100 pie
 items whose total is a finite number, composite states nested 20 deep, 500
 gantt tasks (at the default scale about 200 rows reach the pixel limit first),
-200,000 days checked against `excludes`, 1000
+200,000 days checked against `excludes`, 300 mind map nodes, 1000
 characters per label, link length 10 (as mermaid), `Scale` up to 8, and 12 Mpx
 per image (for time and memory). A flowchart whose links would need more than
 20,000 layout items (very long links through many layers) is refused too. The PNG's size is the caller's to check — it

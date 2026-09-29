@@ -1210,3 +1210,185 @@ func rectMeetsCircle(r rect, c pt, rad float64) bool {
 	dy := math.Max(r.Y0-c.Y, math.Max(0, c.Y-r.Y1))
 	return math.Hypot(dx, dy) < rad-eps
 }
+
+// mindmapFaults checks a mind map's layout: every node placed once inside
+// the picture, no two shapes' boxes overlapping, each text inside its
+// shape and wrapped within mmWrap em, the tree on two sides in bands (a
+// child one gap out from its parent's outer side, siblings in order, a
+// parent between its first and last child, a band holding only its
+// subtree), and each line from its parent's side to its child's with
+// nothing but lines between them.
+func mindmapFaults(m *mr.Mindmap, ml *mindmapLayout, measure measurer) []string {
+	var out faults
+	if len(ml.nodes) != len(m.Nodes) || len(ml.edges) != max(0, len(m.Nodes)-1) {
+		out.add("placed %d nodes and %d lines, want %d and %d", len(ml.nodes), len(ml.edges), len(m.Nodes), max(0, len(m.Nodes)-1))
+		return out
+	}
+	if len(m.Nodes) == 0 {
+		return out
+	}
+	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-6 }
+	all := rect{-eps, -eps, ml.W + eps, ml.H + eps}
+	// The subtree of each node, as a range of source order (preorder).
+	end := make([]int, len(m.Nodes))
+	for i := len(m.Nodes) - 1; i >= 0; i-- {
+		end[i] = i + 1
+		if k := m.Nodes[i].Children; len(k) > 0 {
+			end[i] = end[k[len(k)-1]]
+		}
+	}
+	for i, n := range ml.nodes {
+		mn := m.Nodes[i]
+		if !within(all, n.box) || !within(all, n.band) {
+			out.add("node %d is outside the picture", i)
+		}
+		// The text: its box the size of what is drawn, inside the shape.
+		tw, th, err := measure(n.text, false)
+		if err != nil || !near(n.tbox.W(), tw) || !near(n.tbox.H(), th) {
+			out.add("node %d: its text box is not its text's size", i)
+		}
+		poly := mmOutline(mn.Shape, n.box)
+		t := n.tbox
+		for _, q := range []pt{{t.X0, t.Y0}, {t.X1, t.Y0}, {t.X1, t.Y1}, {t.X0, t.Y1}, t.Center(), {t.Center().X, t.Y0}, {t.Center().X, t.Y1}, {t.X0, t.Center().Y}, {t.X1, t.Center().Y}} {
+			if !inPolygon(poly, q) {
+				out.add("node %d: its text leaves its shape", i)
+				break
+			}
+		}
+		if !within(n.box, polyBounds(poly)) {
+			out.add("node %d: its shape leaves its box", i)
+		}
+		// Wrapping: nothing lost, every line within the width or unbreakable.
+		if strip(n.text) != strip(mn.Text) {
+			out.add("node %d: its wrapped text %q is not %q", i, n.text, mn.Text)
+		}
+		for _, l := range strings.Split(n.text, "\n") {
+			if w, _, err := measure(l, false); err == nil && w > mmWrapOf(mn.Shape)+eps && len(breakSegments(l)) > 1 {
+				out.add("node %d: line %q is wider than %v em and could break", i, l, mmWrapOf(mn.Shape))
+			}
+		}
+		// Sides: the root in the middle, its children alternating from the
+		// left, their descendants on their side.
+		want := 0
+		switch {
+		case mn.Parent == 0:
+			want = 2*(indexOf(m.Nodes[0].Children, i)%2) - 1
+		case mn.Parent > 0:
+			want = ml.nodes[mn.Parent].side
+		}
+		if n.side != want {
+			out.add("node %d is on side %d, want %d", i, n.side, want)
+			continue
+		}
+		if !near(n.cy, n.box.Center().Y) {
+			out.add("node %d: its middle is off its box", i)
+		}
+		if mn.Parent >= 0 {
+			p := ml.nodes[mn.Parent]
+			if (n.side > 0 && !near(n.box.X0, p.box.X1+mmGapX)) || (n.side < 0 && !near(n.box.X1, p.box.X0-mmGapX)) {
+				out.add("node %d does not stand one gap out from its parent's side", i)
+			}
+		}
+		// The band: all of the subtree, and nothing else.
+		for j := range ml.nodes {
+			in := j >= i && j < end[i]
+			if in && !within(n.band, ml.nodes[j].box) {
+				out.add("node %d's band does not hold node %d", i, j)
+			}
+			if !in && i > 0 && ml.nodes[j].box.overlaps(n.band) {
+				out.add("node %d lies in node %d's band", j, i)
+			}
+			if j > i && n.box.overlaps(ml.nodes[j].box) {
+				out.add("nodes %d and %d overlap", i, j)
+			}
+		}
+		// Children: bands in order, apart, the parent between the first and
+		// the last one's middle.
+		for s, kids := range mmKids(m, ml, i) {
+			if len(kids) == 0 {
+				continue
+			}
+			gap := mmGapY
+			if i == 0 {
+				gap = mmBranchGap
+			}
+			for k := 1; k < len(kids); k++ {
+				if ml.nodes[kids[k-1]].band.Y1+gap > ml.nodes[kids[k]].band.Y0+eps {
+					out.add("the bands of nodes %d and %d are out of order or too close", kids[k-1], kids[k])
+				}
+			}
+			mid := (ml.nodes[kids[0]].cy + ml.nodes[kids[len(kids)-1]].cy) / 2
+			if !near(n.cy, mid) {
+				out.add("node %d is not between its children on side %d", i, s)
+			}
+		}
+	}
+	for k, e := range ml.edges {
+		c := k + 1
+		p := m.Nodes[c].Parent
+		if e.from != p || e.to != c || len(e.pts) < 2 {
+			out.add("line %d joins %d and %d, want %d and %d", k, e.from, e.to, p, c)
+			continue
+		}
+		pn, cn := ml.nodes[p], ml.nodes[c]
+		a, b := pt{pn.box.X1, pn.cy}, pt{cn.box.X0, cn.cy}
+		if cn.side < 0 {
+			a, b = pt{pn.box.X0, pn.cy}, pt{cn.box.X1, cn.cy}
+		}
+		first, last := e.pts[0], e.pts[len(e.pts)-1]
+		if !near(first.X, a.X) || !near(first.Y, a.Y) || !near(last.X, b.X) || !near(last.Y, b.Y) {
+			out.add("line %d does not run from its parent's side to its child's", k)
+		}
+		between := rect{math.Min(a.X, b.X), math.Min(a.Y, b.Y), math.Max(a.X, b.X), math.Max(a.Y, b.Y)}
+		for _, q := range e.pts {
+			if q.X < between.X0-eps || q.X > between.X1+eps || q.Y < between.Y0-eps || q.Y > between.Y1+eps {
+				out.add("line %d leaves the space between its nodes", k)
+				break
+			}
+		}
+		strip := rect{between.X0 + eps, between.Y0 - eps, between.X1 - eps, between.Y1 + eps}
+		for j, o := range ml.nodes {
+			if o.box.overlaps(strip) {
+				out.add("node %d lies between nodes %d and %d", j, p, c)
+			}
+		}
+	}
+	return out
+}
+
+// mmKids are a node's children in the layout, by side: the root's are its
+// two sides.
+func mmKids(m *mr.Mindmap, ml *mindmapLayout, i int) [][]int {
+	if i == 0 {
+		return ml.sides[:]
+	}
+	return [][]int{m.Nodes[i].Children}
+}
+
+func polyBounds(poly []pt) rect {
+	r := rect{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
+	for _, q := range poly {
+		r = rect{math.Min(r.X0, q.X), math.Min(r.Y0, q.Y), math.Max(r.X1, q.X), math.Max(r.Y1, q.Y)}
+	}
+	return r
+}
+
+// strip is a text without its spaces and line ends, to compare a wrapped
+// text with the one it wraps.
+func strip(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\n' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func indexOf(s []int, v int) int {
+	for i, x := range s {
+		if x == v {
+			return i
+		}
+	}
+	return -1
+}

@@ -62,6 +62,8 @@ type probe struct {
 	corruptState func(sl *stateLayout)
 	// corruptGantt is corrupt for a gantt chart's layout.
 	corruptGantt func(gl *ganttLayout)
+	// corruptMindmap is corrupt for a mind map's layout.
+	corruptMindmap func(ml *mindmapLayout)
 }
 
 // render is Render with a probe.
@@ -89,6 +91,7 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		pie       *pieLayout
 		st        *stateLayout
 		gt        *ganttLayout
+		mm        *mindmapLayout
 		nodeLines []int
 		title     string
 		titleLine int
@@ -141,6 +144,13 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 		}
 		lay = &flowLayout{W: st.W, H: st.H}
 		title, titleLine = d.Title(), d.TitleLine()
+	case *mr.Mindmap:
+		var err error
+		if mm, err = layoutMindmap(d, fn.measureEm); err != nil {
+			return nil, err
+		}
+		lay = &flowLayout{W: mm.W, H: mm.H}
+		title, titleLine = d.Title(), d.TitleLine()
 	default:
 		return nil, &mr.Error{Kind: mr.UnsupportedType, Msg: fmt.Sprintf("%T", d)}
 	}
@@ -172,10 +182,16 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	if pr.corruptGantt != nil && gt != nil {
 		pr.corruptGantt(gt)
 	}
+	if pr.corruptMindmap != nil && mm != nil {
+		pr.corruptMindmap(mm)
+	}
 	var fs []string
-	if gt != nil {
+	switch {
+	case gt != nil:
 		fs = ganttFaults(d.(*mr.Gantt), gt, fn.measureEm)
-	} else {
+	case mm != nil:
+		fs = mindmapFaults(d.(*mr.Mindmap), mm, fn.measureEm)
+	default:
 		fs = verify(d, lay, er, seq, pie, st, fn.measureEm)
 	}
 	if len(fs) > 0 {
@@ -202,6 +218,12 @@ func render(d mr.Diagram, opts Options, pr probe) (*image.RGBA, error) {
 	}
 	if gt != nil {
 		if err := c.drawGantt(gt, fn); err != nil {
+			return nil, err
+		}
+		return img, nil
+	}
+	if mm != nil {
+		if err := c.drawMindmap(d.(*mr.Mindmap), mm, fn); err != nil {
 			return nil, err
 		}
 		return img, nil

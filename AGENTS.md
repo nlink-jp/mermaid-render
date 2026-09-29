@@ -7,7 +7,7 @@ for gem-agent and lagent to show diagrams in the terminal through their
 `internal/termimg`. Module `github.com/nlink-jp/mermaid-render`. Two packages:
 `mermaidrender` (parse into drawing-independent diagram data) and `raster`
 (layout and drawing). Phase 1 covers flowchart / graph, sequenceDiagram and
-erDiagram; phase 2 adds pie, stateDiagram, gantt (done) and mindmap. Dependency: `golang.org/x/image` only (declared exception to the
+erDiagram; phase 2 added pie, stateDiagram, gantt and mindmap. Dependency: `golang.org/x/image` only (declared exception to the
 lib-series standard-library rule). The specification is
 `docs/en/mermaid-render-rfp.md` (ja: `docs/ja/mermaid-render-rfp.ja.md`).
 
@@ -42,6 +42,9 @@ mermaid-render/
 ├── ganttlex.go       # the gantt.jison lexer (on runLexer)
 ├── ganttparse.go     # its grammar and ganttDb's placing of tasks
 ├── dayjs.go          # dayjs 1.11.21's strict parse, format and add (UTC)
+├── mindmap.go        # Mindmap, MindmapNode, MindmapShape
+├── mindmaplex.go     # mermaid's source preparation for mindmap, the mindmap.jison lexer
+├── mindmapparse.go   # its grammar, MindmapDB.addNode, labels as markdownToHTML shows them
 ├── pie.go            # Pie, Slice
 ├── pieparse.go       # the pie grammar: pie.langium lexed as Chevrotain does, pieDb's rules
 ├── testdata/real/    # real session blocks: reply/, file/; *.parse = reviewed goldens
@@ -52,6 +55,7 @@ mermaid-render/
 │   ├── gantt.go      # gantt: rows, section column, bars, texts, axis, markers, drawing
 │   ├── d3time.go     # d3 7.9.0's time scale ticks and d3-time-format (en-US, UTC)
 │   ├── state.go      # state: scopes laid out innermost first on layoutGraph, composites as frames, drawing
+│   ├── mindmap.go    # mindmap: two sides, bands, curves, shapes, label wrapping, drawing
 │   ├── doc.go        # package raster
 │   ├── text.go       # Font, DefaultFont, glyph-by-glyph fallback, missingGlyphError
 │   ├── fontload.go   # FontSpec, LoadFont, name-table reader (every language)
@@ -103,13 +107,23 @@ mermaid-render/
   Anything that reads today (missing `after` target, year-less formats,
   today marker) or the browser's `Date` (non-ISO starts) is refused, not
   imitated.
+- **A mind map's grammar reads what other parsers throw away.** Indentation,
+  blank lines and trailing spaces matter (a blank line after `mindmap` is
+  mermaid's syntax error), so `mindmapLines` repeats mermaid's own
+  preparation instead of `prepare`: a `cleanupComments` line takes the
+  whitespace-only lines before it with it. The reading was compared with a
+  parser generated from `mindmap.jison` (24,000 sources, no difference).
+  Labels are markdown in HTML: only emphasis is formatting, and
+  `hasMdEmphasis` (label.go, shared with ER and state) errs toward refusal —
+  it was fuzzed against marked 16 with 0 misses; a missed emphasis draws
+  asterisks where mermaid draws italics.
 - **A pie's percentages are of the whole, its angles of the drawn slices**
   (`pieShares`): items under 1% are removed before d3's pie, but the label
   still divides by the full sum. Keep both; a test picks values where they
   round differently.
 - **Layout properties are the correctness gate** (they replace the text-art
   faithfulness checks of gem-agent ADR-0042). `flowFaults`, `erFaults`,
-  `seqFaults`, `pieFaults`, `stateFaults` and `ganttFaults` in `raster/verify.go` are the list, run on every render
+  `seqFaults`, `pieFaults`, `stateFaults`, `ganttFaults` and `mindmapFaults` in `raster/verify.go` are the list, run on every render
   (`LayoutFault`) and strictly by the tests. `strict` adds what is only a
   matter of looks (0.6 em spacing, 20° crossings, centring, frame
   crossings, label-to-bend room); a render must never refuse for those, and
