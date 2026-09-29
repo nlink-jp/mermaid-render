@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-29
+
 ### Added
 
 - `gantt` (mermaid 12.0.0, `gantt.jison`, `ganttDb.js`): tasks placed as
