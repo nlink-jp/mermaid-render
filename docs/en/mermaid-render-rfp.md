@@ -737,6 +737,12 @@ same way as pathguard.
   asked for state diagrams, Gantt charts, mind maps and pie charts; the real data holds 2 state
   diagrams and one each of pie, mindmap and gantt. The four are done smallest first (pie →
   stateDiagram with nested frames → gantt → mindmap), and replacing the text art comes after them.
+  - **2a pie (2026-09-29)**: the grammar was ported from `pie.langium` and Langium 4.2.1's value
+    converters (the docs alone do not fix the escapes or the number forms). During the work the
+    render-time check caught a real layout defect — a percentage placed outside reached into the
+    circle (outside labels are now pushed out sideways until clear). All 10 mutants are caught (2
+    slipped at first and the tests were fixed). Visual review (reviews-pie1): the 7 sheets — 1 real,
+    2 documentation examples, 4 made for the check — all ○ on all four items.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText
