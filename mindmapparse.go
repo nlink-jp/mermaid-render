@@ -223,11 +223,22 @@ func mindmapLabel(descr string, line int) (string, error) {
 	refuse := func(what string) (string, error) {
 		return "", errf(UnsupportedConstruct, line, "%s in %q", what, s)
 	}
-	// With a "<" in it, DOMPurify parses the label and decodes its entity
-	// codes before markdown reads it.
+	// With a "<" in it, DOMPurify parses the label and writes it back
+	// before markdown reads it.
 	forms := []string{s}
 	if strings.Contains(s, "<") {
-		forms = append(forms, html.UnescapeString(entityRefs(s)))
+		forms = append(forms, purified(s))
+	}
+	// marked looks for emphasis with each tag masked as letters, and reads
+	// a delimiter right after a token that is not text (a tag, a code span,
+	// an autolink) against the last text before it, or as at the start.
+	for _, f := range forms {
+		if reMmBreak.MatchString(f) {
+			forms = append(forms, reMmBreak.ReplaceAllString(f, "a"))
+		}
+		if reMdToken.MatchString(f) {
+			forms = append(forms, reMdToken.ReplaceAllString(f, " "), reMdToken.ReplaceAllString(f, ""))
+		}
 	}
 	for _, f := range forms {
 		switch {
@@ -241,16 +252,9 @@ func mindmapLabel(descr string, line int) (string, error) {
 			return refuse("math")
 		}
 	}
-	if lines := strings.Split(s, "\n"); len(lines) > 1 {
-		// A block's raw text, and a hard break's, show with their line ends
-		// as spaces.
-		for k, l := range lines {
-			if reMdBlockLine.MatchString(l) {
-				return refuse("a markdown block")
-			}
-			if k < len(lines)-1 && (strings.HasSuffix(l, "  ") || strings.HasSuffix(l, "\\")) {
-				return refuse("a markdown hard break")
-			}
+	for _, f := range forms {
+		if what := mdAcrossLines(f); what != "" {
+			return refuse(what)
 		}
 	}
 	s = reMmBreak.ReplaceAllString(s, "\n")
@@ -259,6 +263,10 @@ func mindmapLabel(descr string, line int) (string, error) {
 		return refuse("HTML")
 	}
 	s = html.UnescapeString(entityRefs(s))
+	if reNumRef.MatchString(s) {
+		// A malformed numeric reference, which the browser still reads.
+		return refuse("an HTML reference")
+	}
 	var out []string
 	for _, l := range strings.Split(s, "\n") {
 		// HTML collapses ASCII whitespace only.
@@ -267,6 +275,70 @@ func mindmapLabel(descr string, line int) (string, error) {
 		}
 	}
 	return strings.Join(out, "\n"), nil
+}
+
+// mdAcrossLines names what makes a label that spans lines show otherwise
+// than a line per line, or "". Only a paragraph's line ends break the
+// line: a block's raw text (an indented code block, an HTML block, a list,
+// a heading, a table…), a hard break's, and a code span, link or
+// strikethrough running over a line end show with their line ends as
+// spaces.
+func mdAcrossLines(s string) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) < 2 {
+		return ""
+	}
+	if strings.ContainsAny(s, "`~") || strings.Contains(s, "](") {
+		return "markdown across a line end"
+	}
+	blank := true // before the first line
+	for k, l := range lines {
+		if reMdBlockLine.MatchString(l) || blank && mdIndent(l) >= 4 {
+			return "a markdown block"
+		}
+		if k < len(lines)-1 && (strings.HasSuffix(l, "  ") || strings.HasSuffix(l, "\\")) {
+			return "a markdown hard break"
+		}
+		blank = strings.Trim(l, " \t") == ""
+	}
+	return ""
+}
+
+// purified is a label as DOMPurify writes it back: each text between
+// line breaks decoded and escaped again as HTML serializes text (&, <, >
+// and U+00A0 as references).
+func purified(s string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range reMmBreak.FindAllStringIndex(s, -1) {
+		b.WriteString(htmlText(s[last:m[0]]))
+		b.WriteString(s[m[0]:m[1]])
+		last = m[1]
+	}
+	b.WriteString(htmlText(s[last:]))
+	return b.String()
+}
+
+var htmlTextEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\u00a0", "&nbsp;")
+
+func htmlText(s string) string {
+	return htmlTextEscaper.Replace(html.UnescapeString(entityRefs(s)))
+}
+
+// mdIndent is a line's indentation in columns, a tab to the next stop of 4.
+func mdIndent(l string) int {
+	n := 0
+	for _, r := range l {
+		switch r {
+		case ' ':
+			n++
+		case '\t':
+			n += 4 - n%4
+		default:
+			return n
+		}
+	}
+	return n
 }
 
 // entityRefs turns entity codes into HTML references, as mermaid's
@@ -294,8 +366,13 @@ var (
 	// reMdEscape is a markdown backslash escape, which mermaid drops.
 	reMdEscape = regexp.MustCompile(`\\[!-/:-@\[-` + "`" + `{-~]`)
 	// reMdBlockLine is a line that starts a markdown block (or underlines
-	// one): list item, heading, quote, fence, thematic break, setext
+	// one): list item, heading, quote, fence, thematic break, HTML, setext
 	// underline, table delimiter row.
 	reMdBlockLine = regexp.MustCompile(`^[ \t]*(?:#{1,6}(?:[ \t]|$)|>|[-+*](?:[ \t]|$)|\d{1,9}[.)](?:[ \t]|$)|` +
-		"```|~~~|" + `[-_*=]{3,}[ \t]*$|=+[ \t]*$|-+[ \t]*$|\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+\|?[ \t]*$)`)
+		"```|~~~|" + `[-_*=]{3,}[ \t]*$|<[A-Za-z/!?]|[-=|: \t]*[-=][-=|: \t]*$)`)
+	// reMdToken is an inline token that is not text: a line break tag, a
+	// code span, a GFM autolink (URL, www., e-mail).
+	reMdToken = regexp.MustCompile(`(?i)</?br\s*/?>|` + "`[^`]*`" + `|(?:https?://|www\.)[^\s<]*|[A-Za-z0-9._+-]+@[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+`)
+	// reNumRef is what is left of a numeric reference HTML did not decode.
+	reNumRef = regexp.MustCompile(`&#[0-9xX]`)
 )

@@ -1248,12 +1248,8 @@ func mindmapFaults(m *mr.Mindmap, ml *mindmapLayout, measure measurer) []string 
 			out.add("node %d: its text box is not its text's size", i)
 		}
 		poly := mmOutline(mn.Shape, n.box)
-		t := n.tbox
-		for _, q := range []pt{{t.X0, t.Y0}, {t.X1, t.Y0}, {t.X1, t.Y1}, {t.X0, t.Y1}, t.Center(), {t.Center().X, t.Y0}, {t.Center().X, t.Y1}, {t.X0, t.Center().Y}, {t.X1, t.Center().Y}} {
-			if !inPolygon(poly, q) {
-				out.add("node %d: its text leaves its shape", i)
-				break
-			}
+		if !rectInPolygon(poly, n.tbox) {
+			out.add("node %d: its text leaves its shape", i)
 		}
 		if !within(n.box, polyBounds(poly)) {
 			out.add("node %d: its shape leaves its box", i)
@@ -1391,4 +1387,44 @@ func indexOf(s []int, v int) int {
 		}
 	}
 	return -1
+}
+
+// rectInPolygon reports whether r lies inside the polygon, which need not
+// be convex: its centre is inside and no edge of the polygon enters it.
+func rectInPolygon(poly []pt, r rect) bool {
+	if !inPolygon(poly, r.Center()) {
+		return false
+	}
+	for k := range poly {
+		if segmentEnters(poly[k], poly[(k+1)%len(poly)], r) {
+			return false
+		}
+	}
+	return true
+}
+
+// segmentEnters reports whether the segment a–b reaches r's interior
+// (Liang–Barsky clipping).
+func segmentEnters(a, b pt, r rect) bool {
+	t0, t1 := 0.0, 1.0
+	dx, dy := b.X-a.X, b.Y-a.Y
+	for _, c := range [][2]float64{{-dx, a.X - (r.X0 + eps)}, {dx, (r.X1 - eps) - a.X}, {-dy, a.Y - (r.Y0 + eps)}, {dy, (r.Y1 - eps) - a.Y}} {
+		p, q := c[0], c[1]
+		if p == 0 {
+			if q < 0 {
+				return false
+			}
+			continue
+		}
+		t := q / p
+		if p < 0 {
+			t0 = math.Max(t0, t)
+		} else {
+			t1 = math.Min(t1, t)
+		}
+		if t0 > t1 {
+			return false
+		}
+	}
+	return true
 }

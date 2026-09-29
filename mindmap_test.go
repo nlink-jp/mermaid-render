@@ -67,6 +67,13 @@ func TestMindmapReading(t *testing.T) {
 		// Blank and comment lines between nodes separate nothing.
 		{"mindmap\n  r\n    a\n\n\n    b\n  %% x\n    c   ", "0|default|r\n1|default|a\n1|default|b\n1|default|c"},
 		{"%% c\nmindmap\n  r", "0|default|r"},
+		// Directives as mermaid's directiveRegex finds them: a word after
+		// the brace, the closing }%% optional; a final comment line keeps
+		// the line end before it.
+		{"mindmap\n  r\n    a[\"see %%{}%% here\"]", "0|default|r\n1|rect|see %%{}%% here"},
+		{"mindmap\n  r\n    a[\"see %%{x}%% here\"]", "0|default|r\n1|rect|see here"},
+		{"mindmap\n  r\n    a[\"x\"] %%{init", "0|default|r\n1|rect|x"},
+		{"mindmap\n %% c", ""},
 		// A comment line takes the blank lines right before it
 		// (cleanupComments); the first line is trimmed (trimStart).
 		{"mindmap\n\n%% c\n  root", "0|default|root"},
@@ -88,6 +95,7 @@ func TestMindmapReading(t *testing.T) {
 		{"mindmap\n  r\n    b[x] y", "error syntax error"},
 		{"mindmap\n  r\n    a{x}", "error syntax error"},
 		{"mindmapx\n  r", "error syntax error"},
+		{"mindmap\n  r\n    b %%{}%% c", "error syntax error"},
 	} {
 		if got := mmTree(t, c.src); got != c.want {
 			t.Errorf("%q:\n got %q\nwant %q", c.src, got, c.want)
@@ -136,6 +144,30 @@ func TestMindmapLabels(t *testing.T) {
 		{"a</br>b", "a\nb"},
 		{"a &amp; b", "a & b"},
 		{"#foo;", "&foo;"},
+		// Found by the pre-release review against the emulator of mermaid's
+		// label pipeline (2026-09-30): readings of whitespace and of an
+		// underscore next to a combining mark or a format character,
+		// DOMPurify's writing back, and line ends that do not break.
+		{"\u30ab\u3099_x_", "error unsupported construct"},
+		{"x\u200b_y_", "error unsupported construct"},
+		{"x\u00ad_y_", "error unsupported construct"},
+		{"*x\u0085*", "error unsupported construct"},
+		{"x\ufeff*.*", "error unsupported construct"},
+		{"x<br>*y\u00a0*", "error unsupported construct"},
+		{"x\\\u00a0y<br>z", "error unsupported construct"},
+		{"a@b.co*x*", "error unsupported construct"},
+		// Only a delimiter read as at the start after the autolink opens.
+		{"a@b.co*\\「b* x", "error unsupported construct"},
+		{"[x]%www.e.cob*</br>&ast;", "error unsupported construct"},
+		{"&ast;\n    x<br>", "error unsupported construct"},
+		{"\n        first line\n        second", "error unsupported construct"},
+		{"see `code\n    more` here", "error unsupported construct"},
+		{"<br>\n<5***\n .", "error unsupported construct"},
+		{"a\n------|", "error unsupported construct"},
+		{"a &#1 b", "error unsupported construct"},
+		{"first\n        second", "first\nsecond"},
+		// HTML collapses ASCII whitespace only.
+		{"a\u3000\u3000b\u00a0\u00a0c", "a\u3000\u3000b\u00a0\u00a0c"},
 	} {
 		got := mmTree(t, "mindmap\n  r\n    a[\""+c.label+"\"]")
 		if !strings.HasPrefix(got, "error") {

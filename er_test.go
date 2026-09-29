@@ -397,6 +397,7 @@ func TestERRefusals(t *testing.T) {
 		// span (the mindmap specification's review, 2026-09-30).
 		{"emphasis around snake case", `erDiagram
     A ||--o{ B : "_snake_case_"`, UnsupportedConstruct, 2},
+		{"emphasis after a zero-width space", "erDiagram\n    A ||--o{ B : \"x\u200b_y_\"", UnsupportedConstruct, 2},
 		{"subgraphs", `erDiagram
     subgraph title1
         CUSTOMER

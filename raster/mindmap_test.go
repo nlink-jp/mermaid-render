@@ -4,6 +4,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"image/color"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -133,6 +135,19 @@ func TestMindmapDrawn(t *testing.T) {
 	}
 }
 
+// A label is bounded as the flowchart's are.
+func TestMindmapLabelLimit(t *testing.T) {
+	d, err := mr.Parse("mindmap\n  " + strings.Repeat("あ", MaxLabel+1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = layoutMindmap(d.(*mr.Mindmap), fakeMeasure)
+	var e *mr.Error
+	if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct {
+		t.Errorf("a label of %d characters: %v", MaxLabel+1, err)
+	}
+}
+
 // Wrapping breaks at spaces and between CJK characters, never before
 // closing punctuation, and keeps an unbreakable run whole.
 func TestWrapLabel(t *testing.T) {
@@ -232,6 +247,42 @@ func TestMindmapFaultsCatch(t *testing.T) {
 	}
 }
 
+// Each shape is the one its bracket names: a rectangle's corners, a
+// hexagon's six points, a circle's constant radius, the bang's spikes and
+// the cloud's bumps standing out of their inner ellipse, the rounded
+// rectangle rounder than the default shape.
+func TestMindmapShapeForms(t *testing.T) {
+	box := rect{0, 0, 10, 6}
+	radii := func(s mr.MindmapShape, box rect) (lo, hi float64) {
+		c := box.Center()
+		lo, hi = math.Inf(1), 0
+		for _, q := range mmOutline(s, box) {
+			// On the unit circle of the box's ellipse.
+			r := math.Hypot((q.X-c.X)/(box.W()/2), (q.Y-c.Y)/(box.H()/2))
+			lo, hi = math.Min(lo, r), math.Max(hi, r)
+		}
+		return
+	}
+	if p := mmOutline(mr.MindmapRect, box); len(p) != 4 || polyArea(p) != 60 {
+		t.Errorf("rectangle: %v", p)
+	}
+	if p := mmOutline(mr.MindmapHexagon, box); len(p) != 6 {
+		t.Errorf("hexagon: %d points", len(p))
+	}
+	if lo, hi := radii(mr.MindmapCircle, rect{0, 0, 6, 6}); math.Abs(lo-hi) > 1e-9 {
+		t.Errorf("circle radii %v..%v", lo, hi)
+	}
+	if lo, hi := radii(mr.MindmapBang, box); math.Abs(hi/lo-mmSpikeOut) > 1e-9 {
+		t.Errorf("bang: spikes %v times their feet, want %v", hi/lo, mmSpikeOut)
+	}
+	if lo, hi := radii(mr.MindmapCloud, box); hi/lo < mmBumpOut-1e-3 {
+		t.Errorf("cloud: bumps %v times the ellipse, want %v", hi/lo, mmBumpOut)
+	}
+	if polyArea(mmOutline(mr.MindmapRounded, box)) >= polyArea(mmOutline(mr.MindmapDefault, box)) {
+		t.Error("the rounded rectangle is no rounder than the default shape")
+	}
+}
+
 // Every shape is inside its box and holds its text box.
 func TestMindmapShapes(t *testing.T) {
 	for s := mr.MindmapDefault; s <= mr.MindmapHexagon; s++ {
@@ -244,11 +295,8 @@ func TestMindmapShapes(t *testing.T) {
 			}
 			c := box.Center()
 			tr := rect{c.X - tb[0]/2, c.Y - tb[1]/2, c.X + tb[0]/2, c.Y + tb[1]/2}
-			for _, q := range []pt{{tr.X0, tr.Y0}, {tr.X1, tr.Y0}, {tr.X1, tr.Y1}, {tr.X0, tr.Y1}} {
-				if !inPolygon(poly, q) {
-					t.Errorf("shape %d does not hold a %v text", s, tb)
-					break
-				}
+			if !rectInPolygon(poly, tr) {
+				t.Errorf("shape %d does not hold a %v text", s, tb)
 			}
 		}
 	}
@@ -277,5 +325,78 @@ func TestMindmapWrapWidths(t *testing.T) {
 		if got := ml.nodes[0].text; got != want {
 			t.Errorf("%s…%s: %q, want %q", c.open, c.close, got, want)
 		}
+	}
+}
+
+// The text check is exact for non-convex outlines: a text whose corners
+// are inside a bang but whose edge crosses a spike's foot is outside.
+func TestRectInPolygon(t *testing.T) {
+	bang := mmOutline(mr.MindmapBang, rect{0, 0, 10, 6})
+	c := rect{0, 0, 10, 6}.Center()
+	inner := 3 / mmSpikeOut // the spikes' feet on the short axis
+	if !rectInPolygon(bang, rect{c.X - 1, c.Y - 1, c.X + 1, c.Y + 1}) {
+		t.Error("a small text at the middle is outside")
+	}
+	// Corners inside the tips' reach, an edge through a foot.
+	if rectInPolygon(bang, rect{c.X - 3, c.Y - inner - 0.3, c.X + 3, c.Y + inner + 0.3}) {
+		t.Error("a text crossing the spikes' feet is inside")
+	}
+}
+
+// What is drawn, node by node and line by line, is what the layout and
+// the colours say: each node filled with its section's colour, its text
+// in the colour that reads on it at its box's middle, its shape's outline;
+// each line in its child's colour, thinner with depth, from middle to
+// middle.
+func TestMindmapDrawnDetails(t *testing.T) {
+	fn := systemFont(t)
+	src := "mindmap\n  root((中心))\n    a[四角]\n      aa(角丸)\n        aaa\n    b))爆発((\n      bb)雲(\n    c{{六角}}\n"
+	for k := range 10 {
+		src += fmt.Sprintf("    n%d\n", k)
+	}
+	d, err := mr.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := d.(*mr.Mindmap)
+	ml, err := layoutMindmap(m, fn.measureEm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var trace []string
+	if _, err := render(d, Options{Font: fn}, probe{trace: func(s string) { trace = append(trace, s) }}); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(trace, "\n")
+	fill := func(i int) color.RGBA {
+		if sec := m.Nodes[i].Section; sec >= 0 {
+			return mmPalette[sec%len(mmPalette)]
+		}
+		return mmRootColor
+	}
+	for i, n := range ml.nodes {
+		poly := mmOutline(m.Nodes[i].Shape, n.box)
+		c := n.tbox.Center()
+		want := fmt.Sprintf("node %d %q fill=%s text=%s at=%.3f,%.3f poly=%d area=%.3f", i, n.text, hexColor(fill(i)), hexColor(textOn(fill(i))), c.X, c.Y, len(poly), polyArea(poly))
+		if !strings.Contains(got, want) {
+			t.Errorf("trace lacks %q", want)
+		}
+	}
+	width := map[int]float64{}
+	for _, e := range ml.edges {
+		a, b := ml.nodes[e.from].box.Center(), ml.nodes[e.to].box.Center()
+		want := fmt.Sprintf("edge %d %d col=%s w=%.3f from=%.3f,%.3f to=%.3f,%.3f", e.from, e.to, hexColor(fill(e.to)), e.w, a.X, a.Y, b.X, b.Y)
+		if !strings.Contains(got, want) {
+			t.Errorf("trace lacks %q", want)
+		}
+		width[m.Nodes[e.from].Level] = e.w
+	}
+	if !(width[0] > width[1] && width[1] > width[2]) {
+		t.Errorf("line widths by depth %v do not fall", width)
+	}
+	// Sections 0 and 11 share a colour; 0 and 1 do not; the text on the
+	// dark root is light.
+	if fill(ml.sides[0][0]) == fill(ml.sides[1][0]) || textOn(mmRootColor) == colText {
+		t.Error("colours do not tell the sections apart, or the root's text does not read")
 	}
 }

@@ -433,9 +433,11 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
   `NSTR`, `NSTR2`, `ICON`, `CLASS`), with mermaid's added line end. The header is `mindmap`
   (the detector is case-sensitive; the lexer's `mindmap` is not, so a node whose text starts
   with the word `mindmap`, any case, is mermaid's syntax error; `mindmaps` is not). The source
-  is read after mermaid's own preparation: directives (`%%{…}%%`) are removed wherever they
-  stand, a whole-line comment is removed together with the whitespace-only lines right before it
-  (`cleanupComments`), and a line end is added. A node may share the header's line (`mindmap
+  is read after mermaid's own preparation: directives are removed where `directiveRegex` finds
+  them (a word must follow `%%{`, so `%%{}%%` is text; without its `}%%` a directive runs to the
+  end of the text), a whole-line comment is removed together with the whitespace-only lines right
+  before it (`cleanupComments`; a final comment line with no line end leaves the one before it),
+  and a line end is added. A node may share the header's line (`mindmap
   root`); its indentation is then the space after `mindmap`. Consequences shared with mermaid:
   - A node is a line's text: its indentation is the count of JavaScript whitespace characters
     before it (a tab, U+3000 and U+00A0 count one each), and it is either a bare text
@@ -469,20 +471,31 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     found as CommonMark reads delimiter runs — a run of `*` or `_` that can open followed by one of
     the same character that can close — erring toward refusal: `_snake_case_` and `__init_db__`
     are emphasis, `user_id` is not. (The regular expression ER used missed `_` inside the span;
-    ER and state now use the same test.) With a `<` in the label, DOMPurify decodes entity codes
-    before markdown reads it, so `#42;x#42;<br>y` is emphasis too. Headings, lists, quotes and
+    ER and state now use the same test.) Where readings differ, any that finds emphasis refuses:
+    whitespace as Go or as JavaScript reads it (U+0085, U+FEFF), an underscore by CommonMark's rule
+    or by marked's (which only refuses one beside a letter or digit, so a combining mark or a
+    zero-width space before it lets it open), a tag masked as letters, a delimiter right after a
+    code span or an autolink read as at the start. With a `<` in the label, DOMPurify decodes
+    entity codes and writes the text back (`&`, `<`, `>`, U+00A0 as references) before markdown
+    reads it, so `#42;x#42;<br>y` is emphasis too, and the written-back form is checked as well. Headings, lists, quotes and
     code spans on one line are drawn as written, as mermaid shows them.
   - A label spanning lines breaks at each line end, each line trimmed; empty lines do not show.
-    A label spanning lines with a line that starts a markdown block (a list item, heading, quote,
-    fence, or a `---` / `===` underline), or with a hard break (a line ending in two spaces or a
-    backslash), is unsupported: mermaid shows the raw text with its line ends as spaces.
+    Only a paragraph's line ends break: a label spanning lines with a line that starts a markdown
+    block (a list item, heading, quote, fence, HTML, an indented code block, a `---` / `===`
+    underline or a table's delimiter row), with a hard break (a line ending in two spaces or a
+    backslash), or with a code span, link or strikethrough that could run over a line end, is
+    unsupported: mermaid shows the raw text with its line ends as spaces. Left as it is: a label
+    that starts a block and ends in a Unicode space gains an empty-looking line in mermaid (the
+    space becomes a paragraph of its own); no text differs.
   - A backslash before ASCII punctuation (a markdown escape, which mermaid drops) is unsupported;
     so are an icon written in the text (`fa:fa-car`, which mermaid replaces with an icon) and
     math (`$$…$$`, drawn by KaTeX).
   - `<br>` (and `</br>`) breaks the line; a `<` before a letter, `/`, `!` or `?` is unsupported
     (it opens a tag, which hides the rest: `x<y` shows `x`). Entity codes and HTML references are
     decoded (`#35;`, `&amp;`); a name HTML does not know shows as a reference (`#foo;` as `&foo;`).
-    Runs of spaces show as one (mermaid keeps them in a label wrapped by `break-spaces`: not text).
+    A numeric reference the browser reads without its `;` (`&#1`) is unsupported. Runs of spaces
+    show as one (mermaid keeps them in a label wrapped by `break-spaces`: not text). A label is
+    bounded at 1000 characters, as the flowchart's.
   - **Wrapping**: mermaid lets a label grow to a width, then wraps it (`addHtmlSpan`:
     `white-space: break-spaces` in a box of that width, lines centred), at its 16 px text: 200 px
     (`maxNodeWidth`) in the default shape, circle, cloud and bang; 120 px
@@ -518,7 +531,8 @@ isoWeek and advancedFormat; d3 7.9.0 for the time scale, its ticks and `timeForm
     Eleven colours are chosen for the white card; the text is dark or white, whichever reads.
   - Limits: 300 nodes, as the flowchart's.
 - **Checked on every render**: every node placed once, inside the picture, no two nodes'
-  shapes overlapping; each label inside its shape; each child on its parent's outer side, one
+  shapes overlapping; each label inside its shape (exactly: no edge of a cloud or a bang enters
+  its box); each child on its parent's outer side, one
   gap out, siblings in source order; each band holding only its subtree; each line starting and
   ending on its two nodes' sides and staying between them; every wrapped line within its
   shape's width or a run with no break, and no text lost in wrapping.
@@ -1126,6 +1140,20 @@ same way as pathguard.
     (`_snake_case_`: now a delimiter-run test, for ER and state as well — 90,000 strings against
     marked 16, none missed); hard breaks keep a line; a `<` before a letter hides the rest; icons
     in text and math; hyphens break; `&amp;` decodes.
+  - **Pre-release independent review of mindmap (2026-09-30)**: the reading against a new
+    generator (tabs, Unicode spaces, CR, directives mid-line, comments inside labels) and the
+    labels against the emulator of mermaid's label pipeline found: emphasis missed where Go's and
+    JavaScript's whitespace differ, where marked lets an underscore open beside a combining mark
+    or a zero-width space (a regression in ER and state from v0.4.0), where DOMPurify writes
+    U+00A0 back as `&nbsp;`, beside a masked tag, and after an autolink; labels spanning lines
+    broken where an indented code block, an HTML block, a table row or an inline span keeps one
+    line; `%%{}%%` taken for a directive; a final comment line losing the line end before it;
+    the text-in-shape check sampling nine points (a cloud or bang whose feet cross the text
+    passed); the drawing untested (colours, shapes, text position, line ends); the label limit
+    not applied. All fixed. Then 120,000 hostile labels against the emulator: no text differs
+    and no emphasis is missed (62 differ only by an empty-looking line, left as it is), and
+    40,000 sources against the parser: the only differences are the shared preparation's
+    (front matter without keys, a leading U+0085) and one U+2028 line separator.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

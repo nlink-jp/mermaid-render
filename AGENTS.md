@@ -114,9 +114,15 @@ mermaid-render/
   whitespace-only lines before it with it. The reading was compared with a
   parser generated from `mindmap.jison` (24,000 sources, no difference).
   Labels are markdown in HTML: only emphasis is formatting, and
-  `hasMdEmphasis` (label.go, shared with ER and state) errs toward refusal —
-  it was fuzzed against marked 16 with 0 misses; a missed emphasis draws
-  asterisks where mermaid draws italics.
+  `hasMdEmphasis` (label.go, shared with ER and state) errs toward refusal
+  by taking every reading it cannot tell apart (Go/JS whitespace,
+  CommonMark/marked underscores); `mindmapLabel` also checks DOMPurify's
+  written-back form and forms with tags, code spans and autolinks masked.
+  The first version missed emphasis the pre-release review then found
+  (zero-width space before `_`, U+00A0 written back as `&nbsp;`): a fuzz
+  against marked alone is not enough — compare the whole label pipeline
+  (the review's emulator: 120,000 labels, no miss). A missed emphasis
+  draws asterisks where mermaid draws italics.
 - **A pie's percentages are of the whole, its angles of the drawn slices**
   (`pieShares`): items under 1% are removed before d3's pie, but the label
   still divides by the full sum. Keep both; a test picks values where they

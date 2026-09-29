@@ -23,10 +23,11 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Emphasis in ER and state labels is found by CommonMark's delimiter-run
-  rules instead of a regular expression that missed `_` inside the span
-  (`_snake_case_`, `__init_db__` were drawn with their underscores where
-  mermaid draws italics or bold): such a label is now refused.
+- Emphasis in ER and state labels is found by delimiter runs, taking every
+  reading of CommonMark's and marked's rules that could differ, instead of
+  a regular expression that missed `_` inside the span (`_snake_case_`,
+  `__init_db__` were drawn with their underscores where mermaid draws
+  italics or bold): such a label is now refused.
 
 ## [0.4.0] - 2026-09-29
 

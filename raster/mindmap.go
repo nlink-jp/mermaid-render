@@ -1,10 +1,12 @@
 package raster
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	mr "github.com/nlink-jp/mermaid-render"
 )
@@ -73,6 +75,9 @@ func layoutMindmap(m *mr.Mindmap, measure func(string, bool) (float64, float64, 
 		return ml, nil
 	}
 	for i, n := range m.Nodes {
+		if utf8.RuneCountInString(n.Text) > MaxLabel {
+			return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Line: n.Line, Msg: fmt.Sprintf("a label longer than %d characters", MaxLabel)}
+		}
 		text, err := wrapLabel(n.Text, mmWrapOf(n.Shape), measure)
 		if err != nil {
 			return nil, glyphErr(err, n.Line)
@@ -314,17 +319,21 @@ func (c *canvas) drawMindmap(m *mr.Mindmap, ml *mindmapLayout, fn *Font) error {
 		// every outline, bumps and spikes included.
 		pts := append([]pt{ml.nodes[e.from].box.Center()}, e.pts...)
 		pts = append(pts, ml.nodes[e.to].box.Center())
-		c.polyline(pts, e.w, false, mmColor(m.Nodes[e.to].Section))
-		c.tracef("edge %d %d", e.from, e.to)
+		col := mmColor(m.Nodes[e.to].Section)
+		c.polyline(pts, e.w, false, col)
+		f, l := pts[0], pts[len(pts)-1]
+		c.tracef("edge %d %d col=%s w=%.3f from=%.3f,%.3f to=%.3f,%.3f", e.from, e.to, hexColor(col), e.w, f.X, f.Y, l.X, l.Y)
 	}
 	for i, n := range ml.nodes {
 		col := mmColor(m.Nodes[i].Section)
-		c.fill(mmOutline(m.Nodes[i].Shape, n.box), col)
-		ctr := n.tbox.Center()
-		if err := fn.drawText(c.img, (ctr.X+c.offX)*c.em, (ctr.Y+c.offY)*c.em, n.text, false, c.em, textOn(col)); err != nil {
+		poly := mmOutline(m.Nodes[i].Shape, n.box)
+		c.fill(poly, col)
+		ctr, tc := n.tbox.Center(), textOn(col)
+		x, y := (ctr.X+c.offX)*c.em, (ctr.Y+c.offY)*c.em
+		if err := fn.drawText(c.img, x, y, n.text, false, c.em, tc); err != nil {
 			return glyphErr(err, m.Nodes[i].Line)
 		}
-		c.tracef("node %d %q", i, n.text)
+		c.tracef("node %d %q fill=%s text=%s at=%.3f,%.3f poly=%d area=%.3f", i, n.text, hexColor(col), hexColor(tc), x/c.em-c.offX, y/c.em-c.offY, len(poly), polyArea(poly))
 	}
 	return nil
 }
@@ -398,4 +407,16 @@ const (
 func isCJK(r rune) bool {
 	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul) ||
 		(r >= 0x3000 && r <= 0x303f) || (r >= 0xff00 && r <= 0xffef)
+}
+
+func hexColor(c color.RGBA) string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
+
+// polyArea is a polygon's area (the shoelace formula).
+func polyArea(poly []pt) float64 {
+	a := 0.0
+	for k, p := range poly {
+		q := poly[(k+1)%len(poly)]
+		a += p.X*q.Y - q.X*p.Y
+	}
+	return math.Abs(a) / 2
 }

@@ -56,15 +56,31 @@ func decodeEntityCodes(s string) string {
 	})
 }
 
-// hasMdEmphasis reports whether markdown (marked, as CommonMark delimiter
-// runs are read) might draw emphasis in s: a run of * or _ that can open
+// hasMdEmphasis reports whether markdown (marked, reading CommonMark
+// delimiter runs) might draw emphasis in s: a run of * or _ that can open
 // followed by one of the same character that can close. It errs toward
-// yes — the pairing rules that would still leave the pair as text (the
-// rule of three, code spans taking precedence) are not applied — since a
-// label wrongly refused shows its source, and one wrongly drawn shows
-// asterisks where mermaid draws italics.
+// yes, and a label wrongly refused shows its source where one wrongly
+// drawn shows asterisks where mermaid draws italics. So it says yes when
+// any of the readings it cannot tell apart would: whitespace as Go or as
+// JavaScript's \s (U+0085 and U+FEFF differ), and an underscore that
+// opens or closes by CommonMark's rule or by marked's, which only refuses
+// one next to a letter or digit (a combining mark or a zero-width space
+// beside it counts for CommonMark, not for marked). The pairing rules that
+// would still leave a pair as text (the rule of three, code spans) are
+// not applied.
 func hasMdEmphasis(s string) bool {
 	rs := []rune(s)
+	for _, space := range []func(rune) bool{unicode.IsSpace, isJSSpace} {
+		for _, markedUnderscore := range []bool{false, true} {
+			if emphasisIn(rs, space, markedUnderscore) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func emphasisIn(rs []rune, space func(rune) bool, markedUnderscore bool) bool {
 	var open [2]bool // * and _
 	for i := 0; i < len(rs); {
 		c := rs[i]
@@ -83,13 +99,18 @@ func hasMdEmphasis(s string) bool {
 		if j < len(rs) {
 			after = rs[j]
 		}
-		lf := !unicode.IsSpace(after) && (!mdPunct(after) || unicode.IsSpace(before) || mdPunct(before))
-		rf := !unicode.IsSpace(before) && (!mdPunct(before) || unicode.IsSpace(after) || mdPunct(after))
+		lf := !space(after) && (!mdPunct(after) || space(before) || mdPunct(before))
+		rf := !space(before) && (!mdPunct(before) || space(after) || mdPunct(after))
 		canOpen, canClose, k := lf, rf, 0
 		if c == '_' {
-			canOpen = lf && (!rf || mdPunct(before))
-			canClose = rf && (!lf || mdPunct(after))
 			k = 1
+			if markedUnderscore {
+				canOpen = lf && !alnum(before)
+				canClose = rf && !alnum(after)
+			} else {
+				canOpen = lf && (!rf || mdPunct(before))
+				canClose = rf && (!lf || mdPunct(after))
+			}
 		}
 		if canClose && open[k] {
 			return true
@@ -101,6 +122,11 @@ func hasMdEmphasis(s string) bool {
 	}
 	return false
 }
+
+func alnum(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
+
+// isJSSpace is JavaScript's \s.
+func isJSSpace(r rune) bool { return strings.ContainsRune(jsSpaceChars, r) }
 
 // mdPunct is CommonMark's punctuation: Unicode punctuation and symbols.
 func mdPunct(r rune) bool { return unicode.IsPunct(r) || unicode.IsSymbol(r) }

@@ -1,7 +1,9 @@
 package mermaidrender
 
 import (
+	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // The mindmap lexer follows mindmap.jison (mermaid 12.0.0) rule by rule, in
@@ -62,54 +64,140 @@ var mindmapRules = map[string][]lexRule{
 
 // mindmapLines prepares a mind map's source as mermaid does before its
 // parser sees it (preprocessDiagram, mermaid 12.0.0), keeping what the
-// grammar reads: indentation, blank lines and trailing spaces.
-//   - Directives (%%{ … }%%) are removed, leaving the rest of their lines.
-//   - cleanupComments: /^\s*%%(?!{)[^\n]+\n?/gm removes a comment line
-//     together with the whitespace-only lines right before it (\s* crosses
+// grammar reads: indentation, blank lines and trailing spaces. The steps
+// work on the text, as mermaid's regular expressions do, each byte keeping
+// its source line:
+//   - removeDirectives: directiveRegex, wherever it matches (directiveEnd);
+//   - cleanupComments: /^\s*%%(?!{)[^\n]+\n?/gm, which takes the
+//     whitespace-only lines before a comment line with it (\s* crosses
 //     line ends), then trimStart.
 func mindmapLines(src string) ([]srcLine, frontTitle, error) {
 	raw, i, title, err := frontMatter(src)
 	if err != nil {
 		return nil, title, err
 	}
+	var t lineText
+	for k := i; k < len(raw); k++ {
+		if k > i {
+			t.add("\n", k)
+		}
+		t.add(raw[k], k+1)
+	}
+	var cuts [][]int
+	for p := strings.Index(t.s, "%%{"); p >= 0; {
+		next := p + 1
+		if end := directiveEnd(t.s, p); end > p {
+			cuts = append(cuts, []int{p, end})
+			next = end
+		}
+		q := strings.Index(t.s[next:], "%%{")
+		if q < 0 {
+			break
+		}
+		p = next + q
+	}
+	t = t.cut(cuts)
+	t = t.cut(reCommentLine.FindAllStringIndex(t.s, -1))
+	start := len(t.s) - len(strings.TrimLeft(t.s, jsSpaceChars))
+	t = t.cut([][]int{{0, start}})
 	var lines []srcLine
-	for ; i < len(raw); i++ {
-		text, no := raw[i], i+1
-		for k := strings.Index(text, "%%{"); k >= 0; k = strings.Index(text, "%%{") {
-			// A directive may run over several lines; what is left of its
-			// first and last lines is one line.
-			start, rest := i, text[k:]
-			for !strings.Contains(rest, "}%%") {
-				i++
-				if i >= len(raw) {
-					return nil, title, errf(SyntaxError, start+1, "directive is not closed with }%%")
-				}
-				rest = raw[i]
-			}
-			text = text[:k] + rest[strings.Index(rest, "}%%")+3:]
+	if t.s == "" {
+		return nil, title, nil
+	}
+	from := 0
+	for k, text := range strings.Split(t.s, "\n") {
+		no := t.line[min(from, len(t.line)-1)]
+		if k > 0 && from == len(t.s) {
+			no = t.line[from-1] // the empty line after a final line end
 		}
 		lines = append(lines, srcLine{text: text, no: no})
+		from += len(text) + 1
 	}
-	// cleanupComments.
-	var kept []srcLine
-	for _, l := range lines {
-		t := strings.TrimLeft(l.text, jsSpaceChars)
-		if c, ok := strings.CutPrefix(t, "%%"); ok && c != "" && c[0] != '{' {
-			for len(kept) > 0 && strings.Trim(kept[len(kept)-1].text, jsSpaceChars) == "" {
-				kept = kept[:len(kept)-1]
+	return lines, title, nil
+}
+
+// reCommentLine is cleanupComments' expression, \s as JavaScript's.
+var reCommentLine = regexp.MustCompile(`(?m)^[` + jsSpace + `]*%%[^{\n][^\n]*\n?`)
+
+// lineText is text whose every byte knows its source line.
+type lineText struct {
+	s    string
+	line []int
+}
+
+func (t *lineText) add(s string, no int) {
+	t.s += s
+	for range len(s) {
+		t.line = append(t.line, no)
+	}
+}
+
+// cut removes the byte ranges, which are in order and do not overlap.
+func (t lineText) cut(spans [][]int) lineText {
+	var out lineText
+	last := 0
+	var b strings.Builder
+	for _, c := range spans {
+		b.WriteString(t.s[last:c[0]])
+		out.line = append(out.line, t.line[last:c[0]]...)
+		last = c[1]
+	}
+	b.WriteString(t.s[last:])
+	out.line = append(out.line, t.line[last:]...)
+	out.s = b.String()
+	return out
+}
+
+// directiveEnd is where mermaid's directiveRegex, matched at p, ends, or
+// p when it does not match there:
+//
+//	%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?
+//
+// A word must follow the brace, and the closing }%% is optional: without
+// it the directive runs to a line separator or the end of the text.
+func directiveEnd(s string, p int) int {
+	space := func(q int) int {
+		for q < len(s) {
+			r, n := utf8.DecodeRuneInString(s[q:])
+			if !strings.ContainsRune(jsSpaceChars, r) {
+				break
 			}
-			continue
+			q += n
 		}
-		kept = append(kept, l)
+		return q
 	}
-	// trimStart.
-	for len(kept) > 0 && strings.Trim(kept[0].text, jsSpaceChars) == "" {
-		kept = kept[1:]
+	word := func(q int) int {
+		for q < len(s) && (s[q] == '_' || s[q] >= '0' && s[q] <= '9' || s[q]|0x20 >= 'a' && s[q]|0x20 <= 'z') {
+			q++
+		}
+		return q
 	}
-	if len(kept) > 0 {
-		kept[0].text = strings.TrimLeft(kept[0].text, jsSpaceChars)
+	q := space(p + 3)
+	w := word(q)
+	if w == q {
+		return p
 	}
-	return kept, title, nil
+	q = w
+	if r := space(w); r < len(s) && s[r] == ':' {
+		q = r + 1
+	}
+	q = space(q)
+	if w := word(q); w > q {
+		q = w
+	} else {
+		for q < len(s) && !strings.HasPrefix(s[q:], "}%%") {
+			r, n := utf8.DecodeRuneInString(s[q:])
+			if r == '\r' || r == '\u2028' || r == '\u2029' {
+				break // . stops at every line terminator; \r?\n takes \n
+			}
+			q += n
+		}
+	}
+	q = space(q)
+	if strings.HasPrefix(s[q:], "}%%") {
+		q += 3
+	}
+	return q
 }
 
 // lexMindmap turns the prepared lines into tokens, with the line end
