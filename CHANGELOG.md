@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-29
+
 ### Added
 
 - `stateDiagram` / `stateDiagram-v2` (mermaid 12.0.0, `stateDiagram.jison`):
