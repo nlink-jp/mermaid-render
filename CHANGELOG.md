@@ -16,7 +16,8 @@ to [Semantic Versioning](https://semver.org/).
   by rule and was checked against a parser generated from the jison
   grammar. Each scope is laid out on its own, innermost first, and a
   composite is drawn as a frame around its regions; a transition crossing a
-  composite's frame is unsupported. Every render checks every scope's
+  composite's frame is unsupported. A note stands on the side it names,
+  beside its state in top-down diagrams. Every render checks every scope's
   layout, each composite's frame, title and regions.
 
 ### Changed

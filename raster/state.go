@@ -35,6 +35,10 @@ const (
 	// links may use. The circle is sized up front for the links on its
 	// busier side, so the layout never widens it into an ellipse.
 	stCircleSpread = 0.8 // not 1: a port at the rim would meet the other face's at the equator
+	// stNoteGap is a note beside its state to the state, where the dotted
+	// line runs; stNoteStack between two notes on one side.
+	stNoteGap   = 1.0
+	stNoteStack = 0.5
 )
 
 // stateLayout is a placed state diagram.
@@ -59,6 +63,24 @@ type stScope struct {
 	comps  []*stComp
 	// titled: the text of a state with a title and lines, by node index.
 	titled map[int]stTitled
+	// main is each state's own part of its node: the whole box, or the
+	// middle when notes stand beside it. noteBox is each note's box;
+	// noteNode its node in the graph, or -1 when it stands beside its
+	// state. beside, by state index, the notes on each side.
+	main     []rect
+	noteBox  []rect
+	noteNode []int
+	beside   map[int]*stBeside
+	noteSize [][2]float64
+}
+
+// stBeside are the notes beside one state (TB and BT: a note's side is
+// the side it names). The node is the state with a slot of the wider
+// side's width on each side, so the state stays at the node's middle
+// where its links' ports are.
+type stBeside struct {
+	side        float64 // a slot's width, the gap included
+	left, right []int   // note indices, top to bottom
 }
 
 type stTitled struct {
@@ -164,6 +186,62 @@ func (sl *stateLayout) layoutScope(s *mr.StateScope, m measurer) (*stScope, erro
 		}
 		return d
 	}
+	// Notes stand beside their state in TB and BT, on the side they
+	// name. A start, end, choice, fork or join cannot stretch to a note's
+	// height, and a state looping to itself loops out of the node's side,
+	// where the slot is: those notes are nodes of the graph instead.
+	index := map[string]int{}
+	for i, n := range s.States {
+		index[n.ID] = i
+	}
+	selfLoop := map[string]bool{}
+	for _, t := range s.Transitions {
+		if t.From == t.To {
+			selfLoop[t.From] = true
+		}
+	}
+	sc.beside = map[int]*stBeside{}
+	noteW, noteH := make([]float64, len(s.Notes)), make([]float64, len(s.Notes))
+	sc.noteNode = make([]int, len(s.Notes))
+	for k, nt := range s.Notes {
+		if err := long(nt.Text, nt.Line); err != nil {
+			return nil, err
+		}
+		tw, th, err := m(nt.Text, false)
+		if err != nil {
+			return nil, glyphErr(err, nt.Line)
+		}
+		noteW[k], noteH[k] = nodeSize(mr.Rect, tw, th)
+		sc.noteSize = append(sc.noteSize, [2]float64{noteW[k], noteH[k]})
+		sc.noteNode[k] = -1
+		i := index[nt.State]
+		n := s.States[i]
+		if across && (n.Kind == mr.StatePlain || n.Kind == mr.StateComposite) && !selfLoop[n.ID] {
+			bs := sc.beside[i]
+			if bs == nil {
+				bs = &stBeside{}
+				sc.beside[i] = bs
+			}
+			if nt.Left {
+				bs.left = append(bs.left, k)
+			} else {
+				bs.right = append(bs.right, k)
+			}
+			bs.side = math.Max(bs.side, noteW[k]+stNoteGap)
+			continue
+		}
+		sc.noteNode[k] = 0 // a node; its index is set below
+	}
+	stack := func(ks []int) float64 {
+		h := 0.0
+		for j, k := range ks {
+			if j > 0 {
+				h += stNoteStack
+			}
+			h += noteH[k]
+		}
+		return h
+	}
 	for i, n := range s.States {
 		gn := &mr.Node{ID: n.ID, Line: n.Line}
 		var w, h float64
@@ -229,36 +307,45 @@ func (sl *stateLayout) layoutScope(s *mr.StateScope, m measurer) (*stScope, erro
 			sc.titled[i] = t
 			w, h = nodeSize(mr.Round, math.Max(t.tw, t.lw), t.th+stRuleGap+t.lh)
 		}
-		f.Nodes = append(f.Nodes, gn)
-		sizes = append(sizes, [2]float64{w, h})
 		spread := 0.0
 		if n.Kind == mr.StateStart || n.Kind == mr.StateEnd {
 			spread = stCircleSpread
 		}
+		if bs := sc.beside[i]; bs != nil {
+			// The ports stay on the state's own part, at the node's middle.
+			spread = portSpreadOf(gn.Shape) * w / (w + 2*bs.side)
+			h = math.Max(h, math.Max(stack(bs.left), stack(bs.right)))
+			w += 2 * bs.side
+		}
+		f.Nodes = append(f.Nodes, gn)
+		sizes = append(sizes, [2]float64{w, h})
 		spreads = append(spreads, spread)
 		sc.states = append(sc.states, n)
 	}
 	for k, nt := range s.Notes {
-		gn := &mr.Node{ID: "note\n" + strconv.Itoa(k), Label: nt.Text, Shape: mr.Rect, Line: nt.Line}
-		tw, th, err := m(nt.Text, false)
-		if err != nil {
-			return nil, glyphErr(err, nt.Line)
-		}
-		w, h := nodeSize(mr.Rect, tw, th)
-		f.Nodes = append(f.Nodes, gn)
-		sizes = append(sizes, [2]float64{w, h})
-		spreads = append(spreads, 0)
 		sc.notes = append(sc.notes, nt)
+		if sc.noteNode[k] < 0 {
+			continue
+		}
+		sc.noteNode[k] = len(f.Nodes)
+		f.Nodes = append(f.Nodes, &mr.Node{ID: "note\n" + strconv.Itoa(k), Label: nt.Text, Shape: mr.Rect, Line: nt.Line})
+		sizes = append(sizes, [2]float64{noteW[k], noteH[k]})
+		spreads = append(spreads, 0)
 	}
 	for _, t := range s.Transitions {
 		f.Links = append(f.Links, &mr.Link{From: mr.Endpoint{ID: t.From}, To: mr.Endpoint{ID: t.To},
 			Label: t.Label, Stroke: mr.Solid, End: mr.Arrow, Length: 1, Line: t.Line})
 	}
 	for k, nt := range s.Notes {
-		// dataFetcher's note edge: note -> state on the left, state -> note
-		// on the right; dashed, no head.
+		if sc.noteNode[k] < 0 {
+			continue
+		}
+		// A note that is a node follows its line to the side it names in
+		// LR and RL; elsewhere the line runs as dataFetcher's note edge
+		// does (note -> state on the left, state -> note on the right).
+		// Dotted, no head.
 		from, to := nt.State, "note\n"+strconv.Itoa(k)
-		if nt.Left {
+		if nt.Left != (s.Direction == mr.RL) {
 			from, to = to, from
 		}
 		f.Links = append(f.Links, &mr.Link{From: mr.Endpoint{ID: from}, To: mr.Endpoint{ID: to},
@@ -273,7 +360,51 @@ func (sl *stateLayout) layoutScope(s *mr.StateScope, m measurer) (*stScope, erro
 		return nil, err
 	}
 	sc.lay = lay
+	sc.split()
 	return sc, nil
+}
+
+// split finds each state's own part of its node and each note's box.
+func (sc *stScope) split() {
+	sc.main = make([]rect, len(sc.states))
+	sc.noteBox = make([]rect, len(sc.notes))
+	for i := range sc.states {
+		b := sc.lay.Nodes[i].Box
+		bs := sc.beside[i]
+		if bs == nil {
+			sc.main[i] = b
+			continue
+		}
+		mn := rect{b.X0 + bs.side, b.Y0, b.X1 - bs.side, b.Y1}
+		sc.main[i] = mn
+		for _, side := range []struct {
+			ks   []int
+			left bool
+		}{{bs.left, true}, {bs.right, false}} {
+			h := 0.0
+			for j, k := range side.ks {
+				if j > 0 {
+					h += stNoteStack
+				}
+				h += sc.noteSize[k][1]
+			}
+			y := b.Center().Y - h/2
+			for _, k := range side.ks {
+				w, nh := sc.noteSize[k][0], sc.noteSize[k][1]
+				x := mn.X1 + stNoteGap
+				if side.left {
+					x = mn.X0 - stNoteGap - w
+				}
+				sc.noteBox[k] = rect{x, y, x + w, y + nh}
+				y += nh + stNoteStack
+			}
+		}
+	}
+	for k, gi := range sc.noteNode {
+		if gi >= 0 {
+			sc.noteBox[k] = sc.lay.Nodes[gi].Box
+		}
+	}
 }
 
 // place puts a scope's origin at off and its composites' regions into
@@ -281,7 +412,7 @@ func (sl *stateLayout) layoutScope(s *mr.StateScope, m measurer) (*stScope, erro
 func (sl *stateLayout) place(sc *stScope, off pt) {
 	sc.off = off
 	for _, c := range sc.comps {
-		b := sc.lay.Nodes[c.idx].Box
+		b := sc.main[c.idx]
 		c.frame = rect{b.X0 + off.X, b.Y0 + off.Y, b.X1 + off.X, b.Y1 + off.Y}
 		band := c.bandH()
 		c.band = rect{c.frame.X0, c.frame.Y0, c.frame.X1, c.frame.Y0 + band}
@@ -322,7 +453,7 @@ func (c *canvas) drawScope(sc *stScope, fn *Font) error {
 		return nil
 	}
 	for i, n := range sc.states {
-		b := sc.lay.Nodes[i].Box
+		b := sc.main[i]
 		switch n.Kind {
 		case mr.StateStart:
 			ctr := b.Center()
@@ -343,8 +474,20 @@ func (c *canvas) drawScope(sc *stScope, fn *Font) error {
 		}
 		c.tracef("state %s %s", n.Kind, n.ID)
 	}
-	for k := range sc.notes {
-		b := sc.lay.Nodes[len(sc.states)+k].Box
+	for k, nt := range sc.notes {
+		b := sc.noteBox[k]
+		if sc.noteNode[k] < 0 {
+			// Beside its state: a dotted line across the gap, level with
+			// the note's middle as far as the state reaches.
+			mn := sc.main[sc.stateIndex(nt.State)]
+			y := math.Min(math.Max(b.Center().Y, mn.Y0+0.3), mn.Y1-0.3)
+			if nt.Left {
+				c.polyline([]pt{{b.X1, y}, {mn.X0, y}}, lineW, true, colEdge)
+			} else {
+				c.polyline([]pt{{mn.X1, y}, {b.X0, y}}, lineW, true, colEdge)
+			}
+			c.tracef("note beside %s left %v", nt.State, nt.Left)
+		}
 		c.outlineShape(outline(mr.Rect, b, 0), colNote, colNoteSt, lineW, false)
 	}
 	restore()
@@ -374,7 +517,7 @@ func (c *canvas) drawScope(sc *stScope, fn *Font) error {
 		c.tracef("transition %s %s %s", e.Link.From.ID, e.Link.To.ID, e.Link.Stroke)
 	}
 	for i, n := range sc.states {
-		b := sc.lay.Nodes[i].Box
+		b := sc.main[i]
 		if t, ok := sc.titled[i]; ok {
 			top := b.Y0 + padY
 			if err := text(pt{b.Center().X, top + t.th/2}, t.title, false, n.Line); err != nil {
@@ -394,7 +537,7 @@ func (c *canvas) drawScope(sc *stScope, fn *Font) error {
 		}
 	}
 	for k, nt := range sc.notes {
-		b := sc.lay.Nodes[len(sc.states)+k].Box
+		b := sc.noteBox[k]
 		if err := text(b.Center(), nt.Text, false, nt.Line); err != nil {
 			return err
 		}
@@ -410,4 +553,13 @@ func (c *canvas) drawScope(sc *stScope, fn *Font) error {
 		}
 	}
 	return nil
+}
+
+func (sc *stScope) stateIndex(id string) int {
+	for i, n := range sc.states {
+		if n.ID == id {
+			return i
+		}
+	}
+	return -1
 }

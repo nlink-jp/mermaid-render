@@ -327,9 +327,14 @@ lexical rules are ported from those.
   - A transition whose ends are in different scopes (into a composite's inner state from outside
     it, between regions, or between a composite and its own inner state) cannot be drawn this
     way and is unsupported; so is a state inside itself.
-  - A note is a box in its state's scope, joined to it by a dotted line without a head, in the
-    direction `dataFetcher` gives the note edge (`left of`: note to state; `right of`: state to
-    note), so in TB a right note sits below its state. A note belongs to its state's scope
+  - A note stands on the side it names, joined to its state by a dotted line without a head (the
+    operator's check of 2026-09-29: following `dataFetcher`'s note edge put a right note below its
+    state in TB). In TB and BT it stands beside the state: the state and a slot of the wider side's
+    width on each side are one node, the state in the middle where its transitions meet it, the
+    state as tall as its notes; notes on one side stack. In LR and RL the note is a node on a
+    dotted line whose direction puts it on its side. A start, end, choice, fork or join cannot
+    stretch, and a state with a transition to itself loops out of the node's side, so their notes
+    are nodes on the note edge's line in every direction. A note belongs to its state's scope
     (mermaid attaches notes at the top level).
   - Shapes: a state is a rounded rectangle (with a title, a rule under it); start a filled
     circle; end a ring round a filled circle; choice a small diamond; fork and join a bar across
@@ -876,6 +881,13 @@ same way as pathguard.
     stays within 0.9 of its node's half-width — 20,000 random flowcharts, ER and sequence diagrams
     give the same results as before. 20,000 random state diagrams, no fault; 15 mutants of the
     drawing and its check, all caught.
+  - **Visual review of state diagrams, round 1 (reviews-state1, 2026-09-29)**: 14 sheets — 2 real,
+    9 documentation examples, 3 made for the check. 13 are ○ on all four items. The documentation's
+    note example was × on text and notes: "are the notes not upside down?" — following mermaid's
+    note edge had put the right note below its state and the left one above. Notes now stand on
+    the side they name, beside their state in TB and BT (specified above); the render check holds
+    that a note is on its side, beside and clear of its state, holding its text, and that no
+    transition meets such a state off its own part. 10 mutants, all caught.
 - **Considered and not taken**: colours matched to the terminal background, and asking the
   terminal for its cell size (both queries leak into the input box). Refusing display for size,
   crossings or small text (aesthetic judgment belongs to people). Text drawing through CoreText

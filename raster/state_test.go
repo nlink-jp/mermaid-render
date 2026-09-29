@@ -294,7 +294,7 @@ func TestStateDrawn(t *testing.T) {
 	for _, want := range []string{
 		"state choice c", "state fork f", "state join j", "state start root_start", "state end root_end",
 		"state state A", "state composite Box", "composite Box regions 2", "state state x", "state state z",
-		"transition c f solid", "transition A note\n0 dotted", "transition x y solid", "note A",
+		"transition c f solid", "note beside A left false", "transition x y solid", "note A",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("trace lacks %q:\n%s", want, got)
@@ -311,6 +311,7 @@ func TestRenderRefusesStateFaults(t *testing.T) {
     A : title
     A : line
     Box --> A
+    note right of A : a note
     state Box {
         x --> y
         --
@@ -336,10 +337,38 @@ func TestRenderRefusesStateFaults(t *testing.T) {
 			c.regionR[1].X1 += dx
 		},
 		"a title outside its band": func(sl *stateLayout) { sl.comps[0].title.Y1 = sl.comps[0].band.Y1 + 1 },
-		"a state left out of its scope's graph": func(sl *stateLayout) {
+		"a transition left out of its scope's graph": func(sl *stateLayout) {
 			// The graph and its layout agree; only the scope has one more.
 			sc := sl.root.scope
-			sc.States = append(sc.States, &mr.StateNode{ID: "left out"})
+			sc.Transitions = append(sc.Transitions, &mr.Transition{From: "A", To: "Box"})
+		},
+		"a note on the wrong side": func(sl *stateLayout) {
+			sc := sl.root
+			for k, nt := range sc.notes {
+				mn, b := sc.main[sc.stateIndex(nt.State)], sc.noteBox[k]
+				sc.noteBox[k] = rect{2*mn.Center().X - b.X1, b.Y0, 2*mn.Center().X - b.X0, b.Y1}
+			}
+		},
+		"a note over its state": func(sl *stateLayout) {
+			// Still on its side, holding its text, inside the node: only
+			// 0.2 em into the state.
+			sc := sl.root
+			mn, b := sc.main[sc.stateIndex(sc.notes[0].State)], sc.noteBox[0]
+			d := b.X0 - (mn.X1 - 0.2)
+			sc.noteBox[0] = rect{b.X0 - d, b.Y0, b.X1 - d, b.Y1}
+		},
+		"a note too small for its text": func(sl *stateLayout) {
+			sl.root.noteBox[0].X1 = sl.root.noteBox[0].X0 + 0.5
+		},
+		"a transition on a note's slot": func(sl *stateLayout) {
+			sc := sl.root
+			i := sc.stateIndex(sc.notes[0].State)
+			for j, e := range sc.lay.Edges {
+				if e.Link.To.ID == sc.states[i].ID {
+					p := e.Points[len(e.Points)-1]
+					sc.lay.Edges[j].Points[len(e.Points)-1] = pt{sc.noteBox[0].Center().X, p.Y}
+				}
+			}
 		},
 		"states overlapping inside a region": func(sl *stateLayout) {
 			r := sl.comps[0].regions[0]
@@ -397,5 +426,28 @@ func TestStateLayoutRegressions(t *testing.T) {
 	for _, seed := range []int64{3987} {
 		d, sl := stateOf(t, randomState(seed))
 		checkState(t, fmt.Sprintf("seed %d", seed), d, sl, nil)
+	}
+}
+
+// A note stands on the side it names, in every direction: beside its
+// state in TB and BT, a rank before or after it in LR and RL.
+func TestStateNoteSides(t *testing.T) {
+	for _, dir := range []string{"TB", "BT", "LR", "RL"} {
+		_, sl := stateOf(t, "stateDiagram-v2\n  direction "+dir+`
+  A --> B
+  B --> C
+  note left of B : on the left
+  note right of B : on the right`)
+		sc := sl.root
+		mn := sc.main[sc.stateIndex("B")]
+		for k, nt := range sc.notes {
+			b := sc.noteBox[k]
+			if left := b.Center().X < mn.Center().X; left != nt.Left {
+				t.Errorf("%s: %q stands on the wrong side (note %v, state %v)", dir, nt.Text, b, mn)
+			}
+			if beside := sc.noteNode[k] < 0; beside != (dir == "TB" || dir == "BT") {
+				t.Errorf("%s: %q beside %v", dir, nt.Text, beside)
+			}
+		}
 	}
 }

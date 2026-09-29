@@ -913,9 +913,15 @@ func stateFaults(d *mr.StateDiagram, sl *stateLayout, m measurer, strict bool, f
 	var out faults
 	for _, sc := range sl.scopes {
 		s := sc.scope
-		if len(sc.graph.Nodes) != len(s.States)+len(s.Notes) || len(sc.graph.Links) != len(s.Transitions)+len(s.Notes) {
+		nodeNotes := 0
+		for _, gi := range sc.noteNode {
+			if gi >= 0 {
+				nodeNotes++
+			}
+		}
+		if len(sc.noteNode) != len(s.Notes) || len(sc.graph.Nodes) != len(s.States)+nodeNotes || len(sc.graph.Links) != len(s.Transitions)+nodeNotes {
 			out.add("a scope laid out %d nodes and %d links, want %d and %d", len(sc.graph.Nodes), len(sc.graph.Links),
-				len(s.States)+len(s.Notes), len(s.Transitions)+len(s.Notes))
+				len(s.States)+nodeNotes, len(s.Transitions)+nodeNotes)
 			continue
 		}
 		if len(sc.graph.Nodes) > 0 {
@@ -923,11 +929,65 @@ func stateFaults(d *mr.StateDiagram, sl *stateLayout, m measurer, strict bool, f
 				out.add("%s", f)
 			}
 		}
-		for i, t := range sc.titled {
-			if i >= len(sc.lay.Nodes) {
+		if len(sc.main) != len(s.States) || len(sc.noteBox) != len(s.Notes) {
+			out.add("a scope split %d states and %d notes, want %d and %d", len(sc.main), len(sc.noteBox), len(s.States), len(s.Notes))
+			continue
+		}
+		// A state's own part and the notes beside it lie in its node and
+		// apart; every note holds its text.
+		for i := range sc.main {
+			if len(sc.graph.Nodes) > 0 && !within(sc.lay.Nodes[i].Box, sc.main[i]) {
+				out.add("state %s's own part is outside its node", sc.states[i].ID)
+			}
+		}
+		for k, nt := range s.Notes {
+			b := sc.noteBox[k]
+			tw, th, err := m(nt.Text, false)
+			if err == nil && (tw > b.W()-2*padX+eps || th > b.H()-2*padY+eps) {
+				out.add("the note on %s does not hold its text", nt.State)
+			}
+			if sc.noteNode[k] >= 0 {
 				continue
 			}
-			b := sc.lay.Nodes[i].Box
+			i := sc.stateIndex(nt.State)
+			if i < 0 {
+				out.add("the note on %s has no state", nt.State)
+				continue
+			}
+			node, mn := sc.lay.Nodes[i].Box, sc.main[i]
+			if !within(node, b) || b.overlaps(mn) {
+				out.add("the note on %s is not beside it", nt.State)
+			}
+			if nt.Left != (b.X1 <= mn.X0+eps) {
+				out.add("the note on %s is on the wrong side", nt.State)
+			}
+			for j := range k {
+				if sc.noteNode[j] < 0 && sc.noteBox[j].overlaps(b) {
+					out.add("notes overlap beside %s", nt.State)
+				}
+			}
+		}
+		// A transition meets a state with notes beside it on the state's
+		// own part, never on a note or the empty slot across from one.
+		for _, e := range sc.lay.Edges {
+			if len(e.Points) < 2 {
+				continue
+			}
+			for _, end := range []struct {
+				id string
+				p  pt
+			}{{e.Link.From.ID, e.Points[0]}, {e.Link.To.ID, e.Points[len(e.Points)-1]}} {
+				i := sc.stateIndex(end.id)
+				if i < 0 || sc.beside[i] == nil {
+					continue
+				}
+				if mn := sc.main[i]; end.p.X < mn.X0-eps || end.p.X > mn.X1+eps {
+					out.add("a transition meets %s beside its own part, at %v", end.id, end.p)
+				}
+			}
+		}
+		for i, t := range sc.titled {
+			b := sc.main[i]
 			if math.Max(t.tw, t.lw) > b.W()+eps || t.th+stRuleGap+t.lh > b.H()-2*padY+eps {
 				out.add("the title and lines of %s stick out of it", sc.states[i].ID)
 			}
@@ -938,7 +998,7 @@ func stateFaults(d *mr.StateDiagram, sl *stateLayout, m measurer, strict bool, f
 			out.add("composite %s has no box", c.node.ID)
 			continue
 		}
-		b := c.parent.lay.Nodes[c.idx].Box
+		b := c.parent.main[c.idx]
 		o := c.parent.off
 		if want := (rect{b.X0 + o.X, b.Y0 + o.Y, b.X1 + o.X, b.Y1 + o.Y}); c.frame != want {
 			out.add("composite %s's frame %v is not its box %v", c.node.ID, c.frame, want)
@@ -967,6 +1027,11 @@ func stateFaults(d *mr.StateDiagram, sl *stateLayout, m measurer, strict bool, f
 		}
 	}
 	return out
+}
+
+// within is contains with room for rounding.
+func within(outer, inner rect) bool {
+	return outer.X0-eps <= inner.X0 && outer.Y0-eps <= inner.Y0 && inner.X1 <= outer.X1+eps && inner.Y1 <= outer.Y1+eps
 }
 
 // rectInCircle reports whether r lies inside the disc of radius rad

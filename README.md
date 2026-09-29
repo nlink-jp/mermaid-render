@@ -38,8 +38,8 @@ notes, a direction per scope. Each scope is laid out on its own, innermost
 first: a composite is a frame holding its title and its regions side by side,
 and a transition to it stops at the frame. So a transition that crosses a
 composite's frame (into its inner state from outside, or between regions) is
-unsupported, and the source is shown. A note is joined to its state by a
-dotted line in the direction mermaid's own graph gives it.
+unsupported, and the source is shown. A note stands on the side it names
+(beside its state in top-down diagrams), joined by a dotted line.
 
 ## API
 
