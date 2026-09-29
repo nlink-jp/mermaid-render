@@ -586,9 +586,10 @@ func (a *seqArt) frameRow(x0, x1, y int, l, r, fill rune, label string) {
 		x := x0 + 2
 		for _, ch := range label {
 			w := a.tm.width(ch)
-			a.g.cells[y][x] = tcell{r: ch}
-			for k := 1; k < w; k++ {
-				a.g.cells[y][x+k] = tcell{cont: true}
+			for k := 0; k < w; k++ {
+				if a.g.in(x+k, y) {
+					a.g.cells[y][x+k] = tcell{r: ch, cont: k > 0}
+				}
 			}
 			x += w
 		}

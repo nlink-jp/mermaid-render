@@ -149,6 +149,12 @@ func TestTextArtFaults(t *testing.T) {
 			tf.paths[2] = [][2]int{a, {a[0], b[1]}, b, c}
 		}},
 		{"a label over a box", "lies over", func(tf *textFlow) { tf.labels[1] = tf.boxes[2] }},
+		{"a head after a corner", "does not end a straight run", func(tf *textFlow) {
+			// A --> B arriving across onto the cell above B: its head turns.
+			p := tf.paths[0]
+			last := p[len(p)-1]
+			tf.paths[0] = [][2]int{p[0], {p[0][0], last[1] - 2}, {last[0] - 3, last[1] - 2}, {last[0] - 3, last[1]}, last}
+		}},
 		{"a label too small", "smaller than its text", func(tf *textFlow) { tf.labels[1].x1 = tf.labels[1].x0 }},
 		{"a title with no room", "no room for its title", func(tf *textFlow) {
 			// The frame hugs its members: no row above or below them.
@@ -419,5 +425,25 @@ func TestTextArtSequenceGate(t *testing.T) {
 	a.put(0, 0, 'y', scBox)  // a box over an arrow
 	if len(a.fault) != 2 {
 		t.Errorf("faults %v, want two", a.fault)
+	}
+	// A frame's label that does not fit is a fault, not a clipped label.
+	g2, _ := newGrid(8, 1)
+	b := &seqArt{g: g2, tm: &textMeasure{width: eastAsianWidth}, kind: [][]seqCell{make([]seqCell, 8)}}
+	b.frameRow(0, 7, 0, '┌', '┐', '─', "[loop] long")
+	if len(b.fault) != 1 || !strings.Contains(b.fault[0], "does not fit") {
+		t.Errorf("faults %v, want the label not fitting", b.fault)
+	}
+}
+
+// Snapping is by identity: values equal up to rounding error land on one
+// grid line, so a right angle never breaks at a half-cell tie (the case
+// the specification's verification measured).
+func TestSnapperIdentity(t *testing.T) {
+	s := &snapper{scale: 2}
+	s.add(3.7499999999999964)
+	s.add(3.75)
+	s.done()
+	if a, b := s.at(3.7499999999999964), s.at(3.75); a != b {
+		t.Errorf("columns %d and %d for one coordinate", a, b)
 	}
 }
