@@ -101,10 +101,15 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Two interior rows for each relationship to itself.
+		loops := 0
 		for _, r := range d.Relationships {
 			if r.From == e && r.To == e {
-				t.h = max(t.h, 4)
+				loops++
 			}
+		}
+		if loops > 0 {
+			t.h = max(t.h, 2*loops+2)
 		}
 		tables[i] = t
 		sizes[i] = [2]float64{float64(t.w) / 2, float64(t.h)}
@@ -142,7 +147,9 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 	alignLeaves(f, tf)
 	// A relationship of an entity to itself loops on the table's right
 	// face (the layout loops it below, where marks cannot read across):
-	// out and back over its two lowest interior rows.
+	// out and back over its two lowest free interior rows, above the
+	// loops already there.
+	looped := map[[2]int]bool{}
 	for i, lk := range f.Links {
 		if lk.From != lk.To {
 			continue
@@ -161,7 +168,7 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 		}
 		var free []int
 		for y := b.y1 - 1; y > b.y0 && len(free) < 2; y-- {
-			if !used[y] {
+			if !used[y] && !looped[[2]int{x, y}] {
 				free = append(free, y)
 			}
 		}
@@ -169,6 +176,7 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 			return nil, &mr.Error{Kind: mr.LayoutFault, Msg: "text art: no room for a relationship to itself"}
 		}
 		ya, yb := free[1], free[0]
+		looped[[2]int{x, ya}], looped[[2]int{x, yb}] = true, true
 		tf.paths[i] = [][2]int{{x, ya}, {x + 4, ya}, {x + 4, yb}, {x, yb}}
 		if lk.Label != "" {
 			w, h := tm.size(lk.Label)

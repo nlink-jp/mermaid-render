@@ -634,3 +634,16 @@ func TestTextArtActivationAtTheArrow(t *testing.T) {
 		}
 	}
 }
+
+// Two relationships of an entity to itself loop over rows of their own.
+func TestTextArtTwoSelfRelationships(t *testing.T) {
+	art, err := RenderTextSource("erDiagram\n A ||--o{ A : parent\n A }o--|| A : child", TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"│}o──┐\n", "│||──┘ child\n", "│||──┐\n", "│}o──┘ parent\n"} {
+		if !strings.Contains(art, want) {
+			t.Errorf("missing %q in\n%s", want, art)
+		}
+	}
+}
