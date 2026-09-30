@@ -618,6 +618,7 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		put(cells[len(cells)-1], lk.End, endBox(f, tf, lk.To))
 	}
 	// Labels go over their own link's line, which breaks for them.
+	lineIdx := indexLines(tf)
 	for i, lk := range f.Links {
 		if lk.Label == "" {
 			continue
@@ -629,7 +630,7 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		}
 		// On its own line, or — a loop's — beside it: a label anywhere else
 		// names whatever line it happens to stand by.
-		if !labelByItsLine(tf, i, lk.From == lk.To) {
+		if !labelByItsLine(tf, lineIdx, i, r, lk.From == lk.To) {
 			fault("link %d: its label is not on its line", i)
 		}
 		for y := r.y0; y <= r.y1; y++ {
@@ -705,23 +706,40 @@ func crossesBorder(fr iRect, x, y int, dirs uint8) bool {
 	return false
 }
 
-// labelByItsLine reports whether link i's label covers a cell of its line
-// or, for a loop, stands within two cells of it.
-func labelByItsLine(tf *textFlow, i int, loop bool) bool {
+// labelByItsLine reports whether a label in r for link i covers a cell of
+// its line or, for a loop, stands within two steps of it — nearer it than
+// any other line, and touching no other label, or it would read as theirs.
+func labelByItsLine(tf *textFlow, idx map[[2]int][]lineUse, i int, r iRect, loop bool) bool {
 	cells, _, ok := walk(tf.paths[i])
 	if !ok {
 		return true // the line's own checks name it
 	}
-	r, reach := tf.labels[i], 0
-	if loop {
-		reach = 2
-	}
+	// Steps across plus steps down: a line diagonally off the label's
+	// corner is further than one level with it.
+	dist := func(x, y int) int { return max(r.x0-x, x-r.x1, 0) + max(r.y0-y, y-r.y1, 0) }
+	own := 1 << 30
 	for _, c := range cells {
-		if c[0] >= r.x0-reach && c[0] <= r.x1+reach && c[1] >= r.y0-reach && c[1] <= r.y1+reach {
-			return true
+		own = min(own, dist(c[0], c[1]))
+	}
+	if !loop {
+		return own == 0
+	}
+	if own > 2 {
+		return false
+	}
+	for y := r.y0 - own; y <= r.y1+own; y++ {
+		for x := r.x0 - own; x <= r.x1+own; x++ {
+			if dist(x, y) <= own && others(idx, [2]int{x, y}, i) {
+				return false
+			}
 		}
 	}
-	return false
+	for j, o := range tf.labels {
+		if j != i && o != (iRect{}) && r.overlaps(iRect{o.x0 - 1, o.y0 - 1, o.x1 + 1, o.y1 + 1}) {
+			return false
+		}
+	}
+	return true
 }
 
 // titleRows are the rows a subgraph's title of h rows may start on:
@@ -1268,7 +1286,7 @@ func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int, idx map[[2]int][]lin
 			turns = turns || turn[key{x, y}]
 		}
 	}
-	if (on || loop && labelByItsLine(tf, i, true)) && !turns {
+	if (on || loop && labelByItsLine(tf, idx, i, r, true)) && !turns {
 		return true
 	}
 	w, h := r.x1-r.x0+1, r.y1-r.y0+1
@@ -1315,6 +1333,7 @@ func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int, idx map[[2]int][]lin
 				}
 			}
 		}
+		clear = clear && (!loop || labelByItsLine(tf, idx, i, c, true))
 		d := abs(float64(c.x0-r.x0)) + abs(float64(c.y0-r.y0))
 		if clear && (bestD < 0 || int(d) < bestD) {
 			best, bestD = c, int(d)

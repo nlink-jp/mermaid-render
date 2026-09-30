@@ -864,3 +864,88 @@ func TestTextArtFramesApart(t *testing.T) {
 		t.Errorf("got %v, want frames that touch refused", err)
 	}
 }
+
+// A label stands on its line; a loop's may stand two steps from it, but
+// only nearer it than any other line and touching no other label.
+func TestLabelByItsLine(t *testing.T) {
+	// Link 0 a loop down column 4 from row 0 to 6; link 1 down column 12.
+	base := func() *textFlow {
+		return &textFlow{
+			paths:  [][][2]int{{{2, 0}, {4, 0}, {4, 6}, {2, 6}}, {{12, 0}, {12, 6}}},
+			labels: []iRect{{}, {}},
+		}
+	}
+	for _, c := range []struct {
+		name  string
+		r     iRect
+		loop  bool
+		other iRect // link 1's label
+		ok    bool
+	}{
+		{"on the line", iRect{3, 3, 5, 3}, false, iRect{}, true},
+		{"beside, not a loop", iRect{5, 3, 7, 3}, false, iRect{}, false},
+		{"a loop's, a step off", iRect{5, 3, 7, 3}, true, iRect{}, true},
+		{"a loop's, two steps off", iRect{6, 3, 8, 3}, true, iRect{}, true},
+		{"a loop's, three steps off", iRect{7, 3, 9, 3}, true, iRect{}, false},
+		{"a loop's, as near another line", iRect{6, 3, 10, 3}, true, iRect{}, false},
+		{"a loop's, touching another label", iRect{6, 3, 8, 3}, true, iRect{6, 4, 8, 4}, false},
+		{"a loop's, a row clear of another label", iRect{6, 3, 8, 3}, true, iRect{6, 5, 8, 5}, true},
+	} {
+		tf := base()
+		tf.labels[1] = c.other
+		if got := labelByItsLine(tf, indexLines(tf), 0, c.r, c.loop); got != c.ok {
+			t.Errorf("%s: %v, want %v", c.name, got, c.ok)
+		}
+	}
+}
+
+// A relationship of an entity to itself keeps its label to itself: not
+// beside another relationship's line or label.
+func TestTextArtSelfRelationshipLabelIsItsOwn(t *testing.T) {
+	art, err := RenderTextSource("erDiagram\n A {\n string a\n string b\n string c\n }\n A |o..o| A : parent\n A ||--o{ B : owns\n A ||--o{ C : has", TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// It used to stand on the row just above "owns", reading as a
+	// two-line label of that relationship.
+	row := map[string]int{}
+	for k, l := range strings.Split(art, "\n") {
+		for _, w := range []string{"parent", "owns", "has"} {
+			if strings.Contains(l, w) {
+				row[w] = k
+			}
+		}
+	}
+	for _, w := range []string{"owns", "has"} {
+		if d := row["parent"] - row[w]; d >= -1 && d <= 1 {
+			t.Errorf("parent stands next to %s:\n%s", w, art)
+		}
+	}
+}
+
+// A relationship to itself goes out and back on two rows next to each
+// other: spanning another relationship's row, the loop would cross it.
+func TestTextArtSelfLoopRowsAdjacent(t *testing.T) {
+	n := 0
+	for seed := int64(1); seed <= 300; seed++ {
+		for _, dir := range []string{"LR", "RL"} {
+			d, _ := mr.Parse(randomER(seed, dir))
+			er := d.(*mr.ER)
+			textProbe = func(tf *textFlow) {
+				for i, r := range er.Relationships {
+					if p := tf.paths[i]; r.From == r.To && len(p) == 4 {
+						n++
+						if p[3][1]-p[0][1] != 1 {
+							t.Errorf("seed %d %s: loop %d out on row %d, back on %d", seed, dir, i, p[0][1], p[3][1])
+						}
+					}
+				}
+			}
+			RenderText(d, TextOptions{})
+			textProbe = nil
+		}
+	}
+	if n == 0 {
+		t.Fatal("no loop seen")
+	}
+}

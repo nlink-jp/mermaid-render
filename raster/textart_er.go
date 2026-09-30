@@ -169,16 +169,17 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 				}
 			}
 		}
-		var free []int
-		for y := b.y1 - 1; y > b.y0 && len(free) < 2; y-- {
-			if !used[y] && !looped[[2]int{x, y}] {
-				free = append(free, y)
-			}
+		// Two free rows next to each other: a loop spanning another
+		// relationship's row would cross it inside the loop.
+		free := func(y int) bool { return y > b.y0 && y < b.y1 && !used[y] && !looped[[2]int{x, y}] }
+		yb := b.y1 - 1
+		for yb > b.y0 && !(free(yb) && free(yb-1)) {
+			yb--
 		}
-		if len(free) < 2 {
+		if yb <= b.y0 {
 			return nil, &mr.Error{Kind: mr.LayoutFault, Msg: "text art: no room for a relationship to itself"}
 		}
-		ya, yb := free[1], free[0]
+		ya := yb - 1
 		looped[[2]int{x, ya}], looped[[2]int{x, yb}] = true, true
 		tf.paths[i] = [][2]int{{x, ya}, {x + 4, ya}, {x + 4, yb}, {x, yb}}
 		if lk.Label != "" {
