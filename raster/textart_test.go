@@ -375,8 +375,8 @@ func TestTextArtSequence(t *testing.T) {
 │└────┬───┘    └───────┬──────┘│   └────┬───┘
 │     │                │       │        │
 │     │   1. 調査して  │       │        │
-│     │───────────────►│       │        │
-│     │                │       │        │
+│     │───────────────►┃       │        │
+│     │                ┃       │        │
 │     │           ┌─[loop] 3回まで──────┼────┐
 │     │           │    ┃       │        │    │
 │     │           │    ┃  2. 問い合わせ │    │
@@ -405,7 +405,7 @@ func TestTextArtSequence(t *testing.T) {
 │     │                ┃       │        │
 │     │     6. 報告    ┃       │        │
 │     │(───────────────┃       │        │
-│     │                ┃       │        │
+│     │                │       │        │
 │┌────┴───┐    ┌───────┴──────┐│   ┌────┴───┐
 ││ 利用者 │    │ エージェント ││   │ ツール │
 │└────────┘    └──────────────┘│   └────────┘
@@ -618,5 +618,19 @@ func TestTextArtBlockLabelWidths(t *testing.T) {
 	art, err := RenderTextSource("sequenceDiagram\n A->>B: x\n alt yes\n B->>A: y\n else no\n A->>B: z\n end", two)
 	if err != nil || !strings.Contains(art, "[alt] yes") || !strings.Contains(art, "[else] no") {
 		t.Errorf("%v\n%s", err, art)
+	}
+}
+
+// An activation a message opens or closes starts or ends at its arrow, as
+// in the picture.
+func TestTextArtActivationAtTheArrow(t *testing.T) {
+	art, err := RenderTextSource("sequenceDiagram\n A->>+B: go\n B-->>-A: done\n A->>B: again", TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"   │   go   │\n   │───────►┃\n", "   │  done  ┃\n   │◄┈┈┈┈┈┈┈┃\n   │        │\n"} {
+		if !strings.Contains(art, want) {
+			t.Errorf("missing %q in\n%s", want, art)
+		}
 	}
 }

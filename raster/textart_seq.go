@@ -461,11 +461,25 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 	for i := range active {
 		active[i] = make([]bool, height)
 	}
+	// An activation a message opens or closes (A->>+B, B-->>-A) starts or
+	// ends at that message's arrow, as in the picture.
+	arrowAt := func(i int) int {
+		if i >= 0 && i < len(d.Events) && d.Events[i].Kind == mr.Message {
+			return rows[i].y + rows[i].h - 1
+		}
+		return -1
+	}
 	depth := make([]int, n)
 	for i, e := range d.Events {
 		switch e.Kind {
 		case mr.Activate:
-			depth[idx[e.From]]++
+			p := idx[e.From]
+			depth[p]++
+			if y := arrowAt(i - 1); y >= 0 {
+				for yy := y; yy < rows[i].y; yy++ {
+					active[p][yy] = true
+				}
+			}
 		case mr.Deactivate:
 			if depth[idx[e.From]] > 0 {
 				depth[idx[e.From]]--
@@ -476,6 +490,11 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 				end := height
 				if i+1 < len(rows) {
 					end = rows[i+1].y
+					if n := d.Events[i+1]; n.Kind == mr.Deactivate && idx[n.From] == p && depth[p] == 1 {
+						if y := arrowAt(i); y >= 0 {
+							end = y + 1
+						}
+					}
 				}
 				for yy := rows[i].y; yy < end && yy < bottom; yy++ {
 					active[p][yy] = true
