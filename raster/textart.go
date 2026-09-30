@@ -90,9 +90,9 @@ func (tm *textMeasure) check(s string, line int) error {
 	for _, r := range s {
 		switch {
 		case r == '\n':
-		case r < 0x20, r == 0x7f, r >= 0x80 && r < 0xa0, r == '\t':
+		case r < 0x20, r == 0x7f, r >= 0x80 && r < 0xa0, r == '\t', r == 0x2028, r == 0x2029:
 			return &mr.Error{Kind: mr.UnsupportedConstruct, Line: line, Msg: fmt.Sprintf("text art: a control character %U in a label", r)}
-		case unicode.Is(unicode.Bidi_Control, r):
+		case unicode.Is(unicode.Bidi_Control, r): // before joins: these are Cf too
 			return &mr.Error{Kind: mr.UnsupportedConstruct, Line: line, Msg: fmt.Sprintf("text art: a bidi control %U in a label", r)}
 		case joins(r):
 			return &mr.Error{Kind: mr.UnsupportedConstruct, Line: line, Msg: fmt.Sprintf("text art: %U joins a grapheme cluster", r)}
@@ -105,10 +105,13 @@ func (tm *textMeasure) check(s string, line int) error {
 }
 
 // joins reports a rune that extends the grapheme cluster before it:
-// combining marks, ZWJ, variation selectors, emoji modifiers, regional
-// indicators, and other zero-width format characters.
+// combining and spacing marks, ZWJ, variation selectors, emoji modifiers,
+// regional indicators, Hangul vowel and final jamo, the Thai and Lao
+// SARA AM, and other zero-width format characters.
 func joins(r rune) bool {
-	return unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf) ||
+	return unicode.In(r, unicode.Mn, unicode.Me, unicode.Mc, unicode.Cf) ||
+		r >= 0x1160 && r <= 0x11ff || r >= 0xd7b0 && r <= 0xd7ff ||
+		r == 0x0e33 || r == 0x0eb3 ||
 		r >= 0xfe00 && r <= 0xfe0f || r >= 0xe0100 && r <= 0xe01ef ||
 		r >= 0x1f3fb && r <= 0x1f3ff || r >= 0x1f1e6 && r <= 0x1f1ff
 }

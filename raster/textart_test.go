@@ -104,12 +104,26 @@ func TestTextArtGlyphs(t *testing.T) {
 // Labels the grid cannot hold cell by cell are refused; the caller's
 // widths are used.
 func TestTextArtLabels(t *testing.T) {
-	for _, label := range []string{"a\x1b[31mred", "tab\there", "e\u0301", "👨\u200d👩", "a\u202eb"} {
+	for label, why := range map[string]string{
+		"a\x1b[31mred": "control character", "tab\there": "control character", "del\x7f": "control character",
+		"c1\u0085": "control character", "line\u2028sep": "control character", "para\u2029sep": "control character",
+		"a\u202eb": "bidi control", "a\u2066b": "bidi control",
+		"e\u0301": "joins", "👨\u200d👩": "joins", "🇯🇵": "joins", "👍🏽": "joins", "no\ufe0f": "joins",
+		"कि\u093e": "joins", "\u1100\u1161\u11a8": "joins", "\u0e01\u0e33": "joins", "\u0e81\u0eb3": "joins",
+	} {
 		f := &mr.Flowchart{Nodes: []*mr.Node{{ID: "a", Label: label, Line: 2}}}
 		_, err := RenderText(f, TextOptions{})
 		var e *mr.Error
-		if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct {
-			t.Errorf("%q: %v, want unsupported", label, err)
+		if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct || !strings.Contains(e.Msg, why) {
+			t.Errorf("%q: %v, want unsupported: %s", label, err, why)
+		}
+	}
+	// Precomposed Hangul, Thai without SARA AM, and ambiguous characters
+	// are one cell or two, and draw.
+	for label, cells := range map[string]int{"한국": 4, "\u0e01\u0e32": 2, "α±→": 3} {
+		tm := &textMeasure{width: eastAsianWidth}
+		if err := tm.check(label, 1); err != nil || tm.cells(label) != cells {
+			t.Errorf("%q: %v, %d cells, want %d", label, err, tm.cells(label), cells)
 		}
 	}
 	narrow := func(rune) int { return 1 }
