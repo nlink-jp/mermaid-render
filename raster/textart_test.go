@@ -508,3 +508,61 @@ func TestTextArtLabelOnLine(t *testing.T) {
 		t.Errorf("%d resolves_to labels on their lines, want 2:\n%s", n, art)
 	}
 }
+
+// A frame whose title the links crossing it leave no room for widens into
+// free columns beside it, a cell from each side (the field flowchart
+// gem-agent's box art drew before this engine).
+func TestTextArtTitleWidensItsFrame(t *testing.T) {
+	src := "flowchart TD\n    Start([Investigation Target]) --> CheckType{Target Type?}\n    subgraph Domain_Flow[Domain Attribution]\n        CheckType -->|Domain / FQDN| D1[WHOIS / RDAP Lookup]\n        D1 --> D2[DNS / DoH Resolution]\n    end\n    subgraph IP_Flow[IP Attribution]\n        CheckType -->|IP / CIDR| I1[ASN & GeoIP Lookup]\n        I1 --> I2[Tor / Relay Check]\n    end\n    D2 --> R[Report]\n    I2 --> R\n"
+	art, err := RenderTextSource(src, TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(art, "║ IP Attribution │") {
+		t.Errorf("title not a cell clear of the frame and the link:\n%s", art)
+	}
+}
+
+// titleRoom widens by the fewest columns, on the side that is free (the
+// right when both are) a cell clear of what is beside it, on the grid,
+// not past a frame around it, and not at all when the title already has
+// room. The blockers stand beside the frame's lower rows, clear of the
+// title's own.
+func TestTitleRoom(t *testing.T) {
+	f := &mr.Flowchart{Subgraphs: []*mr.Subgraph{{ID: "s", Title: "abcdef"}, {ID: "p"}}}
+	tm := &textMeasure{width: eastAsianWidth}
+	wide, fr := iRect{-10, -2, 90, 11}, iRect{10, 1, 20, 8}
+	for _, c := range []struct {
+		name  string
+		frame iRect
+		link  int
+		boxes []iRect
+		label iRect
+		outer iRect
+		want  iRect
+	}{
+		{"both free", fr, 15, nil, iRect{}, wide, iRect{10, 1, 24, 8}},
+		{"left blocked", fr, 15, []iRect{{2, 6, 9, 8}}, iRect{}, wide, iRect{10, 1, 24, 8}},
+		{"right blocked", fr, 15, []iRect{{21, 6, 30, 8}}, iRect{}, wide, iRect{6, 1, 20, 8}},
+		{"right blocked by a label", fr, 15, nil, iRect{21, 6, 30, 8}, wide, iRect{6, 1, 20, 8}},
+		{"right would abut", fr, 15, []iRect{{25, 6, 30, 8}}, iRect{}, wide, iRect{6, 1, 20, 8}},
+		{"left would abut", fr, 15, []iRect{{1, 6, 5, 8}, {21, 6, 30, 8}}, iRect{}, wide, fr},
+		{"both blocked", fr, 15, []iRect{{2, 6, 9, 8}, {21, 6, 30, 8}}, iRect{}, wide, fr},
+		{"the frame around", fr, 15, []iRect{{2, 6, 9, 8}}, iRect{}, iRect{-10, -2, 24, 11}, fr},
+		{"the grid's edge", iRect{3, 1, 13, 8}, 8, []iRect{{14, 6, 30, 8}}, iRect{}, wide, iRect{3, 1, 13, 8}},
+		{"room already", fr, 18, nil, iRect{}, wide, fr},
+	} {
+		tf := &textFlow{
+			boxes:  c.boxes,
+			frames: []iRect{c.frame, c.outer},
+			titles: []iRect{{c.frame.x0 + 1, 2, c.frame.x1 - 1, 2}, {}},
+			paths:  [][][2]int{{{c.link, 0}, {c.link, 9}}},
+			labels: []iRect{c.label},
+			w:      31, h: 10,
+		}
+		titleRoom(f, tf, tm)
+		if tf.frames[0] != c.want || tf.w <= tf.frames[0].x1 {
+			t.Errorf("%s: frame %v in width %d, want %v", c.name, tf.frames[0], tf.w, c.want)
+		}
+	}
+}

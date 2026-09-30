@@ -84,6 +84,7 @@ func flowGrid(f *mr.Flowchart, lay *flowLayout, tm *textMeasure) *textFlow {
 	alignLeaves(f, tf)
 	straighten(f, tf, tm)
 	labelsOnLines(f, tf, 2)
+	titleRoom(f, tf, tm)
 	return tf
 }
 
@@ -460,25 +461,7 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 			fault("subgraph %q: its title's rows are not inside its frame", f.Subgraphs[i].ID)
 			continue
 		}
-		// Rows above the members (the title's own and the padding below
-		// it), else below them: a title the links crossing the top leave no
-		// room for stands at the bottom.
-		top, bottom := fr.y1-h, fr.y0+1
-		for _, id := range f.Subgraphs[i].Nodes {
-			for k, n := range f.Nodes {
-				if n.ID == id {
-					top = min(top, tf.boxes[k].y0-h)
-					bottom = max(bottom, tf.boxes[k].y1+1)
-				}
-			}
-		}
-		var rows []int
-		for y := t.y0; y <= top; y++ {
-			rows = append(rows, y)
-		}
-		for y := bottom; y <= fr.y1-h; y++ {
-			rows = append(rows, y)
-		}
+		rows := titleRows(f, tf, i, h)
 		free := func(x0, y0 int) bool {
 			for y := y0; y < y0+h; y++ {
 				for x := x0 - 1; x <= x0+w; x++ {
@@ -620,6 +603,138 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: "text art: " + faults[0]}
 	}
 	return g, nil
+}
+
+// titleRows are the rows a subgraph's title of h rows may start on:
+// above its members (the title's own row and the padding below it), else
+// below them — a title the links crossing the top leave no room for
+// stands at the bottom.
+func titleRows(f *mr.Flowchart, tf *textFlow, i, h int) []int {
+	fr := tf.frames[i]
+	top, bottom := fr.y1-h, fr.y0+1
+	for _, id := range f.Subgraphs[i].Nodes {
+		for k, n := range f.Nodes {
+			if n.ID == id {
+				top = min(top, tf.boxes[k].y0-h)
+				bottom = max(bottom, tf.boxes[k].y1+1)
+			}
+		}
+	}
+	var rows []int
+	for y := tf.titles[i].y0; y <= top; y++ {
+		rows = append(rows, y)
+	}
+	for y := bottom; y <= fr.y1-h; y++ {
+		rows = append(rows, y)
+	}
+	return rows
+}
+
+// titleRoom widens a frame whose title the links crossing its rows leave
+// no room for (the picture draws a title over its links; text cannot):
+// by the fewest columns, into columns beside it that nothing else uses,
+// right before left. A title it cannot help is left to the drawing,
+// which refuses it.
+func titleRoom(f *mr.Flowchart, tf *textFlow, tm *textMeasure) {
+	for i := range tf.frames {
+		title := f.Subgraphs[i].Title
+		if title == "" {
+			continue
+		}
+		w, h := tm.size(title)
+		taken := tf.occupied(i)
+		// fits reports a place for the title in fr, pad cells from its
+		// sides: the drawing's own rule lets a title touch them, a widened
+		// frame leaves it a cell each side.
+		fits := func(fr iRect, pad int) bool {
+			for _, y0 := range titleRows(f, tf, i, h) {
+				for x0 := fr.x0 + 1 + pad; x0+w-1 < fr.x1-pad; x0++ {
+					ok := true
+					for y := y0; ok && y < y0+h; y++ {
+						for x := max(x0-1, fr.x0+1); ok && x <= min(x0+w, fr.x1-1); x++ {
+							ok = !taken[[2]int{x, y}]
+						}
+					}
+					if ok {
+						return true
+					}
+				}
+			}
+			return false
+		}
+		fr := tf.frames[i]
+		if fits(fr, 0) {
+			continue
+		}
+		// clear reports whether columns x0..x1 over the frame's rows are
+		// on the grid and hold nothing — the border of a frame around this
+		// one included.
+		clear := func(x0, x1 int) bool {
+			if x0 < 0 {
+				return false
+			}
+			for y := fr.y0; y <= fr.y1; y++ {
+				for x := x0; x <= x1; x++ {
+					if taken[[2]int{x, y}] {
+						return false
+					}
+				}
+			}
+			return true
+		}
+		for k := 1; k <= w+3; k++ {
+			if wide := (iRect{fr.x0, fr.y0, fr.x1 + k, fr.y1}); clear(fr.x1+1, fr.x1+k+1) && fits(wide, 1) {
+				tf.frames[i], tf.w = wide, max(tf.w, wide.x1+2)
+				break
+			}
+			if wide := (iRect{fr.x0 - k, fr.y0, fr.x1, fr.y1}); clear(fr.x0-k-1, fr.x0-1) && fits(wide, 1) {
+				tf.frames[i] = wide
+				break
+			}
+		}
+	}
+}
+
+// occupied is every cell a box, a line, a label or another frame takes,
+// seen from frame i: a frame around it takes only its border.
+func (tf *textFlow) occupied(i int) map[[2]int]bool {
+	taken := map[[2]int]bool{}
+	fill := func(r iRect) {
+		for y := r.y0; y <= r.y1; y++ {
+			for x := r.x0; x <= r.x1; x++ {
+				taken[[2]int{x, y}] = true
+			}
+		}
+	}
+	for _, b := range tf.boxes {
+		fill(b)
+	}
+	for _, l := range tf.labels {
+		if l != (iRect{}) {
+			fill(l)
+		}
+	}
+	for _, pts := range tf.paths {
+		if cells, _, ok := walk(pts); ok {
+			for _, c := range cells {
+				taken[c] = true
+			}
+		}
+	}
+	fr := tf.frames[i]
+	for j, o := range tf.frames {
+		switch {
+		case j == i:
+		case o.x0 < fr.x0 && o.x1 > fr.x1 && o.y0 < fr.y0 && o.y1 > fr.y1:
+			fill(iRect{o.x0, o.y0, o.x1, o.y0})
+			fill(iRect{o.x0, o.y1, o.x1, o.y1})
+			fill(iRect{o.x0, o.y0, o.x0, o.y1})
+			fill(iRect{o.x1, o.y0, o.x1, o.y1})
+		default:
+			fill(o)
+		}
+	}
+	return taken
 }
 
 func endBox(f *mr.Flowchart, tf *textFlow, e mr.Endpoint) iRect {
