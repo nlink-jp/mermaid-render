@@ -144,6 +144,9 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 	}
 	tf := snapFlow(f, lay)
 	tf.tables, tf.marks = tables, marks
+	if tf.w*tf.h > MaxTextCells {
+		return drawFlowText(f, tf, tm) // refused for its size, without the passes
+	}
 	alignLeaves(f, tf, 3)
 	// A relationship of an entity to itself loops on the table's right
 	// face (the layout loops it below, where marks cannot read across):

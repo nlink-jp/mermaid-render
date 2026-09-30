@@ -82,6 +82,11 @@ func flowText(f *mr.Flowchart, tm *textMeasure) (*tgrid, error) {
 // straightened.
 func flowGrid(f *mr.Flowchart, lay *flowLayout, tm *textMeasure) *textFlow {
 	tf := snapFlow(f, lay)
+	// The passes only grow the grid: art already past the bound is refused
+	// by the drawing without them (MaxTextCells bounds time too).
+	if tf.w*tf.h > MaxTextCells {
+		return tf
+	}
 	alignLeaves(f, tf, 2)
 	straighten(f, tf, tm)
 	labelsOnLines(f, tf, 2)
@@ -1112,13 +1117,45 @@ func dedupePts(pts [][2]int) [][2]int {
 	return out
 }
 
+// lineUse is one link's use of a cell: its directions there, and whether
+// the cell is an end of the link.
+type lineUse struct {
+	link int
+	dirs uint8
+	end  bool
+}
+
+// indexLines maps every cell a line takes to the links that take it.
+func indexLines(tf *textFlow) map[[2]int][]lineUse {
+	idx := map[[2]int][]lineUse{}
+	for j, p := range tf.paths {
+		if cells, dirs, ok := walk(p); ok {
+			for m, c := range cells {
+				idx[c] = append(idx[c], lineUse{j, dirs[m], m == 0 || m == len(cells)-1})
+			}
+		}
+	}
+	return idx
+}
+
+// others reports whether a link other than i takes cell c.
+func others(idx map[[2]int][]lineUse, c [2]int, i int) bool {
+	for _, u := range idx[c] {
+		if u.link != i {
+			return true
+		}
+	}
+	return false
+}
+
 // labelsOnLines puts each label on its own line (placeLabel): the
 // operator's check of the text art, round 2, found a label beside its
 // line, where the line ran a track away from the label's layer.
 func labelsOnLines(f *mr.Flowchart, tf *textFlow, keep int) {
+	idx := indexLines(tf)
 	for i, lk := range f.Links {
 		if lk.Label != "" && len(tf.paths[i]) >= 2 {
-			placeLabel(f, tf, i, keep)
+			placeLabel(f, tf, i, keep, idx)
 		}
 	}
 }
@@ -1129,7 +1166,7 @@ func labelsOnLines(f *mr.Flowchart, tf *textFlow, keep int) {
 // else and of keep cells at each end (its head and a cell of line, or an
 // ER mark and a cell of line) — for a loop, beside a stretch too. A label
 // over a turn hides which way the line goes. It reports whether the label ends where it may stand.
-func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int) bool {
+func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int, idx map[[2]int][]lineUse) bool {
 	type key [2]int
 	own, turn := map[key]bool{}, map[key]bool{}
 	cells, dirs, ok := walk(tf.paths[i])
@@ -1144,20 +1181,8 @@ func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int) bool {
 	}
 	loop := f.Links[i].From == f.Links[i].To
 	solid := func(x, y int) bool {
-		if turn[key{x, y}] {
+		if turn[key{x, y}] || others(idx, [2]int{x, y}, i) {
 			return true
-		}
-		for j, p := range tf.paths {
-			if j == i {
-				continue
-			}
-			if oc, _, ok := walk(p); ok {
-				for _, c := range oc {
-					if c == [2]int{x, y} {
-						return true
-					}
-				}
-			}
 		}
 		for _, b := range tf.boxes {
 			if b.has(x, y) {
@@ -1275,6 +1300,7 @@ func alignLeaves(f *mr.Flowchart, tf *textFlow, keep int) {
 		}
 		return -1
 	}
+	idx := indexLines(tf) // rebuilt after each move
 	fits := func(node int, b iRect, skip int) bool {
 		if b.x0 < 0 || b.y0 < 0 {
 			return false
@@ -1303,15 +1329,10 @@ func alignLeaves(f *mr.Flowchart, tf *textFlow, keep int) {
 				return false
 			}
 		}
-		for j, p := range tf.paths {
-			if j == skip {
-				continue
-			}
-			if cells, _, ok := walk(p); ok {
-				for _, c := range cells {
-					if c[0] >= b.x0-1 && c[0] <= b.x1+1 && c[1] >= b.y0-1 && c[1] <= b.y1+1 {
-						return false
-					}
+		for y := b.y0 - 1; y <= b.y1+1; y++ {
+			for x := b.x0 - 1; x <= b.x1+1; x++ {
+				if others(idx, [2]int{x, y}, skip) {
+					return false
 				}
 			}
 		}
@@ -1343,21 +1364,10 @@ func alignLeaves(f *mr.Flowchart, tf *textFlow, keep int) {
 					return false
 				}
 			}
-			for j, p := range tf.paths {
-				if j == link {
-					continue
-				}
-				oc, od, ok := walk(p)
-				if !ok {
-					continue
-				}
-				for m, q := range oc {
-					if q == c {
-						straight := func(d uint8) bool { return d == dUp|dDown || d == dLeft|dRight }
-						if !(straight(od[m]) && straight(dirs[n]) && od[m] != dirs[n]) || m == 0 || m == len(oc)-1 {
-							return false
-						}
-					}
+			straight := func(d uint8) bool { return d == dUp|dDown || d == dLeft|dRight }
+			for _, u := range idx[c] {
+				if u.link != link && (!(straight(u.dirs) && straight(dirs[n]) && u.dirs != dirs[n]) || u.end) {
+					return false
 				}
 			}
 		}
@@ -1396,10 +1406,12 @@ func alignLeaves(f *mr.Flowchart, tf *textFlow, keep int) {
 			ob, op, ol, ow, oh := tf.boxes[n], tf.paths[i], tf.labels[i], tf.w, tf.h
 			tf.boxes[n], tf.paths[i] = b, straight
 			tf.w, tf.h = max(tf.w, b.x1+1), max(tf.h, b.y1+1)
-			if lk.Label != "" && !placeLabel(f, tf, i, keep) {
+			nidx := indexLines(tf)
+			if lk.Label != "" && !placeLabel(f, tf, i, keep, nidx) {
 				tf.boxes[n], tf.paths[i], tf.labels[i], tf.w, tf.h = ob, op, ol, ow, oh
 				return false
 			}
+			idx = nidx
 			return true
 		}
 		var toEnd, fromEnd [2]int

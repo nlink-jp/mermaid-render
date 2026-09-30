@@ -711,3 +711,18 @@ func TestTextArtLeavesMoveRight(t *testing.T) {
 		}
 	}
 }
+
+// Art past MaxTextCells is refused for its size: a star of 299 leaves is
+// thousands of cells wide.
+func TestTextArtSizeBound(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("flowchart TD\n")
+	for i := 0; i < 299; i++ {
+		fmt.Fprintf(&b, "  hub --> n%d[leaf]\n", i)
+	}
+	_, err := RenderTextSource(b.String(), TextOptions{})
+	var e *mr.Error
+	if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct || !strings.Contains(e.Msg, "cells (limit") {
+		t.Errorf("got %v, want a refusal for its size", err)
+	}
+}
