@@ -139,6 +139,7 @@ func erText(d *mr.ER, tm *textMeasure) (*tgrid, error) {
 	}
 	tf := snapFlow(f, lay)
 	tf.tables, tf.marks = tables, marks
+	alignLeaves(f, tf)
 	// A relationship of an entity to itself loops on the table's right
 	// face (the layout loops it below, where marks cannot read across):
 	// out and back over its two lowest interior rows.

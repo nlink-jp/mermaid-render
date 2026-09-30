@@ -81,6 +81,7 @@ func flowText(f *mr.Flowchart, tm *textMeasure) (*tgrid, error) {
 // straightened.
 func flowGrid(f *mr.Flowchart, lay *flowLayout, tm *textMeasure) *textFlow {
 	tf := snapFlow(f, lay)
+	alignLeaves(f, tf)
 	straighten(f, tf, tm)
 	labelsOnLines(f, tf, 2)
 	return tf
@@ -1042,6 +1043,159 @@ func labelsOnLines(f *mr.Flowchart, tf *textFlow, keep int) {
 		}
 		if bestD >= 0 {
 			tf.labels[i] = best
+		}
+	}
+}
+
+// alignLeaves straightens a link that steps across halfway (its two ends'
+// faces share no interior row or column on the grid) by moving the box at
+// one end — a node no other link touches — along the face until the ends
+// line up, when the moved box hits nothing (the operator's check of the
+// text art, round 3: a leaf's link stepped where the leaf could move).
+func alignLeaves(f *mr.Flowchart, tf *textFlow) {
+	degree := map[string]int{}
+	for _, lk := range f.Links {
+		degree[lk.From.ID]++
+		degree[lk.To.ID]++
+	}
+	nodeAt := map[string]int{}
+	for i, n := range f.Nodes {
+		nodeAt[n.ID] = i
+	}
+	inFrame := func(id string) int {
+		for k, sg := range f.Subgraphs {
+			for _, m := range sg.Nodes {
+				if m == id {
+					return k
+				}
+			}
+		}
+		return -1
+	}
+	fits := func(node int, b iRect, skip int) bool {
+		if b.x0 < 0 || b.y0 < 0 {
+			return false
+		}
+		for j, o := range tf.boxes {
+			if j != node && b.overlaps(iRect{o.x0 - 1, o.y0 - 1, o.x1 + 1, o.y1 + 1}) {
+				return false
+			}
+		}
+		k := inFrame(f.Nodes[node].ID)
+		for j, fr := range tf.frames {
+			inside := b.x0 > fr.x0 && b.x1 < fr.x1 && b.y0 > fr.y0 && b.y1 < fr.y1
+			if j == k && !inside || j != k && b.overlaps(fr) && !(fr.x0 < b.x0 && b.x1 < fr.x1 && fr.y0 < b.y0 && b.y1 < fr.y1) {
+				return false
+			}
+		}
+		for _, t := range tf.titles {
+			if b.overlaps(t) {
+				return false
+			}
+		}
+		for j, r := range tf.labels {
+			if f.Links[j].Label != "" && j != skip && b.overlaps(r) {
+				return false
+			}
+		}
+		for j, p := range tf.paths {
+			if j == skip {
+				continue
+			}
+			if cells, _, ok := walk(p); ok {
+				for _, c := range cells {
+					if c[0] >= b.x0-1 && c[0] <= b.x1+1 && c[1] >= b.y0-1 && c[1] <= b.y1+1 {
+						return false
+					}
+				}
+			}
+		}
+		return true
+	}
+	// The straight link: through no box, title or other label, meeting
+	// other links only crossing at right angles.
+	clearPath := func(link, node int, b iRect, pts [][2]int) bool {
+		cells, dirs, ok := walk(pts)
+		if !ok {
+			return false
+		}
+		for n, c := range cells {
+			for j, o := range tf.boxes {
+				if j == node {
+					o = b
+				}
+				if o.has(c[0], c[1]) {
+					return false
+				}
+			}
+			for _, t := range tf.titles {
+				if t.has(c[0], c[1]) {
+					return false
+				}
+			}
+			for j, r := range tf.labels {
+				if j != link && f.Links[j].Label != "" && r.has(c[0], c[1]) {
+					return false
+				}
+			}
+			for j, p := range tf.paths {
+				if j == link {
+					continue
+				}
+				oc, od, ok := walk(p)
+				if !ok {
+					continue
+				}
+				for m, q := range oc {
+					if q == c {
+						straight := func(d uint8) bool { return d == dUp|dDown || d == dLeft|dRight }
+						if !(straight(od[m]) && straight(dirs[n]) && od[m] != dirs[n]) || m == 0 || m == len(oc)-1 {
+							return false
+						}
+					}
+				}
+			}
+		}
+		return true
+	}
+	for i, lk := range f.Links {
+		p := tf.paths[i]
+		if len(p) != 4 || lk.From.Subgraph || lk.To.Subgraph || lk.From == lk.To {
+			continue
+		}
+		across := p[0][1] == p[1][1] && p[1][0] == p[2][0] && p[2][1] == p[3][1]
+		down := p[0][0] == p[1][0] && p[1][1] == p[2][1] && p[2][0] == p[3][0]
+		if !across && !down {
+			continue
+		}
+		axis := 1 // the coordinate the step changes
+		if down {
+			axis = 0
+		}
+		delta := p[0][axis] - p[3][axis]
+		try := func(id string, sign int, straight [][2]int) bool {
+			if degree[id] != 1 {
+				return false
+			}
+			n := nodeAt[id]
+			b := tf.boxes[n]
+			if axis == 1 {
+				b.y0, b.y1 = b.y0+sign*delta, b.y1+sign*delta
+			} else {
+				b.x0, b.x1 = b.x0+sign*delta, b.x1+sign*delta
+			}
+			if !fits(n, b, i) || !clearPath(i, n, b, straight) {
+				return false
+			}
+			tf.boxes[n], tf.paths[i] = b, straight
+			tf.w, tf.h = max(tf.w, b.x1+1), max(tf.h, b.y1+1)
+			return true
+		}
+		var toEnd, fromEnd [2]int
+		toEnd, fromEnd = p[3], p[0]
+		toEnd[axis], fromEnd[axis] = p[0][axis], p[3][axis]
+		if !try(lk.To.ID, 1, [][2]int{p[0], toEnd}) {
+			try(lk.From.ID, -1, [][2]int{fromEnd, p[3]})
 		}
 	}
 }

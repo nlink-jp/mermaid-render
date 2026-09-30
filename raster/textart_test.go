@@ -483,6 +483,12 @@ func TestTextArtStraighten(t *testing.T) {
 				t.Errorf("%s: %s bends %d times", id, label, len(tf.paths[i])-2)
 			}
 		}
+		// A leaf moves so that its one link runs straight (round 3: Archive).
+		for i, lk := range f.Links {
+			if lk.Label == "Archive" && len(tf.paths[i]) != 2 {
+				t.Errorf("%s: Archive bends %d times", id, len(tf.paths[i])-2)
+			}
+		}
 		if _, err := RenderText(d, TextOptions{}); err != nil {
 			t.Errorf("%s: %v", id, err)
 		}
