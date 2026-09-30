@@ -293,6 +293,29 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 	}
 	var faults []string
 	fault := func(format string, a ...any) { faults = append(faults, fmt.Sprintf(format, a...)) }
+	// Everything placed lies on the grid: a pass that moved or widened
+	// something past it must be refused, not clipped (or index past it).
+	inside := func(r iRect) bool {
+		return r.x0 >= 0 && r.y0 >= 0 && r.x1 < tf.w && r.y1 < tf.h && r.x0 <= r.x1 && r.y0 <= r.y1
+	}
+	for i, b := range tf.boxes {
+		if !inside(b) {
+			return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fmt.Sprintf("text art: node %q leaves the grid", f.Nodes[i].ID)}
+		}
+	}
+	for i, fr := range tf.frames {
+		if !inside(fr) {
+			return nil, &mr.Error{Kind: mr.LayoutFault, Msg: fmt.Sprintf("text art: subgraph %q leaves the grid", f.Subgraphs[i].ID)}
+		}
+		// Flowcharts nest no subgraphs: frames stand apart, a cell at least
+		// between their borders, or two would read as one.
+		for j := 0; j < i; j++ {
+			o := tf.frames[j]
+			if fr.overlaps(iRect{o.x0 - 1, o.y0 - 1, o.x1 + 1, o.y1 + 1}) {
+				fault("subgraphs %q and %q touch", f.Subgraphs[j].ID, f.Subgraphs[i].ID)
+			}
+		}
+	}
 	// Frames first: nodes and lines go over them.
 	for i, fr := range tf.frames {
 		drawBorder(g, fr, [6]rune{'╔', '═', '╗', '║', '╚', '╝'}, ownFrame+i)
@@ -626,11 +649,36 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 				}
 			}
 		}
+		// Centred in its room, or a cell right when that puts the text on
+		// its line: a room is whole units wide, so a one-cell label on a
+		// line down would stand beside it (Y│), not break it.
 		lines := strings.Split(lk.Label, "\n")
 		top := r.y0 + (r.y1-r.y0+1-len(lines))/2
+		covers := func(shift int) bool {
+			for k, l := range lines {
+				x0 := r.x0 + (r.x1-r.x0+1-tm.cells(l))/2 + shift
+				for x := x0; x < x0+tm.cells(l); x++ {
+					if g.in(x, top+k) && g.cells[top+k][x].own == ownLine+i {
+						return true
+					}
+				}
+			}
+			return false
+		}
+		shift := 0
+		if !covers(0) && covers(1) {
+			shift = 1
+		}
+		if lk.From != lk.To && !covers(shift) {
+			fault("link %d: its label's text is not on its line", i)
+		}
 		for k, l := range lines {
 			lw := tm.cells(l)
-			x0 := r.x0 + (r.x1-r.x0+1-lw)/2
+			x0 := r.x0 + (r.x1-r.x0+1-lw)/2 + shift
+			if x0+lw-1 > r.x1 {
+				fault("link %d: its label's text leaves its room", i)
+				continue
+			}
 			// The line breaks under the text only.
 			g.text(x0, top+k, l, ownLabel+i, tm)
 		}

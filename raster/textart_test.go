@@ -181,8 +181,9 @@ func TestTextArtFaults(t *testing.T) {
 		}},
 		{"a node in a frame it is not in", "which it is not in", func(tf *textFlow) {
 			fr, c := &tf.frames[0], tf.boxes[2]
-			fr.x0, fr.y0 = min(fr.x0, c.x0-1), min(fr.y0, c.y0-1)
+			fr.x0, fr.y0 = max(0, min(fr.x0, c.x0-1)), max(0, min(fr.y0, c.y0-1))
 			fr.x1, fr.y1 = max(fr.x1, c.x1+1), max(fr.y1, c.y1+1)
+			tf.w, tf.h = max(tf.w, fr.x1+1), max(tf.h, fr.y1+1)
 		}},
 		{"a label off its line", "not on its line", func(tf *textFlow) {
 			tf.labels[1].x0 += 30
@@ -805,10 +806,61 @@ func TestCrossesBorder(t *testing.T) {
 	}{
 		{5, 2, dUp | dDown, true}, {5, 8, dUp | dDown, true}, {2, 5, dLeft | dRight, true}, {10, 5, dLeft | dRight, true},
 		{5, 2, dLeft | dRight, false}, {2, 5, dUp | dDown, false}, {5, 2, dUp | dRight, false},
+		{2, 5, dLeft | dUp, false}, {10, 5, dRight | dDown, false}, {5, 8, dDown | dLeft, false},
 		{2, 2, dUp | dDown, false}, {10, 8, dLeft | dRight, false}, {2, 2, dDown | dRight, false}, {10, 2, dLeft | dDown, false},
 	} {
 		if got := crossesBorder(fr, c.x, c.y, c.dirs); got != c.ok {
 			t.Errorf("%d,%d dirs %04b: %v, want %v", c.x, c.y, c.dirs, got, c.ok)
 		}
+	}
+}
+
+// Anything a pass left off the grid is refused before it is drawn.
+func TestTextArtOffTheGrid(t *testing.T) {
+	src := "flowchart TD\n    subgraph S [枠]\n        A[一] --> B[二]\n    end\n    B --> C[三]"
+	for name, corrupt := range map[string]func(*textFlow){
+		"node":     func(tf *textFlow) { tf.boxes[2].x1 = tf.w + 3 },
+		"frame":    func(tf *textFlow) { tf.frames[0].x1 = tf.w },
+		"negative": func(tf *textFlow) { tf.frames[0].x0 = -1 },
+	} {
+		textProbe = corrupt
+		d, _ := mr.Parse(src)
+		_, err := RenderText(d, TextOptions{})
+		textProbe = nil
+		var e *mr.Error
+		if !errors.As(err, &e) || e.Kind != mr.LayoutFault || !strings.Contains(e.Msg, "leaves the grid") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// A one-cell label on a line down stands on the line, not beside it.
+func TestTextArtNarrowLabelOnItsLine(t *testing.T) {
+	art, err := RenderTextSource("flowchart TD\n A{ok?} -->|Y| B[go]\n A -->|N| C[stop]", TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(art, "       Y            N\n       ▼            ▼") {
+		t.Errorf("labels beside their lines:\n%s", art)
+	}
+}
+
+// Frames stand apart: two that touch would read as one.
+func TestTextArtFramesApart(t *testing.T) {
+	src := "flowchart LR\n    subgraph S [一]\n        A[a]\n    end\n    subgraph T [二]\n        B[b]\n    end\n    A --> B"
+	if _, err := RenderTextSource(src, TextOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	textProbe = func(tf *textFlow) {
+		a, b := tf.frames[0], &tf.frames[1]
+		b.x0 = a.x1 + 1
+	}
+	d, _ := mr.Parse(src)
+	debugArt = true
+	_, err := RenderText(d, TextOptions{})
+	textProbe, debugArt = nil, false
+	var e *mr.Error
+	if !errors.As(err, &e) || e.Kind != mr.LayoutFault || !strings.Contains(e.Msg, "touch") {
+		t.Errorf("got %v, want frames that touch refused", err)
 	}
 }
