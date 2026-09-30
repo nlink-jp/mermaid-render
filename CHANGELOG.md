@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-30
+
 ### Added
 
 - Text art (`raster.RenderText`): a flowchart in box-drawing characters on
@@ -21,6 +23,15 @@ to [Semantic Versioning](https://semver.org/).
   above and below, lifelines (heavy while active), messages with every head
   kind, messages to self, notes, blocks as frames sized to what they hold,
   groups as background frames; all 10 real sequence diagrams draw.
+  Wrong art is refused, never drawn: a frame holds only its members, a line
+  only crosses a frame's border straight, a label's text stands on a
+  straight stretch of its own line (a loop's beside it, nearer it than any
+  other line) and hides no turn, and every cell of a sequence diagram goes
+  through one gate that knows what may cover what. Labels holding a control
+  character or a multi-rune grapheme cluster are refused.
+  `raster.RenderTextSource` parses and draws in one call; art past
+  `raster.MaxTextCells` (2,000,000 cells) is refused for its size.
+  `golang.org/x/text` becomes a direct dependency (`x/text/width`).
 
 ### Changed
 
