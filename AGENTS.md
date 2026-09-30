@@ -153,7 +153,11 @@ mermaid-render/
   drawing never asked what a line or label cell covers. Now a frame holds
   only its members, a line only crosses a border straight, a label stands on
   a straight stretch of its own line (a loop's beside it) over no turn.
-  Random flowcharts draw at 97%, ER at 94%; the rest are refused as wrong.
+  Random flowcharts draw at 98%, ER at 95% (tests hold 97% and 93%); the
+  rest are refused as wrong. The second review added: a label's TEXT must
+  cover its line (a room is whole units wide), frames stand apart and on
+  the grid, a loop's label stands nearer its loop than any other line, and
+  a label candidate may cover only the stretch it stands on.
 - **Never walk every path per cell tested** (`indexLines`): label placement
   and leaf moves did, and a 300-node flowchart took 10 s, mostly garbage
   collection. The index is rebuilt only after a leaf moves; art already past

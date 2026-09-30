@@ -650,12 +650,14 @@ it (the operator's decisions of 2026-09-30):
   other link touches runs straight instead: that node moves along the face until the ends line
   up, when the moved box and the straight link hit nothing (round 3). The spacing was measured on random flowcharts: link ends two
   units apart on a face (one apart collided in 60% of them), a row between layers, two units
-  before a head. The 22 real flowcharts draw; of 4,000 random ones 99.6% (the rest are refused). ER is always laid out left to right (right to left when
+  before a head. The 22 real flowcharts draw; random ones draw at the rate given under the checks below. ER is always laid out left to right (right to left when
   written RL): cardinality reads along a horizontal line; a TB diagram is drawn as LR — a stated
   difference, the relationships unchanged. Its layer gap is a unit wider and its heads' room one
   more, so a label keeps a cell of line from a mark; a relationship of an entity to itself loops
-  on the table's right face over two interior rows no other link ends on (the layout loops it
-  below, where marks cannot read across). Sequence has a column layout of its own, like the
+  on the table's right face over two adjacent interior rows no other link ends on, each further
+  loop on two rows above the last, the table growing two rows for each (the layout loops it
+  below, where marks cannot read across); its label stands within two steps of its loop, nearer
+  it than any other line and touching no other label. Sequence has a column layout of its own, like the
   picture's. The independent verification ran this on the 22 real flowcharts (clean) and 20,000
   random ones (0.03% collide, all rounding ties, before the interior-cell and title rules).
 - **Checked on every render**, on the grid, as the picture's properties are: every node's box
@@ -671,12 +673,15 @@ it (the operator's decisions of 2026-09-30):
   caller shows the source. Never refused for width: art wider than the terminal wraps there and
   taller scrolls (gem-agent ADR-0063). The only size bound is 2,000,000 cells (an unsupported
   construct), reached by the largest diagrams the picture allows: a 299-leaf star laid out
-  top-down is 4,560 × 436 with labels of one to three characters, and past the bound with longer
-  ones (the picture refuses those too). It is checked as soon as the layout is on the grid, before
-  the passes that could only grow it; the slowest large diagram of the pre-release review took
-  0.7 s. Random flowcharts, denser than real ones, draw at 97% and random ER diagrams at 94%; the
-  rest are refused as wrong (a label no straight stretch of its line holds, a line along a frame's
-  border). Accepted: every real diagram draws.
+  top-down is 4,560 × 436 when its leaves are named n1 to n299, and past the bound when each is
+  labelled with three letters (the picture refuses those too). It is checked as soon as the
+  layout is on the grid, before the passes that could only grow it; the slowest large diagram of
+  the pre-release reviews took 0.8 s. Random flowcharts, denser than real ones, draw at 98% and
+  random ER diagrams at 95% (the tests hold 97% and 93%); the rest are refused as wrong (a label
+  no straight stretch of its line holds, a line along a frame's border). Accepted: every real
+  diagram draws. A sequence with no participant draws nothing, as the picture does; blocks with no
+  participant are refused, since the picture draws their frames and the art has no column for
+  them.
 - **Integration**: gem-agent drops `mermaid-ascii`, its rewrite table and its two guards, and
   hands the fence to this engine (an ADR amending ADR-0042 / ADR-0063). The art still bypasses
   the Markdown renderer and still goes through the TUI's inert filter. lagent adds the art lane
