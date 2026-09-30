@@ -104,13 +104,16 @@ func (tm *textMeasure) check(s string, line int) error {
 	return nil
 }
 
-// joins reports a rune that extends the grapheme cluster before it:
+// joins reports a rune that joins a grapheme cluster with its neighbour:
 // combining and spacing marks, ZWJ, variation selectors, emoji modifiers,
-// regional indicators, Hangul vowel and final jamo, the Thai and Lao
-// SARA AM, and other zero-width format characters.
+// regional indicators, Hangul jamo (leading ones join what follows), the
+// Thai and Lao SARA AM, Prepend characters, and other zero-width format
+// characters.
 func joins(r rune) bool {
 	return unicode.In(r, unicode.Mn, unicode.Me, unicode.Mc, unicode.Cf) ||
-		r >= 0x1160 && r <= 0x11ff || r >= 0xd7b0 && r <= 0xd7ff ||
+		r >= 0x1100 && r <= 0x11ff || r >= 0xa960 && r <= 0xa97f || r >= 0xd7b0 && r <= 0xd7ff ||
+		r == 0x0d4e || r == 0x111c2 || r == 0x111c3 || r == 0x1193f || r == 0x11941 || r == 0x11a3a ||
+		r >= 0x11a84 && r <= 0x11a89 || r == 0x11d46 || r == 0x11f02 ||
 		r == 0x0e33 || r == 0x0eb3 ||
 		r >= 0xfe00 && r <= 0xfe0f || r >= 0xe0100 && r <= 0xe01ef ||
 		r >= 0x1f3fb && r <= 0x1f3ff || r >= 0x1f1e6 && r <= 0x1f1ff

@@ -114,6 +114,8 @@ func TestTextArtLabels(t *testing.T) {
 		"a\u202eb": "bidi control", "a\u2066b": "bidi control",
 		"e\u0301": "joins", "👨\u200d👩": "joins", "🇯🇵": "joins", "👍🏽": "joins", "no\ufe0f": "joins",
 		"कि\u093e": "joins", "\u1100\u1161\u11a8": "joins", "\u0e01\u0e33": "joins", "\u0e81\u0eb3": "joins",
+		"\u1100가": "joins", "가\u11a8": "joins", "가\u1160": "joins", "가\ud7b0": "joins", "\ua960가": "joins",
+		"\u0d4eക": "joins", "\U000111c2a": "joins",
 	} {
 		f := &mr.Flowchart{Nodes: []*mr.Node{{ID: "a", Label: label, Line: 2}}}
 		_, err := RenderText(f, TextOptions{})
