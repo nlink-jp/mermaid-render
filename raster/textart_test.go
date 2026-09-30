@@ -949,3 +949,21 @@ func TestTextArtSelfLoopRowsAdjacent(t *testing.T) {
 		t.Fatal("no loop seen")
 	}
 }
+
+// Every activation toggled right after a message starts or ends at its
+// arrow; a bar another toggle or a deeper activation keeps open goes on.
+func TestTextArtActivationRuns(t *testing.T) {
+	for src, want := range map[string]string{
+		// Two toggles each way after one message.
+		"sequenceDiagram\n A->>B: req\n activate B\n activate A\n B-->>A: resp\n deactivate B\n deactivate A": "   │  req  │\n   ┃──────►┃\n   ┃       ┃\n   ┃  resp ┃\n   ┃◄┈┈┈┈┈┈┃\n   │       │\n",
+		// B's bar closes at x; A's, open before, goes on to y.
+		"sequenceDiagram\n activate A\n activate B\n A->>B: x\n deactivate B\n B->>A: y\n deactivate A": "   ┃──────►┃\n   ┃       │\n   ┃   y   │\n   ┃◄──────│\n   │       │\n",
+		// Activated twice, deactivated once: still open.
+		"sequenceDiagram\n activate A\n activate A\n A->>B: x\n deactivate A\n A->>B: y\n deactivate A": "   ┃──────►│\n   ┃       │\n   ┃   y   │\n   ┃──────►│\n   │       │\n",
+	} {
+		art, err := RenderTextSource(src, TextOptions{})
+		if err != nil || !strings.Contains(art, want) {
+			t.Errorf("%q: %v\n%s\nwant\n%s", src, err, art, want)
+		}
+	}
+}

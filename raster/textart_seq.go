@@ -459,13 +459,23 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 	for i := range active {
 		active[i] = make([]bool, height)
 	}
-	// An activation a message opens or closes (A->>+B, B-->>-A) starts or
-	// ends at that message's arrow, as in the picture.
+	// Activations and deactivations right after a message (A->>+B,
+	// B-->>-A, or activate / deactivate lines) start and end at that
+	// message's arrow, as the picture's do.
 	arrowAt := func(i int) int {
 		if i >= 0 && i < len(d.Events) && d.Events[i].Kind == mr.Message {
 			return rows[i].y + rows[i].h - 1
 		}
 		return -1
+	}
+	toggles := func(k mr.EventKind) bool { return k == mr.Activate || k == mr.Deactivate }
+	// anchor is the message a run of (de)activations follows, or -1.
+	anchor := func(i int) int {
+		j := i - 1
+		for j >= 0 && toggles(d.Events[j].Kind) {
+			j--
+		}
+		return j
 	}
 	depth := make([]int, n)
 	for i, e := range d.Events {
@@ -473,7 +483,7 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 		case mr.Activate:
 			p := idx[e.From]
 			depth[p]++
-			if y := arrowAt(i - 1); y >= 0 {
+			if y := arrowAt(anchor(i)); y >= 0 {
 				for yy := y; yy < rows[i].y; yy++ {
 					active[p][yy] = true
 				}
@@ -484,19 +494,32 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 			}
 		}
 		for p := range ps {
-			if depth[p] > 0 {
-				end := height
-				if i+1 < len(rows) {
-					end = rows[i+1].y
-					if n := d.Events[i+1]; n.Kind == mr.Deactivate && idx[n.From] == p && depth[p] == 1 {
-						if y := arrowAt(i); y >= 0 {
-							end = y + 1
+			if depth[p] == 0 {
+				continue
+			}
+			end := height
+			if i+1 < len(rows) {
+				end = rows[i+1].y
+			}
+			// A message whose following deactivations close p's bar ends
+			// it at the arrow.
+			if y := arrowAt(i); y >= 0 {
+				dp := depth[p]
+				for k := i + 1; k < len(d.Events) && toggles(d.Events[k].Kind) && dp > 0; k++ {
+					if idx[d.Events[k].From] == p {
+						if d.Events[k].Kind == mr.Activate {
+							dp++
+						} else {
+							dp--
 						}
 					}
 				}
-				for yy := rows[i].y; yy < end && yy < bottom; yy++ {
-					active[p][yy] = true
+				if dp == 0 {
+					end = y + 1
 				}
+			}
+			for yy := rows[i].y; yy < end && yy < bottom; yy++ {
+				active[p][yy] = true
 			}
 		}
 	}
