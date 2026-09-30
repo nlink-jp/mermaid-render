@@ -460,66 +460,53 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 		active[i] = make([]bool, height)
 	}
 	// Activations and deactivations right after a message (A->>+B,
-	// B-->>-A, or activate / deactivate lines) start and end at that
-	// message's arrow, as the picture's do.
-	arrowAt := func(i int) int {
-		if i >= 0 && i < len(d.Events) && d.Events[i].Kind == mr.Message {
-			return rows[i].y + rows[i].h - 1
-		}
-		return -1
-	}
+	// B-->>-A, or activate / deactivate lines) all happen at that message's
+	// arrow, as the picture's do: a bar open before the message runs to the
+	// arrow, one open after the run of toggles runs on from it.
 	toggles := func(k mr.EventKind) bool { return k == mr.Activate || k == mr.Deactivate }
-	// anchor is the message a run of (de)activations follows, or -1.
-	anchor := func(i int) int {
-		j := i - 1
-		for j >= 0 && toggles(d.Events[j].Kind) {
-			j--
-		}
-		return j
-	}
 	depth := make([]int, n)
 	for i, e := range d.Events {
 		switch e.Kind {
 		case mr.Activate:
-			p := idx[e.From]
-			depth[p]++
-			if y := arrowAt(anchor(i)); y >= 0 {
-				for yy := y; yy < rows[i].y; yy++ {
-					active[p][yy] = true
-				}
-			}
+			depth[idx[e.From]]++
 		case mr.Deactivate:
 			if depth[idx[e.From]] > 0 {
 				depth[idx[e.From]]--
 			}
 		}
-		for p := range ps {
-			if depth[p] == 0 {
-				continue
-			}
-			end := height
-			if i+1 < len(rows) {
-				end = rows[i+1].y
-			}
-			// A message whose following deactivations close p's bar ends
-			// it at the arrow.
-			if y := arrowAt(i); y >= 0 {
-				dp := depth[p]
-				for k := i + 1; k < len(d.Events) && toggles(d.Events[k].Kind) && dp > 0; k++ {
-					if idx[d.Events[k].From] == p {
-						if d.Events[k].Kind == mr.Activate {
-							dp++
-						} else {
-							dp--
-						}
-					}
-				}
-				if dp == 0 {
-					end = y + 1
-				}
-			}
-			for yy := rows[i].y; yy < end && yy < bottom; yy++ {
+		next := height
+		if i+1 < len(rows) {
+			next = rows[i+1].y
+		}
+		mark := func(p, from, to int) {
+			for yy := from; yy < to && yy < bottom; yy++ {
 				active[p][yy] = true
+			}
+		}
+		if e.Kind != mr.Message {
+			for p := range ps {
+				if depth[p] > 0 {
+					mark(p, rows[i].y, next)
+				}
+			}
+			continue
+		}
+		arrow := rows[i].y + rows[i].h - 1
+		after := append([]int(nil), depth...)
+		for k := i + 1; k < len(d.Events) && toggles(d.Events[k].Kind); k++ {
+			q := idx[d.Events[k].From]
+			if d.Events[k].Kind == mr.Activate {
+				after[q]++
+			} else if after[q] > 0 {
+				after[q]--
+			}
+		}
+		for p := range ps {
+			if depth[p] > 0 {
+				mark(p, rows[i].y, arrow+1)
+			}
+			if after[p] > 0 {
+				mark(p, arrow, next)
 			}
 		}
 	}

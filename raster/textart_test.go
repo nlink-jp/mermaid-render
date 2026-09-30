@@ -176,6 +176,18 @@ func TestTextArtFaults(t *testing.T) {
 			tf.paths[0] = [][2]int{p[0], {p[0][0], last[1] - 2}, {last[0] - 3, last[1] - 2}, {last[0] - 3, last[1]}, last}
 		}},
 		{"a label too small", "smaller than its text", func(tf *textFlow) { tf.labels[1].x1 = tf.labels[1].x0 }},
+		{"a label's text beside its line", "text is not on its line", func(tf *textFlow) {
+			// A wide room whose last cell is on a stretch down: the text,
+			// centred, stays clear of the line.
+			cells, dirs, _ := walk(tf.paths[1])
+			for k, c := range cells {
+				if dirs[k] == dUp|dDown {
+					tf.labels[1] = iRect{c[0] - 13, c[1], c[0], c[1]}
+					break
+				}
+			}
+			tf.w += 14
+		}},
 		{"a label over its head", "over its head", func(tf *textFlow) {
 			cells, _, _ := walk(tf.paths[1])
 			h, r := cells[len(cells)-1], tf.labels[1]
@@ -875,10 +887,10 @@ func TestTextArtFramesApart(t *testing.T) {
 // A label stands on its line; a loop's may stand two steps from it, but
 // only nearer it than any other line and touching no other label.
 func TestLabelByItsLine(t *testing.T) {
-	// Link 0 a loop down column 4 from row 0 to 6; link 1 down column 12.
+	// Link 0 a loop down column 4 from row 0 to 6; link 1 down column 14.
 	base := func() *textFlow {
 		return &textFlow{
-			paths:  [][][2]int{{{2, 0}, {4, 0}, {4, 6}, {2, 6}}, {{12, 0}, {12, 6}}},
+			paths:  [][][2]int{{{2, 0}, {4, 0}, {4, 6}, {2, 6}}, {{14, 0}, {14, 6}}},
 			labels: []iRect{{}, {}},
 		}
 	}
@@ -894,7 +906,7 @@ func TestLabelByItsLine(t *testing.T) {
 		{"a loop's, a step off", iRect{5, 3, 7, 3}, true, iRect{}, true},
 		{"a loop's, two steps off", iRect{6, 3, 8, 3}, true, iRect{}, true},
 		{"a loop's, three steps off", iRect{7, 3, 9, 3}, true, iRect{}, false},
-		{"a loop's, as near another line", iRect{6, 3, 10, 3}, true, iRect{}, false},
+		{"a loop's, as near another line", iRect{6, 3, 12, 3}, true, iRect{}, false},
 		{"a loop's, touching another label", iRect{6, 3, 8, 3}, true, iRect{6, 4, 8, 4}, false},
 		{"a loop's, a row clear of another label", iRect{6, 3, 8, 3}, true, iRect{6, 5, 8, 5}, true},
 	} {
@@ -965,6 +977,10 @@ func TestTextArtActivationRuns(t *testing.T) {
 		"sequenceDiagram\n A->>B: req\n activate B\n activate A\n B-->>A: resp\n deactivate B\n deactivate A": "   │  req  │\n   ┃──────►┃\n   ┃       ┃\n   ┃  resp ┃\n   ┃◄┈┈┈┈┈┈┃\n   │       │\n",
 		// B's bar closes at x; A's, open before, goes on to y.
 		"sequenceDiagram\n activate A\n activate B\n A->>B: x\n deactivate B\n B->>A: y\n deactivate A": "   ┃──────►┃\n   ┃       │\n   ┃   y   │\n   ┃◄──────│\n   │       │\n",
+		// Three toggles after one message: all at its arrow.
+		"sequenceDiagram\n A->>B: req\n activate B\n activate A\n activate C\n B->>C: x\n deactivate C\n deactivate B\n deactivate A": "   │  req  │       │\n   ┃──────►┃       ┃\n",
+		// Deactivated twice after activating once more: closed at the arrow.
+		"sequenceDiagram\n activate A\n A->>B: x\n activate A\n deactivate A\n deactivate A\n B->>A: y": "   ┃──────►│\n   │       │\n   │   y   │\n",
 		// Activated twice, deactivated once: still open.
 		"sequenceDiagram\n activate A\n activate A\n A->>B: x\n deactivate A\n A->>B: y\n deactivate A": "   ┃──────►│\n   ┃       │\n   ┃   y   │\n   ┃──────►│\n   │       │\n",
 	} {
@@ -1049,5 +1065,23 @@ func TestPlaceLabel(t *testing.T) {
 				t.Errorf("loop label %v over its loop at %d,%d", tf.labels[0], x, y)
 			}
 		}
+	}
+}
+
+// A title widens its frame only into columns no other frame holds.
+func TestTitleRoomSiblings(t *testing.T) {
+	f := &mr.Flowchart{Subgraphs: []*mr.Subgraph{{ID: "s", Title: "abcdef"}, {ID: "l"}, {ID: "r"}}}
+	tf := &textFlow{
+		// Frame 0 between two siblings a column clear each side, a line
+		// down its middle.
+		frames: []iRect{{10, 1, 20, 8}, {0, 1, 8, 8}, {22, 1, 30, 8}},
+		titles: []iRect{{11, 2, 19, 2}, {}, {}},
+		paths:  [][][2]int{{{15, 0}, {15, 9}}},
+		labels: []iRect{{}},
+		w:      31, h: 10,
+	}
+	titleRoom(f, tf, &textMeasure{width: eastAsianWidth})
+	if tf.frames[0] != (iRect{10, 1, 20, 8}) {
+		t.Errorf("frame widened to %v, into a sibling", tf.frames[0])
 	}
 }
