@@ -104,6 +104,9 @@ with the cardinality in mermaid's notation (`||`, `o{`, …) next to each table.
 caller's terminal. A label holding a control character or a multi-rune
 grapheme cluster is unsupported in the art. Every render is checked on the
 grid; a fault is a `LayoutFault` and the caller shows the source.
+`raster.RenderTextSource(src, opts)` parses and draws in one call. Art larger
+than `raster.MaxTextCells` (2,000,000 cells) is refused as an unsupported
+construct — a bound on time and memory, not on looks.
 
 Parsing follows the mermaid 12.0.0 documentation; details it leaves open
 (which characters an id may hold, how link symbols are read, subgraph

@@ -625,7 +625,7 @@ it (the operator's decisions of 2026-09-30):
   cross kinds, `)` for the async kinds, none for `->` / `-->`; both ends for `<<->>`), a message to
   self as a loop to the right, autonumber as a `1.` prefix, notes as boxes, `box` groups as titled
   frames, blocks as frames with their kind and label, their sections split by a `┈` line naming
-  `else` / `and` / `option`, each nesting level one column inside the last. A block's frame is
+  `else` / `and` / `option`, each nesting level three columns inside the last. A block's frame is
   sized to what it holds (its messages' text, notes, inner frames, its labels); a `box` group is a
   background frame that arrows and text cross. Every cell is written through one gate that knows
   what may cover what (text over a lifeline, an arrow across a lifeline or a group's side as `┼`,
@@ -663,19 +663,27 @@ it (the operator's decisions of 2026-09-30):
   cells from its source's box to its target's, touching no other box; two links share a cell only
   where two straight runs cross at a right angle — a corner or a T on another link is a fault; one
   head per arrowed end, next to its box; every label present, clear of boxes and other links;
-  frames holding their members, titles inside; ER markers at their own ends; sequence messages in
+  frames holding their members and nothing else, titles inside; a line on a frame's border only
+  crossing it straight, never along it or turning on it (it would read as ending at the frame); each
+  label on a straight stretch of its own line — a loop's may stand beside it — hiding no turn of
+  it; ER markers at their own ends; sequence messages in
   order, each from its sender's lifeline to its receiver's. A failure is `LayoutFault`, and the
   caller shows the source. Never refused for width: art wider than the terminal wraps there and
   taller scrolls (gem-agent ADR-0063). The only size bound is 2,000,000 cells (an unsupported
-  construct): the largest diagrams the picture allows measured up to 1.3 million (a 299-leaf star
-  laid out top-down, 4,868 × 267) and took under 50 ms to lay out.
+  construct), reached by the largest diagrams the picture allows: a 299-leaf star laid out
+  top-down is 4,560 × 436 with labels of one to three characters, and past the bound with longer
+  ones (the picture refuses those too). It is checked as soon as the layout is on the grid, before
+  the passes that could only grow it; the slowest large diagram of the pre-release review took
+  0.7 s. Random flowcharts, denser than real ones, draw at 97% and random ER diagrams at 94%; the
+  rest are refused as wrong (a label no straight stretch of its line holds, a line along a frame's
+  border). Accepted: every real diagram draws.
 - **Integration**: gem-agent drops `mermaid-ascii`, its rewrite table and its two guards, and
   hands the fence to this engine (an ADR amending ADR-0042 / ADR-0063). The art still bypasses
   the Markdown renderer and still goes through the TUI's inert filter. lagent adds the art lane
   the same way: `Segment` gains art, the reply renderer emits it verbatim (an ADR amending
   ADR-0025, ADR-0024 — which rules out a box-art hold — and ADR-0020 A1).
 
-### Configuration### Configuration
+### Configuration
 
 The library has no configuration file and no environment variables. Settings such as the font
 live in the gem-agent and lagent configuration and reach the library as a `FontSpec`. The key

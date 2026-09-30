@@ -65,7 +65,11 @@ mermaid-render/
 │   ├── geom.go       # shape outlines, clipping, segment tests
 │   ├── draw.go       # rasterizing shapes, links, heads, frames
 │   ├── verify.go     # layout properties, checked on every render and (strictly) by tests
-│   └── render.go     # Options, Render, RenderSource, MaxPixels
+│   ├── render.go     # Options, Render, RenderSource, MaxPixels
+│   ├── textart.go    # text art: RenderText(Source), TextOptions, MaxTextCells, the cell rule, grid, snapper
+│   ├── textart_flow.go # flowchart art: snap, alignLeaves, straighten, placeLabel, titleRoom, drawFlowText's checks
+│   ├── textart_er.go # ER art: tables, cardinality marks, self-relationship loops
+│   └── textart_seq.go # sequence art: its own columns, every cell through seqArt.put's gate
 ├── tools/mmdpng/     # development CLI: mermaid file -> PNG
 ├── Makefile
 └── docs/{en,ja}/     # RFP
@@ -138,6 +142,28 @@ mermaid-render/
   loose threshold at most the strict one. Run `go test ./raster/ -random 20000`
   after any layout change — 20000 seeds found defects 400 did not. Pin a seed
   that exposed a defect in `TestLayoutRegressions`.
+- **Text art is checked as it is drawn** (`drawFlowText`'s faults, and
+  `seqArt.put`, the one gate every sequence cell goes through); `textProbe`
+  corrupts a layout and `debugArt` returns the faulty grid, for tests. The
+  passes after the layout (`alignLeaves`, `straighten`, `placeLabel`,
+  `titleRoom`) move things the layout placed: every move must carry what
+  rides on it, and every way it can go wrong needs a check at drawing. The
+  pre-release review found wrong art passing in four ways, three from those
+  moves (a leaf moved into a foreign frame, a label left behind), because the
+  drawing never asked what a line or label cell covers. Now a frame holds
+  only its members, a line only crosses a border straight, a label stands on
+  a straight stretch of its own line (a loop's beside it) over no turn.
+  Random flowcharts draw at 97%, ER at 94%; the rest are refused as wrong.
+- **Never walk every path per cell tested** (`indexLines`): label placement
+  and leaf moves did, and a 300-node flowchart took 10 s, mostly garbage
+  collection. The index is rebuilt only after a leaf moves; art already past
+  `MaxTextCells` once snapped skips the passes.
+- **A text-art fault list is read in grid order**: the line cells were
+  checked in map order and the first fault differed run to run.
+- **The cell rule refuses what joins a grapheme** (`joins`): Mn, Me, Mc, Cf,
+  Hangul vowel and final jamo, SARA AM, variation selectors, emoji modifiers,
+  regional indicators. Go has no grapheme-break property; add a class when a
+  test finds one, and keep the bidi case before `joins` (bidi controls are Cf).
 - **A link crossing a foreign subgraph frame is counted, not failed**, in the
   random sweep (see the RFP's Discussion Log); fixed cases still assert none.
 - **Links are orthogonal between layers** (`assignTracks` in place.go):

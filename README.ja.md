@@ -81,7 +81,8 @@ art, err := raster.RenderText(d, raster.TextOptions{Width: cellWidth}) // Width 
 ブロックは枠、グループはメンバーを囲む）。ER のエンティティは表で、左から右に並べ、多重度は表の隣に mermaid の記法
 （`||`・`o{` など）で書く。`Width` は呼び出し側の端末で文字が占める桁数。制御文字や、複数の rune からなる
 書記素クラスタを含むラベルは罫線では未対応。描くたびに格子の上で確かめ、破れれば `LayoutFault` で、呼び出し側は
-ソースを見せる。
+ソースを見せる。`raster.RenderTextSource(src, opts)` は構文解析と描画を 1 度に行う。`raster.MaxTextCells`
+（200 万セル）を超える罫線は構文が未対応と同じ扱いで拒む — 時間とメモリの上限で、見た目の上限ではない。
 
 構文の読み取りは mermaid 12.0.0 のドキュメントに従う。ドキュメントが決めていない細部
 （ID に使える文字、線の記号の読み方、subgraph の所属）は、同じ版の mermaid 自身の
