@@ -61,8 +61,11 @@ func TestTextArtRandomFlowcharts(t *testing.T) {
 			}
 		}
 	}
-	if ok*100 < total*99 {
-		t.Errorf("%d of %d random flowcharts drawn, want 99%%", ok, total)
+	// Random flowcharts are denser than real ones: 97% draw. The rest are
+	// refused as wrong — a label no straight stretch of its line holds
+	// would hide a turn, a line along a frame's border reads as ending there.
+	if ok*100 < total*97 {
+		t.Errorf("%d of %d random flowcharts drawn, want 97%%", ok, total)
 	}
 }
 
@@ -170,6 +173,26 @@ func TestTextArtFaults(t *testing.T) {
 			tf.paths[0] = [][2]int{p[0], {p[0][0], last[1] - 2}, {last[0] - 3, last[1] - 2}, {last[0] - 3, last[1]}, last}
 		}},
 		{"a label too small", "smaller than its text", func(tf *textFlow) { tf.labels[1].x1 = tf.labels[1].x0 }},
+		{"a node in a frame it is not in", "which it is not in", func(tf *textFlow) {
+			fr, c := &tf.frames[0], tf.boxes[2]
+			fr.x0, fr.y0 = min(fr.x0, c.x0-1), min(fr.y0, c.y0-1)
+			fr.x1, fr.y1 = max(fr.x1, c.x1+1), max(fr.y1, c.y1+1)
+		}},
+		{"a label off its line", "not on its line", func(tf *textFlow) {
+			tf.labels[1].x0 += 30
+			tf.labels[1].x1 += 30
+			tf.w += 40
+		}},
+		{"a label over a turn", "hides a turn", func(tf *textFlow) {
+			p, r := tf.paths[1], tf.labels[1]
+			last := p[len(p)-1]
+			tf.paths[1] = [][2]int{p[0], {p[0][0], r.y0}, {r.x0, r.y0}, {r.x0, last[1]}, last}
+		}},
+		{"a line along a frame's border", "runs along or turns on the border", func(tf *textFlow) {
+			p, fr := tf.paths[2], tf.frames[0]
+			last := p[len(p)-1]
+			tf.paths[2] = [][2]int{p[0], {p[0][0], fr.y1}, {p[0][0] + 2, fr.y1}, {p[0][0] + 2, last[1]}, last}
+		}},
 		{"a title with no room", "no room for its title", func(tf *textFlow) {
 			// The frame hugs its members: no row above or below them.
 			fr := &tf.frames[0]
@@ -672,6 +695,19 @@ func TestTextArtFaultIsDeterministic(t *testing.T) {
 	for k := 0; k < 50; k++ {
 		if _, err := RenderTextSource(src, TextOptions{}); err == nil || err.Error() != first.Error() {
 			t.Fatalf("run %d: %v, first %v", k, err, first)
+		}
+	}
+}
+
+// Moving a leaf to straighten its link keeps it out of frames it is not
+// in and takes its label along; these random flowcharts drew a leaf in a
+// foreign frame (732) or left a label far from its line (243, 196), and
+// the checks now refuse both, so they draw only if the move is right.
+func TestTextArtLeavesMoveRight(t *testing.T) {
+	for _, seed := range []int64{732, 243, 196} {
+		d, _ := mr.Parse(randomFlowchart(seed, "TD"))
+		if _, err := RenderText(d, TextOptions{}); err != nil {
+			t.Errorf("seed %d: %v", seed, err)
 		}
 	}
 }

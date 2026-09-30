@@ -82,7 +82,7 @@ func flowText(f *mr.Flowchart, tm *textMeasure) (*tgrid, error) {
 // straightened.
 func flowGrid(f *mr.Flowchart, lay *flowLayout, tm *textMeasure) *textFlow {
 	tf := snapFlow(f, lay)
-	alignLeaves(f, tf)
+	alignLeaves(f, tf, 2)
 	straighten(f, tf, tm)
 	labelsOnLines(f, tf, 2)
 	titleRoom(f, tf, tm)
@@ -291,14 +291,19 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 	// Frames first: nodes and lines go over them.
 	for i, fr := range tf.frames {
 		drawBorder(g, fr, [6]rune{'╔', '═', '╗', '║', '╚', '╝'}, ownFrame+i)
+		member := map[string]bool{}
 		for _, id := range f.Subgraphs[i].Nodes {
-			for k, n := range f.Nodes {
-				if n.ID == id {
-					b := tf.boxes[k]
-					if !(b.x0 > fr.x0 && b.x1 < fr.x1 && b.y0 > fr.y0 && b.y1 < fr.y1) {
-						fault("subgraph %q does not hold node %q", f.Subgraphs[i].ID, id)
-					}
-				}
+			member[id] = true
+		}
+		for k, n := range f.Nodes {
+			b := tf.boxes[k]
+			switch {
+			case member[n.ID] && !(b.x0 > fr.x0 && b.x1 < fr.x1 && b.y0 > fr.y0 && b.y1 < fr.y1):
+				fault("subgraph %q does not hold node %q", f.Subgraphs[i].ID, n.ID)
+			case !member[n.ID] && b.overlaps(fr):
+				// A frame holds its members and nothing else: a node inside
+				// one reads as a member (flowcharts nest no subgraphs).
+				fault("node %q stands in subgraph %q, which it is not in", n.ID, f.Subgraphs[i].ID)
 			}
 		}
 	}
@@ -393,6 +398,23 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		case own >= ownBox && own < ownFrame:
 			fault("link %d runs through node %q", us[0].link, f.Nodes[own-ownBox].ID)
 			continue
+		}
+		// On a frame's border a line only crosses it: straight across a
+		// side, never along it, never turning on it — a line that runs
+		// along or turns on a border reads as ending at the frame.
+		if overFrame {
+			fr := tf.frames[own-ownFrame]
+			across := uint8(0)
+			switch {
+			case (y == fr.y0 || y == fr.y1) && x > fr.x0 && x < fr.x1:
+				across = dUp | dDown
+			case (x == fr.x0 || x == fr.x1) && y > fr.y0 && y < fr.y1:
+				across = dLeft | dRight
+			}
+			if len(us) != 1 || us[0].dirs != across {
+				fault("link %d runs along or turns on the border of subgraph %q", us[0].link, f.Subgraphs[own-ownFrame].ID)
+				continue
+			}
 		}
 		switch len(us) {
 		case 1:
@@ -585,6 +607,11 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		if r.x1-r.x0+1 < w || r.y1-r.y0+1 < h {
 			fault("link %d: its label's room is smaller than its text", i)
 		}
+		// On its own line, or — a loop's — beside it: a label anywhere else
+		// names whatever line it happens to stand by.
+		if !labelByItsLine(tf, i, lk.From == lk.To) {
+			fault("link %d: its label is not on its line", i)
+		}
 		for y := r.y0; y <= r.y1; y++ {
 			for x := r.x0; x <= r.x1; x++ {
 				if !g.in(x, y) {
@@ -597,6 +624,8 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 				}
 				if c.own == ownLine+i && c.r != strokeGlyph(lk.Stroke, c.dirs) {
 					fault("link %d: its label lies over its head or mark", i)
+				} else if c.own == ownLine+i && isCorner(c.dirs) {
+					fault("link %d: its label hides a turn of its line", i)
 				}
 			}
 		}
@@ -616,6 +645,25 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: "text art: " + faults[0]}
 	}
 	return g, nil
+}
+
+// labelByItsLine reports whether link i's label covers a cell of its line
+// or, for a loop, stands within two cells of it.
+func labelByItsLine(tf *textFlow, i int, loop bool) bool {
+	cells, _, ok := walk(tf.paths[i])
+	if !ok {
+		return true // the line's own checks name it
+	}
+	r, reach := tf.labels[i], 0
+	if loop {
+		reach = 2
+	}
+	for _, c := range cells {
+		if c[0] >= r.x0-reach && c[0] <= r.x1+reach && c[1] >= r.y0-reach && c[1] <= r.y1+reach {
+			return true
+		}
+	}
+	return false
 }
 
 // titleRows are the rows a subgraph's title of h rows may start on:
@@ -1064,26 +1112,52 @@ func dedupePts(pts [][2]int) [][2]int {
 	return out
 }
 
-// labelsOnLines moves a label its link does not run through onto a
-// straight run of that link under the label's span — across for a run
-// across, down for a run down — when the cells there hold nothing else
-// (the operator's check of the text art, round 2: a label beside its
-// line, where the line ran a track away from the label's layer).
-// keep is how many cells at each end of a link a label stays off: its head
-// and a cell of line, or an ER mark and a cell of line.
+// labelsOnLines puts each label on its own line (placeLabel): the
+// operator's check of the text art, round 2, found a label beside its
+// line, where the line ran a track away from the label's layer.
 func labelsOnLines(f *mr.Flowchart, tf *textFlow, keep int) {
-	type key [2]int
-	occupied := map[key]int{} // cell -> link+1
-	for i, p := range tf.paths {
-		if cells, _, ok := walk(p); ok {
-			for _, c := range cells {
-				occupied[key(c)] = i + 1
-			}
+	for i, lk := range f.Links {
+		if lk.Label != "" && len(tf.paths[i]) >= 2 {
+			placeLabel(f, tf, i, keep)
 		}
 	}
-	solid := func(x, y, link int) bool {
-		if l := occupied[key{x, y}]; l != 0 && l != link+1 {
+}
+
+// placeLabel keeps link i's label where it is when it stands on the line
+// (a loop's: on it or beside it) over no turn of it, and otherwise moves
+// it to the nearest straight stretch that holds it clear of everything
+// else and of keep cells at each end (its head and a cell of line, or an
+// ER mark and a cell of line) — for a loop, beside a stretch too. A label
+// over a turn hides which way the line goes. It reports whether the label ends where it may stand.
+func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int) bool {
+	type key [2]int
+	own, turn := map[key]bool{}, map[key]bool{}
+	cells, dirs, ok := walk(tf.paths[i])
+	if !ok {
+		return false
+	}
+	for k, c := range cells {
+		own[key(c)] = true
+		if isCorner(dirs[k]) {
+			turn[key(c)] = true
+		}
+	}
+	loop := f.Links[i].From == f.Links[i].To
+	solid := func(x, y int) bool {
+		if turn[key{x, y}] {
 			return true
+		}
+		for j, p := range tf.paths {
+			if j == i {
+				continue
+			}
+			if oc, _, ok := walk(p); ok {
+				for _, c := range oc {
+					if c == [2]int{x, y} {
+						return true
+					}
+				}
+			}
 		}
 		for _, b := range tf.boxes {
 			if b.has(x, y) {
@@ -1101,78 +1175,79 @@ func labelsOnLines(f *mr.Flowchart, tf *textFlow, keep int) {
 			}
 		}
 		for j, r := range tf.labels {
-			if j != link && f.Links[j].Label != "" && r.has(x, y) {
+			if j != i && f.Links[j].Label != "" && r.has(x, y) {
 				return true
 			}
 		}
 		return false
 	}
-	for i, lk := range f.Links {
-		if lk.Label == "" || len(tf.paths[i]) < 2 {
-			continue
+	r := tf.labels[i]
+	// Where it is: on the line (or by a loop), over no turn.
+	on, turns := false, false
+	for y := r.y0; y <= r.y1; y++ {
+		for x := r.x0; x <= r.x1; x++ {
+			on = on || own[key{x, y}] && !turn[key{x, y}]
+			turns = turns || turn[key{x, y}]
 		}
-		r := tf.labels[i]
-		on := false
-		for y := r.y0; y <= r.y1 && !on; y++ {
-			for x := r.x0; x <= r.x1; x++ {
-				if occupied[key{x, y}] == i+1 {
-					on = true
+	}
+	if (on || loop && labelByItsLine(tf, i, true)) && !turns {
+		return true
+	}
+	w, h := r.x1-r.x0+1, r.y1-r.y0+1
+	ends := map[key]bool{}
+	for k := 0; k < keep && k < len(cells); k++ {
+		ends[key(cells[k])] = true
+		ends[key(cells[len(cells)-1-k])] = true
+	}
+	pts := tf.paths[i]
+	var cands []iRect
+	for k := 1; k < len(pts); k++ {
+		a, b := pts[k-1], pts[k]
+		switch {
+		case a[1] == b[1]: // across
+			lo, hi := min(a[0], b[0]), max(a[0], b[0])
+			if h == 1 {
+				if x0 := clamp(r.x0, lo+1, hi-w); x0 >= lo+1 && x0+w-1 <= hi-1 {
+					cands = append(cands, iRect{x0, a[1], x0 + w - 1, a[1]})
+				}
+			}
+			if loop { // above or below the stretch
+				x0 := clamp(r.x0, lo, hi-w+1)
+				cands = append(cands, iRect{x0, a[1] - h, x0 + w - 1, a[1] - 1}, iRect{x0, a[1] + 1, x0 + w - 1, a[1] + h})
+			}
+		case a[0] == b[0]: // down
+			lo, hi := min(a[1], b[1]), max(a[1], b[1])
+			if y0 := clamp(r.y0, lo+1, hi-h); y0 >= lo+1 && y0+h-1 <= hi-1 {
+				cands = append(cands, iRect{a[0] - w/2, y0, a[0] - w/2 + w - 1, y0 + h - 1})
+			}
+			if loop { // a cell clear of the stretch, either side
+				y0 := clamp(r.y0, lo, hi-h+1)
+				cands = append(cands, iRect{a[0] + 2, y0, a[0] + 1 + w, y0 + h - 1}, iRect{a[0] - 1 - w, y0, a[0] - 2, y0 + h - 1})
+			}
+		}
+	}
+	best, bestD := iRect{}, -1
+	for _, c := range cands {
+		clear := c.x0 >= 0 && c.y0 >= 0
+		for y := c.y0; y <= c.y1 && clear; y++ {
+			for x := c.x0; x <= c.x1; x++ {
+				if solid(x, y) || ends[key{x, y}] {
+					clear = false
 					break
 				}
 			}
 		}
-		if on {
-			continue
-		}
-		w, h := r.x1-r.x0+1, r.y1-r.y0+1
-		pts := tf.paths[i]
-		ends := map[key]bool{}
-		if cells, _, ok := walk(pts); ok {
-			for k := 0; k < keep && k < len(cells); k++ {
-				ends[key(cells[k])] = true
-				ends[key(cells[len(cells)-1-k])] = true
-			}
-		}
-		best, bestD := iRect{}, -1
-		for k := 1; k < len(pts); k++ {
-			a, b := pts[k-1], pts[k]
-			var c iRect
-			switch {
-			case a[1] == b[1] && h == 1: // across: the label on the row
-				lo, hi := min(a[0], b[0]), max(a[0], b[0])
-				x0 := clamp(r.x0, lo+1, hi-w)
-				if x0 < lo+1 || x0+w-1 > hi-1 {
-					continue
-				}
-				c = iRect{x0, a[1], x0 + w - 1, a[1]}
-			case a[0] == b[0]: // down: the label centred on the column
-				lo, hi := min(a[1], b[1]), max(a[1], b[1])
-				y0 := clamp(r.y0, lo+1, hi-h)
-				if y0 < lo+1 || y0+h-1 > hi-1 {
-					continue
-				}
-				c = iRect{a[0] - w/2, y0, a[0] - w/2 + w - 1, y0 + h - 1}
-			default:
-				continue
-			}
-			clear := true
-			for y := c.y0; y <= c.y1 && clear; y++ {
-				for x := c.x0; x <= c.x1; x++ {
-					if solid(x, y, i) || ends[key{x, y}] {
-						clear = false
-						break
-					}
-				}
-			}
-			d := abs(float64(c.x0-r.x0)) + abs(float64(c.y0-r.y0))
-			if clear && (bestD < 0 || int(d) < bestD) {
-				best, bestD = c, int(d)
-			}
-		}
-		if bestD >= 0 {
-			tf.labels[i] = best
+		d := abs(float64(c.x0-r.x0)) + abs(float64(c.y0-r.y0))
+		if clear && (bestD < 0 || int(d) < bestD) {
+			best, bestD = c, int(d)
 		}
 	}
+	if bestD < 0 {
+		return false
+	}
+	tf.labels[i] = best
+	tf.w, tf.h = max(tf.w, best.x1+1), max(tf.h, best.y1+1)
+	return true
 }
 
 // alignLeaves straightens a link that steps across halfway (its two ends'
@@ -1180,7 +1255,7 @@ func labelsOnLines(f *mr.Flowchart, tf *textFlow, keep int) {
 // one end — a node no other link touches — along the face until the ends
 // line up, when the moved box hits nothing (the operator's check of the
 // text art, round 3: a leaf's link stepped where the leaf could move).
-func alignLeaves(f *mr.Flowchart, tf *textFlow) {
+func alignLeaves(f *mr.Flowchart, tf *textFlow, keep int) {
 	degree := map[string]int{}
 	for _, lk := range f.Links {
 		degree[lk.From.ID]++
@@ -1212,7 +1287,9 @@ func alignLeaves(f *mr.Flowchart, tf *textFlow) {
 		k := inFrame(f.Nodes[node].ID)
 		for j, fr := range tf.frames {
 			inside := b.x0 > fr.x0 && b.x1 < fr.x1 && b.y0 > fr.y0 && b.y1 < fr.y1
-			if j == k && !inside || j != k && b.overlaps(fr) && !(fr.x0 < b.x0 && b.x1 < fr.x1 && fr.y0 < b.y0 && b.y1 < fr.y1) {
+			// Only into its own frame: flowcharts nest no subgraphs, so a
+			// node inside another frame would read as its member.
+			if j == k && !inside || j != k && b.overlaps(fr) {
 				return false
 			}
 		}
@@ -1315,8 +1392,14 @@ func alignLeaves(f *mr.Flowchart, tf *textFlow) {
 			if !fits(n, b, i) || !clearPath(i, n, b, straight) {
 				return false
 			}
+			// The label goes with its line, or the leaf stays.
+			ob, op, ol, ow, oh := tf.boxes[n], tf.paths[i], tf.labels[i], tf.w, tf.h
 			tf.boxes[n], tf.paths[i] = b, straight
 			tf.w, tf.h = max(tf.w, b.x1+1), max(tf.h, b.y1+1)
+			if lk.Label != "" && !placeLabel(f, tf, i, keep) {
+				tf.boxes[n], tf.paths[i], tf.labels[i], tf.w, tf.h = ob, op, ol, ow, oh
+				return false
+			}
 			return true
 		}
 		var toEnd, fromEnd [2]int
