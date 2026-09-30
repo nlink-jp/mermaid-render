@@ -670,6 +670,11 @@ func TestTextArtBlockLabelWidths(t *testing.T) {
 	if err != nil || !strings.Contains(art, "[alt] a much longer condition") || !strings.Contains(art, "[else] no") {
 		t.Errorf("%v\n%s", err, art)
 	}
+	// A section's label longer than its block's sets the width.
+	art, err = RenderTextSource("sequenceDiagram\n A->>B: x\n par a\n B->>A: y\n and a much longer section\n A->>B: z\n end", two)
+	if err != nil || !strings.Contains(art, "[and] a much longer section") {
+		t.Errorf("%v\n%s", err, art)
+	}
 }
 
 // An activation a message opens or closes starts or ends at its arrow, as
@@ -966,6 +971,83 @@ func TestTextArtActivationRuns(t *testing.T) {
 		art, err := RenderTextSource(src, TextOptions{})
 		if err != nil || !strings.Contains(art, want) {
 			t.Errorf("%q: %v\n%s\nwant\n%s", src, err, art, want)
+		}
+	}
+}
+
+// The line cells are checked in reading order, so a refusal names the
+// same first fault every run.
+func TestReadingOrder(t *testing.T) {
+	m := map[[2]int]bool{}
+	for y := 0; y < 7; y++ {
+		for x := 0; x < 9; x++ {
+			m[[2]int{(x * 5) % 9, (y * 3) % 7}] = true
+		}
+	}
+	got := readingOrder(m)
+	for k := 1; k < len(got); k++ {
+		a, b := got[k-1], got[k]
+		if a[1] > b[1] || a[1] == b[1] && a[0] >= b[0] {
+			t.Fatalf("%v before %v", a, b)
+		}
+	}
+	if len(got) != 63 {
+		t.Errorf("%d cells, want 63", len(got))
+	}
+}
+
+// placeLabel keeps a label on a straight stretch of its line, moves one
+// over a turn to the nearest stretch that holds it clear of the ends and
+// of everything else, and puts a loop's beside the loop.
+func TestPlaceLabel(t *testing.T) {
+	a, b := mr.Endpoint{ID: "a"}, mr.Endpoint{ID: "b"}
+	f := &mr.Flowchart{Links: []*mr.Link{{From: a, To: b, Label: "x"}, {From: a, To: b}}}
+	// Link 0: across row 2 from 0 to 20, down to row 12 at column 20. A
+	// label on a stretch stays, even near an end; a moved one keeps off
+	// its two end cells.
+	mk := func(label iRect, other [][2]int) *textFlow {
+		tf := &textFlow{
+			paths:  [][][2]int{{{0, 2}, {20, 2}, {20, 12}}, other},
+			labels: []iRect{label, {}},
+			w:      40, h: 20,
+		}
+		return tf
+	}
+	for _, c := range []struct {
+		name  string
+		label iRect
+		other [][2]int
+		want  iRect
+	}{
+		{"on a stretch: kept", iRect{8, 2, 10, 2}, nil, iRect{8, 2, 10, 2}},
+		{"over the turn: the nearest stretch, down", iRect{19, 2, 21, 2}, nil, iRect{19, 3, 21, 3}},
+		{"another line on that one: along the row", iRect{19, 2, 21, 2}, [][2]int{{18, 3}, {22, 3}}, iRect{17, 2, 19, 2}},
+		{"moved, off the end cells", iRect{-1, 2, 1, 2}, [][2]int{{18, 3}, {22, 3}}, iRect{2, 2, 4, 2}},
+	} {
+		tf := mk(c.label, c.other)
+		if len(c.other) == 0 {
+			tf.paths[1] = nil
+		}
+		ok := placeLabel(f, tf, 0, 2, indexLines(tf))
+		if !ok || tf.labels[0] != c.want {
+			t.Errorf("%s: %v %v, want %v", c.name, ok, tf.labels[0], c.want)
+		}
+	}
+	// A loop's label too wide for any stretch stands beside the loop.
+	loop := &mr.Flowchart{Links: []*mr.Link{{From: a, To: a, Label: "wide label"}}}
+	tf := &textFlow{
+		paths:  [][][2]int{{{5, 5}, {5, 8}, {9, 8}, {9, 5}}},
+		labels: []iRect{{4, 8, 13, 8}},
+		w:      40, h: 20,
+	}
+	if !placeLabel(loop, tf, 0, 1, indexLines(tf)) || !labelByItsLine(tf, indexLines(tf), 0, tf.labels[0], true) {
+		t.Errorf("loop label at %v", tf.labels[0])
+	}
+	for y := tf.labels[0].y0; y <= tf.labels[0].y1; y++ {
+		for x := tf.labels[0].x0; x <= tf.labels[0].x1; x++ {
+			if (x == 5 || x == 9) && y >= 5 && y <= 8 || y == 8 && x >= 5 && x <= 9 {
+				t.Errorf("loop label %v over its loop at %d,%d", tf.labels[0], x, y)
+			}
 		}
 	}
 }

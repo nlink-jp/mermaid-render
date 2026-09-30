@@ -403,17 +403,7 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		}
 	}
 	// In reading order, so the first fault named is the same every run.
-	cellsUsed := make([][2]int, 0, len(uses))
-	for c := range uses {
-		cellsUsed = append(cellsUsed, c)
-	}
-	sort.Slice(cellsUsed, func(a, b int) bool {
-		if cellsUsed[a][1] != cellsUsed[b][1] {
-			return cellsUsed[a][1] < cellsUsed[b][1]
-		}
-		return cellsUsed[a][0] < cellsUsed[b][0]
-	})
-	for _, c := range cellsUsed {
+	for _, c := range readingOrder(uses) {
 		us := uses[c]
 		x, y := c[0], c[1]
 		if !g.in(x, y) {
@@ -693,6 +683,21 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 	return g, nil
 }
 
+// readingOrder is a cell map's keys, row by row, left to right.
+func readingOrder[V any](m map[[2]int]V) [][2]int {
+	cells := make([][2]int, 0, len(m))
+	for c := range m {
+		cells = append(cells, c)
+	}
+	sort.Slice(cells, func(a, b int) bool {
+		if cells[a][1] != cells[b][1] {
+			return cells[a][1] < cells[b][1]
+		}
+		return cells[a][0] < cells[b][0]
+	})
+	return cells
+}
+
 // crossesBorder reports whether a line with dirs at (x, y), a cell of
 // fr's border, crosses it straight: up and down through its top or bottom,
 // across through a side, never at a corner.
@@ -923,9 +928,12 @@ func crossGlyph(f *mr.Flowchart, a int, adirs uint8, b int) rune {
 }
 
 // walk lists the cells of a path of right-angled runs and the directions
-// each cell's line leaves it in; ok is false when two corners are not on
-// one row or column.
+// each cell's line leaves it in; ok is false for no path, or when two
+// corners are not on one row or column.
 func walk(pts [][2]int) (cells [][2]int, dirs []uint8, ok bool) {
+	if len(pts) == 0 {
+		return nil, nil, false
+	}
 	cells = [][2]int{pts[0]}
 	dirs = []uint8{0}
 	for k := 1; k < len(pts); k++ {
@@ -1292,7 +1300,7 @@ func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int, idx map[[2]int][]lin
 			turns = turns || turn[key{x, y}]
 		}
 	}
-	if (on || loop && labelByItsLine(tf, idx, i, r, true)) && !turns {
+	if (on || loop && labelByItsLine(tf, idx, i, r, true)) && !turns && r.x0 >= 0 && r.y0 >= 0 {
 		return true
 	}
 	w, h := r.x1-r.x0+1, r.y1-r.y0+1
@@ -1303,28 +1311,36 @@ func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int, idx map[[2]int][]lin
 	}
 	pts := tf.paths[i]
 	var cands []iRect
+	// stretch is the run of its line a candidate may cover: the one it
+	// stands on, or none for a loop's beside it. Covering any other part of
+	// its line would break it twice.
+	stretch := map[iRect]iRect{}
+	none := iRect{1, 1, 0, 0}
 	for k := 1; k < len(pts); k++ {
 		a, b := pts[k-1], pts[k]
 		switch {
 		case a[1] == b[1]: // across
 			lo, hi := min(a[0], b[0]), max(a[0], b[0])
-			if h == 1 {
-				if x0 := clamp(r.x0, lo+1, hi-w); x0 >= lo+1 && x0+w-1 <= hi-1 {
-					cands = append(cands, iRect{x0, a[1], x0 + w - 1, a[1]})
-				}
+			// Every place along the stretch, between its corners.
+			for x0 := lo + 1; h == 1 && x0+w-1 <= hi-1; x0++ {
+				c := iRect{x0, a[1], x0 + w - 1, a[1]}
+				cands, stretch[c] = append(cands, c), iRect{lo, a[1], hi, a[1]}
 			}
-			if loop { // above or below the stretch
-				x0 := clamp(r.x0, lo, hi-w+1)
-				cands = append(cands, iRect{x0, a[1] - h, x0 + w - 1, a[1] - 1}, iRect{x0, a[1] + 1, x0 + w - 1, a[1] + h})
+			for x0 := lo - w + 1; loop && x0 <= hi; x0++ { // above or below it, overlapping it
+				for _, c := range []iRect{{x0, a[1] - h, x0 + w - 1, a[1] - 1}, {x0, a[1] + 1, x0 + w - 1, a[1] + h}} {
+					cands, stretch[c] = append(cands, c), none
+				}
 			}
 		case a[0] == b[0]: // down
 			lo, hi := min(a[1], b[1]), max(a[1], b[1])
-			if y0 := clamp(r.y0, lo+1, hi-h); y0 >= lo+1 && y0+h-1 <= hi-1 {
-				cands = append(cands, iRect{a[0] - w/2, y0, a[0] - w/2 + w - 1, y0 + h - 1})
+			for y0 := lo + 1; y0+h-1 <= hi-1; y0++ {
+				c := iRect{a[0] - w/2, y0, a[0] - w/2 + w - 1, y0 + h - 1}
+				cands, stretch[c] = append(cands, c), iRect{a[0], lo, a[0], hi}
 			}
-			if loop { // a cell clear of the stretch, either side
-				y0 := clamp(r.y0, lo, hi-h+1)
-				cands = append(cands, iRect{a[0] + 2, y0, a[0] + 1 + w, y0 + h - 1}, iRect{a[0] - 1 - w, y0, a[0] - 2, y0 + h - 1})
+			for y0 := lo - h + 1; loop && y0 <= hi; y0++ { // a cell clear of it, either side
+				for _, c := range []iRect{{a[0] + 2, y0, a[0] + 1 + w, y0 + h - 1}, {a[0] - 1 - w, y0, a[0] - 2, y0 + h - 1}} {
+					cands, stretch[c] = append(cands, c), none
+				}
 			}
 		}
 	}
@@ -1333,7 +1349,7 @@ func placeLabel(f *mr.Flowchart, tf *textFlow, i, keep int, idx map[[2]int][]lin
 		clear := c.x0 >= 0 && c.y0 >= 0
 		for y := c.y0; y <= c.y1 && clear; y++ {
 			for x := c.x0; x <= c.x1; x++ {
-				if solid(x, y) || ends[key{x, y}] {
+				if solid(x, y) || ends[key{x, y}] || own[key{x, y}] && !stretch[c].has(x, y) {
 					clear = false
 					break
 				}
