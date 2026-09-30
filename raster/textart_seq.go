@@ -157,6 +157,11 @@ type seqBlock struct {
 func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 	ps := d.Participants
 	if len(ps) == 0 {
+		// Blocks with no one in them have no columns to stand in: empty art
+		// would say the diagram is empty.
+		if len(d.Events) > 0 {
+			return nil, &mr.Error{Kind: mr.UnsupportedConstruct, Msg: "text art: blocks with no participant in them"}
+		}
 		return newGrid(0, 0)
 	}
 	idx := map[*mr.Participant]int{}
@@ -241,6 +246,15 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 			lo, hi := idx[b.Participants[0]], idx[b.Participants[len(b.Participants)-1]]
 			if hi > lo {
 				need[lo][hi] = max(need[lo][hi], w+4-boxW[lo]/2-boxW[hi]/2)
+			} else {
+				// A group of one widens past its box to hold its title
+				// (groupX): keep that room to its right.
+				ext := w + 2 - boxW[lo]/2
+				if lo+1 < n {
+					need[lo][lo+1] = max(need[lo][lo+1], ext+boxW[lo+1]/2+3)
+				} else {
+					right = max(right, ext+2)
+				}
 			}
 		}
 	}
@@ -343,12 +357,12 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 				label := 0
 				for _, s := range []int{a.start} {
 					w, _ := tm.size(d.Events[s].Text)
-					label = w + len(b.kind.String()) + 3
+					label = w + tm.cells(blockWord(b.kind.String()))
 				}
 				for k := a.start + 1; k < i; k++ {
 					if d.Events[k].Kind == mr.BlockSection && startOf(d.Events, d.Events[k]) == a.start {
 						w, _ := tm.size(d.Events[k].Text)
-						label = max(label, w+len(sectionWord(b.kind))+3)
+						label = max(label, w+tm.cells(blockWord(sectionWord(b.kind))))
 					}
 				}
 				x1 = max(x1, x0+label+3)
@@ -376,10 +390,18 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 	for _, f := range frames {
 		minX, maxX = min(minX, f[0]), max(maxX, f[1])
 	}
+	// groupX is a participant group's frame across: around its members'
+	// boxes, and wide enough for its title.
+	groupX := func(b *mr.Box) (int, int) {
+		lo, hi := idx[b.Participants[0]], idx[b.Participants[len(b.Participants)-1]]
+		w, _ := tm.size(b.Title)
+		x0, x1 := pos[lo]-boxW[lo]/2-1, pos[hi]-boxW[hi]/2+boxW[hi]
+		return x0, max(x1, x0+w+3)
+	}
 	for _, b := range d.Boxes {
 		if len(b.Participants) > 0 {
-			i := idx[b.Participants[0]]
-			minX = min(minX, pos[i]-boxW[i]/2-1)
+			x0, x1 := groupX(b)
+			minX, maxX = min(minX, x0), max(maxX, x1)
 		}
 	}
 	if minX < 0 {
@@ -476,8 +498,7 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 		if len(b.Participants) == 0 {
 			continue
 		}
-		lo, hi := idx[b.Participants[0]], idx[b.Participants[len(b.Participants)-1]]
-		x0, x1 := pos[lo]-boxW[lo]/2-1, pos[hi]-boxW[hi]/2+boxW[hi]
+		x0, x1 := groupX(b)
 		a.frameRow(x0, x1, top-1, '┌', '┐', '─', b.Title)
 		a.frameRow(x0, x1, height-1, '└', '┘', '─', "")
 		for yy := top; yy < height-1; yy++ {
@@ -498,13 +519,13 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 			b := blockSpan[i]
 			stack = append(stack, b)
 			x0, x1 := frameX(b)
-			label := "[" + b.kind.String() + "] " + e.Text
+			label := blockWord(b.kind.String()) + e.Text
 			a.frameRow(x0, x1, r.y, '┌', '┐', '─', label)
 		case mr.BlockSection:
 			if len(stack) > 0 {
 				b := stack[len(stack)-1]
 				x0, x1 := frameX(b)
-				a.frameRow(x0, x1, r.y, '├', '┤', '┈', "["+sectionWord(b.kind)+"] "+e.Text)
+				a.frameRow(x0, x1, r.y, '├', '┤', '┈', blockWord(sectionWord(b.kind))+e.Text)
 			}
 		case mr.BlockEnd:
 			if len(stack) > 0 {
@@ -587,6 +608,10 @@ func sectionWord(k mr.BlockKind) string {
 
 // frameRow draws a frame's border row with an optional label after its
 // corner.
+// blockWord is the bracketed word a block's or a section's label starts
+// with; measured, not counted, since the caller's widths decide its cells.
+func blockWord(w string) string { return "[" + w + "] " }
+
 func (a *seqArt) frameRow(x0, x1, y int, l, r, fill rune, label string) {
 	if x1-x0 < 2 {
 		a.faultf("a frame too narrow")
@@ -628,13 +653,20 @@ func (a *seqArt) message(e *mr.Event, txt string, xf, xt, y, h int, active [][]b
 		// ├─┐ text
 		// │◄┘
 		ay := y
-		a.put(xf+1, ay, line, scArrow)
+		start, end := line, line
+		if e.BothEnds {
+			start = seqHead(e.Head, -1)
+		}
+		if e.Head != mr.HeadNone {
+			end = seqHead(e.Head, -1)
+		}
+		a.put(xf+1, ay, start, scArrow)
 		a.put(xf+2, ay, '┐', scArrow)
 		for k := ay + 1; k < y+h-1; k++ {
 			a.put(xf+2, k, '│', scArrow)
 		}
 		a.put(xf+2, y+h-1, '┘', scArrow)
-		a.put(xf+1, y+h-1, seqHead(e.Head, -1), scArrow)
+		a.put(xf+1, y+h-1, end, scArrow)
 		for k, l := range lines {
 			a.text(xf+tqLoopW+1, y+k, l, scText)
 		}

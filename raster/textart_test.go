@@ -321,11 +321,15 @@ func TestTextArtRandomSequences(t *testing.T) {
 		}
 		art, err := RenderText(d, TextOptions{})
 		var e *mr.Error
-		if err != nil && !(errors.As(err, &e) && e.Kind == mr.LayoutFault) {
+		empty := len(d.(*mr.Sequence).Participants) == 0 && len(d.(*mr.Sequence).Events) > 0
+		if err != nil && !(errors.As(err, &e) && (e.Kind == mr.LayoutFault || empty && e.Kind == mr.UnsupportedConstruct)) {
 			t.Fatalf("seed %d: %v", seed, err)
 		}
 		if err != nil {
 			continue
+		}
+		if empty || art == "" && len(d.(*mr.Sequence).Events) > 0 {
+			t.Fatalf("seed %d: blocks with no participant drew %q", seed, art)
 		}
 		ok++
 		if again, _ := RenderText(d, TextOptions{}); again != art {
@@ -564,5 +568,55 @@ func TestTitleRoom(t *testing.T) {
 		if tf.frames[0] != c.want || tf.w <= tf.frames[0].x1 {
 			t.Errorf("%s: frame %v in width %d, want %v", c.name, tf.frames[0], tf.w, c.want)
 		}
+	}
+}
+
+// A message to self keeps its arrowheads: none for ->, one back into the
+// lifeline for ->>, both ends for <<->>, a cross for -x.
+func TestTextArtSelfMessageHeads(t *testing.T) {
+	got, err := RenderTextSource("sequenceDiagram\n A->A: plain\n A-->A: dotted\n A->>A: head\n A<<->>A: both\n A-xA: cross", TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"│─┐ plain\n   │─┘", "│┈┐ dotted\n   │┈┘", "│─┐ head\n   │◄┘", "│◄┐ both\n   │◄┘", "│─┐ cross\n   │×┘"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in\n%s", want, got)
+		}
+	}
+}
+
+// Blocks with no participant have no columns: refused, never empty art.
+func TestTextArtBlocksWithNoParticipant(t *testing.T) {
+	art, err := RenderTextSource("sequenceDiagram\nloop x\ncritical y\noption z\nend\nend", TextOptions{})
+	var e *mr.Error
+	if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct || art != "" {
+		t.Errorf("got %q, %v", art, err)
+	}
+	if art, err := RenderTextSource("sequenceDiagram", TextOptions{}); err != nil || art != "" {
+		t.Errorf("an empty diagram: %q, %v", art, err)
+	}
+}
+
+// A group of one participant widens past its box to hold its title, and
+// keeps the next participant clear of it.
+func TestTextArtGroupOfOne(t *testing.T) {
+	for _, src := range []string{
+		"sequenceDiagram\n box A long group title\n participant A\n end\n A->>B: x",
+		"sequenceDiagram\n participant A\n box B long group title\n participant B\n end\n A->>B: x",
+		"sequenceDiagram\n participant A\n box B long group title\n participant B\n end\n participant C\n A->>C: x",
+	} {
+		art, err := RenderTextSource(src, TextOptions{})
+		if err != nil || !strings.Contains(art, "─B long group title─┐") && !strings.Contains(art, "─A long group title─┐") {
+			t.Errorf("%q: %v\n%s", src, err, art)
+		}
+	}
+}
+
+// Block labels are measured with the caller's widths, brackets included.
+func TestTextArtBlockLabelWidths(t *testing.T) {
+	two := TextOptions{Width: func(rune) int { return 2 }}
+	art, err := RenderTextSource("sequenceDiagram\n A->>B: x\n alt yes\n B->>A: y\n else no\n A->>B: z\n end", two)
+	if err != nil || !strings.Contains(art, "[alt] yes") || !strings.Contains(art, "[else] no") {
+		t.Errorf("%v\n%s", err, art)
 	}
 }
