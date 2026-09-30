@@ -2,6 +2,7 @@ package raster
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	mr "github.com/nlink-jp/mermaid-render"
@@ -368,7 +369,19 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 			uses[c] = append(uses[c], use{i, dirs[k]})
 		}
 	}
-	for c, us := range uses {
+	// In reading order, so the first fault named is the same every run.
+	cellsUsed := make([][2]int, 0, len(uses))
+	for c := range uses {
+		cellsUsed = append(cellsUsed, c)
+	}
+	sort.Slice(cellsUsed, func(a, b int) bool {
+		if cellsUsed[a][1] != cellsUsed[b][1] {
+			return cellsUsed[a][1] < cellsUsed[b][1]
+		}
+		return cellsUsed[a][0] < cellsUsed[b][0]
+	})
+	for _, c := range cellsUsed {
+		us := uses[c]
 		x, y := c[0], c[1]
 		if !g.in(x, y) {
 			fault("a line leaves the grid")

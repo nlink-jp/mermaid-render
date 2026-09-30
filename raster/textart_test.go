@@ -647,3 +647,17 @@ func TestTextArtTwoSelfRelationships(t *testing.T) {
 		}
 	}
 }
+
+// A refusal names the same fault every run.
+func TestTextArtFaultIsDeterministic(t *testing.T) {
+	src := "erDiagram\n A ||--o{ A : r\n A ||--|| A : s\n A }o--o{ A : t\n A ||--o{ B : u"
+	_, first := RenderTextSource(src, TextOptions{})
+	if first == nil {
+		t.Fatal("the source draws now: the property needs one that is refused")
+	}
+	for k := 0; k < 50; k++ {
+		if _, err := RenderTextSource(src, TextOptions{}); err == nil || err.Error() != first.Error() {
+			t.Fatalf("run %d: %v, first %v", k, err, first)
+		}
+	}
+}
