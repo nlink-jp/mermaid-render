@@ -773,13 +773,33 @@ func titleRows(f *mr.Flowchart, tf *textFlow, i, h int) []int {
 // right before left. A title it cannot help is left to the drawing,
 // which refuses it.
 func titleRoom(f *mr.Flowchart, tf *textFlow, tm *textMeasure) {
+	base := tf.occupied() // boxes, lines and labels: no pass here moves them
 	for i := range tf.frames {
 		title := f.Subgraphs[i].Title
 		if title == "" {
 			continue
 		}
 		w, h := tm.size(title)
-		taken := tf.occupied(i)
+		// taken is a cell something other than frame i holds: seen from
+		// frame i, a frame around it holds only its border.
+		taken := func(c [2]int) bool {
+			if base[c] {
+				return true
+			}
+			fr := tf.frames[i]
+			for j, o := range tf.frames {
+				switch {
+				case j == i || !o.has(c[0], c[1]):
+				case o.x0 < fr.x0 && o.x1 > fr.x1 && o.y0 < fr.y0 && o.y1 > fr.y1:
+					if c[0] == o.x0 || c[0] == o.x1 || c[1] == o.y0 || c[1] == o.y1 {
+						return true
+					}
+				default:
+					return true
+				}
+			}
+			return false
+		}
 		// fits reports a place for the title in fr, pad cells from its
 		// sides: the drawing's own rule lets a title touch them, a widened
 		// frame leaves it a cell each side.
@@ -789,7 +809,7 @@ func titleRoom(f *mr.Flowchart, tf *textFlow, tm *textMeasure) {
 					ok := true
 					for y := y0; ok && y < y0+h; y++ {
 						for x := max(x0-1, fr.x0+1); ok && x <= min(x0+w, fr.x1-1); x++ {
-							ok = !taken[[2]int{x, y}]
+							ok = !taken([2]int{x, y})
 						}
 					}
 					if ok {
@@ -812,7 +832,7 @@ func titleRoom(f *mr.Flowchart, tf *textFlow, tm *textMeasure) {
 			}
 			for y := fr.y0; y <= fr.y1; y++ {
 				for x := x0; x <= x1; x++ {
-					if taken[[2]int{x, y}] {
+					if taken([2]int{x, y}) {
 						return false
 					}
 				}
@@ -832,9 +852,8 @@ func titleRoom(f *mr.Flowchart, tf *textFlow, tm *textMeasure) {
 	}
 }
 
-// occupied is every cell a box, a line, a label or another frame takes,
-// seen from frame i: a frame around it takes only its border.
-func (tf *textFlow) occupied(i int) map[[2]int]bool {
+// occupied is every cell a box, a line or a label takes.
+func (tf *textFlow) occupied() map[[2]int]bool {
 	taken := map[[2]int]bool{}
 	fill := func(r iRect) {
 		for y := r.y0; y <= r.y1; y++ {
@@ -856,19 +875,6 @@ func (tf *textFlow) occupied(i int) map[[2]int]bool {
 			for _, c := range cells {
 				taken[c] = true
 			}
-		}
-	}
-	fr := tf.frames[i]
-	for j, o := range tf.frames {
-		switch {
-		case j == i:
-		case o.x0 < fr.x0 && o.x1 > fr.x1 && o.y0 < fr.y0 && o.y1 > fr.y1:
-			fill(iRect{o.x0, o.y0, o.x1, o.y0})
-			fill(iRect{o.x0, o.y1, o.x1, o.y1})
-			fill(iRect{o.x0, o.y0, o.x0, o.y1})
-			fill(iRect{o.x1, o.y0, o.x1, o.y1})
-		default:
-			fill(o)
 		}
 	}
 	return taken
