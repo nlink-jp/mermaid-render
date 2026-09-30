@@ -408,15 +408,7 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		// side, never along it, never turning on it — a line that runs
 		// along or turns on a border reads as ending at the frame.
 		if overFrame {
-			fr := tf.frames[own-ownFrame]
-			across := uint8(0)
-			switch {
-			case (y == fr.y0 || y == fr.y1) && x > fr.x0 && x < fr.x1:
-				across = dUp | dDown
-			case (x == fr.x0 || x == fr.x1) && y > fr.y0 && y < fr.y1:
-				across = dLeft | dRight
-			}
-			if len(us) != 1 || us[0].dirs != across {
+			if len(us) != 1 || !crossesBorder(tf.frames[own-ownFrame], x, y, us[0].dirs) {
 				fault("link %d runs along or turns on the border of subgraph %q", us[0].link, f.Subgraphs[own-ownFrame].ID)
 				continue
 			}
@@ -650,6 +642,19 @@ func drawFlowText(f *mr.Flowchart, tf *textFlow, tm *textMeasure) (*tgrid, error
 		return nil, &mr.Error{Kind: mr.LayoutFault, Msg: "text art: " + faults[0]}
 	}
 	return g, nil
+}
+
+// crossesBorder reports whether a line with dirs at (x, y), a cell of
+// fr's border, crosses it straight: up and down through its top or bottom,
+// across through a side, never at a corner.
+func crossesBorder(fr iRect, x, y int, dirs uint8) bool {
+	switch {
+	case (y == fr.y0 || y == fr.y1) && x > fr.x0 && x < fr.x1:
+		return dirs == dUp|dDown
+	case (x == fr.x0 || x == fr.x1) && y > fr.y0 && y < fr.y1:
+		return dirs == dLeft|dRight
+	}
+	return false
 }
 
 // labelByItsLine reports whether link i's label covers a cell of its line

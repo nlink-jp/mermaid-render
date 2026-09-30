@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -173,6 +174,11 @@ func TestTextArtFaults(t *testing.T) {
 			tf.paths[0] = [][2]int{p[0], {p[0][0], last[1] - 2}, {last[0] - 3, last[1] - 2}, {last[0] - 3, last[1]}, last}
 		}},
 		{"a label too small", "smaller than its text", func(tf *textFlow) { tf.labels[1].x1 = tf.labels[1].x0 }},
+		{"a label over its head", "over its head", func(tf *textFlow) {
+			cells, _, _ := walk(tf.paths[1])
+			h, r := cells[len(cells)-1], tf.labels[1]
+			tf.labels[1] = iRect{h[0] - (r.x1 - r.x0), h[1] - (r.y1 - r.y0), h[0], h[1]}
+		}},
 		{"a node in a frame it is not in", "which it is not in", func(tf *textFlow) {
 			fr, c := &tf.frames[0], tf.boxes[2]
 			fr.x0, fr.y0 = min(fr.x0, c.x0-1), min(fr.y0, c.y0-1)
@@ -646,14 +652,19 @@ func TestTextArtGroupOfOne(t *testing.T) {
 		if err != nil || !strings.Contains(art, "─B long group title─┐") && !strings.Contains(art, "─A long group title─┐") {
 			t.Errorf("%q: %v\n%s", src, err, art)
 		}
+		// The participant after the group stands clear of its frame.
+		if strings.Contains(src, "participant C") && !strings.Contains(art, "│  ┌───┐") ||
+			strings.HasPrefix(src, "sequenceDiagram\n box A") && !strings.Contains(art, "│  ┌───┐") {
+			t.Errorf("%q: the next participant is not clear of the group\n%s", src, art)
+		}
 	}
 }
 
 // Block labels are measured with the caller's widths, brackets included.
 func TestTextArtBlockLabelWidths(t *testing.T) {
 	two := TextOptions{Width: func(rune) int { return 2 }}
-	art, err := RenderTextSource("sequenceDiagram\n A->>B: x\n alt yes\n B->>A: y\n else no\n A->>B: z\n end", two)
-	if err != nil || !strings.Contains(art, "[alt] yes") || !strings.Contains(art, "[else] no") {
+	art, err := RenderTextSource("sequenceDiagram\n A->>B: x\n alt a much longer condition\n B->>A: y\n else no\n A->>B: z\n end", two)
+	if err != nil || !strings.Contains(art, "[alt] a much longer condition") || !strings.Contains(art, "[else] no") {
 		t.Errorf("%v\n%s", err, art)
 	}
 }
@@ -682,6 +693,12 @@ func TestTextArtTwoSelfRelationships(t *testing.T) {
 		if !strings.Contains(art, want) {
 			t.Errorf("missing %q in\n%s", want, art)
 		}
+	}
+	// Four: the table grows two rows for each.
+	art, err = RenderTextSource("erDiagram\n A ||--o{ A : a\n A }o--|| A : b\n A ||--|| A : c\n A |o--o| A : d", TextOptions{})
+	loops := regexp.MustCompile(`[|o{}]──┐`)
+	if err != nil || len(loops.FindAllString(art, -1)) != 4 || strings.Count(art, "──┘ ") != 4 {
+		t.Errorf("%v\n%s", err, art)
 	}
 }
 
@@ -724,5 +741,74 @@ func TestTextArtSizeBound(t *testing.T) {
 	var e *mr.Error
 	if !errors.As(err, &e) || e.Kind != mr.UnsupportedConstruct || !strings.Contains(e.Msg, "cells (limit") {
 		t.Errorf("got %v, want a refusal for its size", err)
+	}
+}
+
+// Heads point along their line: into the box a link goes to, across as
+// well as down.
+func TestTextArtHeadsAcross(t *testing.T) {
+	for src, want := range map[string]string{
+		"flowchart LR\n A --> B": "│ A  ├───►│ B  │",
+		"flowchart RL\n A --> B": "│ B  │◄───┤ A  │",
+	} {
+		if art, err := RenderTextSource(src, TextOptions{}); err != nil || !strings.Contains(art, want) {
+			t.Errorf("%q: %v\n%s", src, err, art)
+		}
+	}
+}
+
+// A message with heads at both ends, notes on their sides, and a par
+// block's sections named "and".
+func TestTextArtSequenceParts(t *testing.T) {
+	art, err := RenderTextSource("sequenceDiagram\n participant A\n participant B\n A<<->>B: both\n Note left of A: L\n Note right of B: R\n par one\n A->>B: x\n and two\n B->>A: y\n end", TextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"│◄─────►│", " │ L │  │", "│       │  │ R │", "[par] one", "├┈[and] two┈┤"} {
+		if !strings.Contains(art, want) {
+			t.Errorf("missing %q in\n%s", want, art)
+		}
+	}
+}
+
+// The sequence gate lets a line cross a lifeline or a group and text sit
+// on a lifeline, and refuses anything drawn over a box, a frame, an arrow
+// or text.
+func TestSeqGate(t *testing.T) {
+	for _, c := range []struct {
+		have, what seqCell
+		r          rune
+		ok         bool
+	}{
+		{scLifeline, scArrow, '─', true}, {scLifeline, scText, 'x', true}, {scGroup, scArrow, '─', true},
+		{scGroup, scText, 'x', true}, {scFree, scText, 'x', true},
+		{scFrame, scArrow, '─', false}, {scText, scText, 'x', false}, {scArrow, scText, 'x', false},
+		{scText, scArrow, '─', false}, {scBox, scArrow, '─', false}, {scArrow, scArrow, '─', false},
+	} {
+		g, _ := newGrid(1, 1)
+		a := &seqArt{g: g, kind: [][]seqCell{{c.have}}}
+		a.put(0, 0, c.r, c.what)
+		if ok := len(a.fault) == 0; ok != c.ok {
+			t.Errorf("%s over %s: allowed %v, want %v", seqWhat(c.what), seqWhat(c.have), ok, c.ok)
+		}
+	}
+}
+
+// A line on a frame's border only crosses it straight, never along it or
+// at a corner.
+func TestCrossesBorder(t *testing.T) {
+	fr := iRect{2, 2, 10, 8}
+	for _, c := range []struct {
+		x, y int
+		dirs uint8
+		ok   bool
+	}{
+		{5, 2, dUp | dDown, true}, {5, 8, dUp | dDown, true}, {2, 5, dLeft | dRight, true}, {10, 5, dLeft | dRight, true},
+		{5, 2, dLeft | dRight, false}, {2, 5, dUp | dDown, false}, {5, 2, dUp | dRight, false},
+		{2, 2, dUp | dDown, false}, {10, 8, dLeft | dRight, false}, {2, 2, dDown | dRight, false}, {10, 2, dLeft | dDown, false},
+	} {
+		if got := crossesBorder(fr, c.x, c.y, c.dirs); got != c.ok {
+			t.Errorf("%d,%d dirs %04b: %v, want %v", c.x, c.y, c.dirs, got, c.ok)
+		}
 	}
 }

@@ -249,11 +249,9 @@ func seqText(d *mr.Sequence, tm *textMeasure) (*tgrid, error) {
 			} else {
 				// A group of one widens past its box to hold its title
 				// (groupX): keep that room to its right.
-				ext := w + 2 - boxW[lo]/2
+				// (The last one's is in the width, from groupX.)
 				if lo+1 < n {
-					need[lo][lo+1] = max(need[lo][lo+1], ext+boxW[lo+1]/2+3)
-				} else {
-					right = max(right, ext+2)
+					need[lo][lo+1] = max(need[lo][lo+1], w+2-boxW[lo]/2+boxW[lo+1]/2+3)
 				}
 			}
 		}
@@ -625,11 +623,12 @@ func sectionWord(k mr.BlockKind) string {
 	return "else"
 }
 
-// frameRow draws a frame's border row with an optional label after its
-// corner.
 // blockWord is the bracketed word a block's or a section's label starts
 // with; measured, not counted, since the caller's widths decide its cells.
 func blockWord(w string) string { return "[" + w + "] " }
+
+// frameRow draws a frame's border row with an optional label after its
+// corner.
 
 func (a *seqArt) frameRow(x0, x1, y int, l, r, fill rune, label string) {
 	if x1-x0 < 2 {
